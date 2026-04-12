@@ -1,0 +1,7 @@
+# .claudeignore
+multiagents_trading_assistant/cache/
+multiagents_trading_assistant/output/
+chroma_db/
+*.db
+*.log
+__pycache__/

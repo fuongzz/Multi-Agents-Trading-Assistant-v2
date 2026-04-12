@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(py -3.11 -m pip install -e .)",
+      "Bash(PYTHONIOENCODING=utf-8 py -3.11 multiagents_trading_assistant/news_fetcher.py)",
+      "Bash(py -3.11 -c ':*)",
+      "Bash(PYTHONIOENCODING=utf-8 py -3.11 multiagents_trading_assistant/agents/macro_agent.py)",
+      "Bash(PYTHONIOENCODING=utf-8 py -3.11 multiagents_trading_assistant/risk_manager.py)",
+      "Bash(PYTHONIOENCODING=utf-8 py -3.11 multiagents_trading_assistant/discord_bot.py)",
+      "Bash(PYTHONIOENCODING=utf-8 py -3.11 multiagents_trading_assistant/main.py --help)"
+    ]
+  }
+}
