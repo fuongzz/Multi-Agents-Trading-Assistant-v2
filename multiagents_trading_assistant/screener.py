@@ -296,19 +296,19 @@ def detect_ma_pullback(df: pd.DataFrame, ind: dict) -> tuple[bool, list[str]]:
     # Phải đang UPTREND
     is_uptrend = price > ma20 > ma60 > ma200
 
-    # Giá gần MA60
+    # Giá gần MA60 — nới từ 5% → 8%
     dist_ma60_pct = (price - ma60) / ma60 * 100
-    near_ma60 = 0 <= dist_ma60_pct <= 5.0
+    near_ma60 = 0 <= dist_ma60_pct <= 8.0
 
-    # RSI vùng trung tính (đã giảm, chưa oversold)
-    rsi_ok = 35 <= rsi <= 55
+    # RSI vùng trung tính — nới rộng từ 35-55 → 30-60
+    rsi_ok = 30 <= rsi <= 60
 
-    # Volume 3 phiên gần nhất giảm dần
+    # Volume 3 phiên gần nhất giảm dần — nới: 2/3 phiên giảm là đủ
     if len(df) >= 4:
         v1 = float(df["volume"].iloc[-4])
         v2 = float(df["volume"].iloc[-3])
         v3 = float(df["volume"].iloc[-2])
-        vol_declining = v1 > v2 and v2 > v3
+        vol_declining = (v1 > v2) or (v2 > v3)  # nới: chỉ cần 1 trong 2 giảm
     else:
         vol_declining = False
 
@@ -343,8 +343,8 @@ def detect_rsi_bounce(df: pd.DataFrame, ind: dict) -> tuple[bool, list[str]]:
     if not all([price, rsi]):
         return False, []
 
-    # RSI oversold
-    is_oversold = rsi < 35
+    # RSI oversold (nới từ 35 → 40)
+    is_oversold = rsi < 40
 
     # Còn trên MA200 (trend dài hạn vẫn tốt)
     above_ma200 = (price > ma200) if ma200 else False
@@ -454,8 +454,17 @@ def run_screener(
     print("[screener] Bước 3/3: Scan 5 chiến lược...")
     candidates = []
 
+    _MIN_LIQUIDITY = 300_000  # cổ phiếu/ngày TB20
+    skipped_liquidity = 0
+
     for symbol, df in ohlcv_map.items():
         if df is None or df.empty or len(df) < 30:
+            continue
+
+        # Lọc thanh khoản — TB20 volume phải > 300k cp/ngày
+        avg_vol_20 = float(df["volume"].tail(20).mean())
+        if avg_vol_20 < _MIN_LIQUIDITY:
+            skipped_liquidity += 1
             continue
 
         # Tính indicators một lần, dùng cho tất cả 5 chiến lược
@@ -474,16 +483,23 @@ def run_screener(
                 ("RETEST",      detect_retest),
                 ("SPRING",      detect_spring),
                 ("MA_PULLBACK", detect_ma_pullback),
+                ("RSI_BOUNCE",  detect_rsi_bounce),
             ]:
                 passed, reasons = detect_fn(df, ind)
                 if passed:
                     detected.append((strategy_name, reasons))
 
-        # RSI bounce chạy cả UPTREND và SIDEWAY
-        if market_ctx.trend in ("UPTREND", "SIDEWAY"):
-            passed, reasons = detect_rsi_bounce(df, ind)
-            if passed:
-                detected.append(("RSI_BOUNCE", reasons))
+        # SIDEWAY: RETEST + SPRING vẫn có giá trị trên từng cổ phiếu
+        if market_ctx.trend == "SIDEWAY":
+            for strategy_name, detect_fn in [
+                ("RETEST",      detect_retest),
+                ("SPRING",      detect_spring),
+                ("MA_PULLBACK", detect_ma_pullback),
+                ("RSI_BOUNCE",  detect_rsi_bounce),
+            ]:
+                passed, reasons = detect_fn(df, ind)
+                if passed:
+                    detected.append((strategy_name, reasons))
 
         # Nếu 1 mã pass nhiều chiến lược → lấy chiến lược ưu tiên cao nhất
         for setup_type, reasons in detected:
@@ -502,6 +518,7 @@ def run_screener(
     candidates.sort(key=lambda c: c.priority_score, reverse=True)
     candidates = candidates[:max_candidates]
 
+    print(f"[screener] Lọc thanh khoản <300k: bỏ {skipped_liquidity} mã")
     print(f"[screener] Kết quả: {len(candidates)} candidates")
     for c in candidates:
         print(f"  {c.symbol:6s} | {c.setup_type:12s} | score={c.priority_score:.0f} | {c.reasons[0] if c.reasons else ''}")

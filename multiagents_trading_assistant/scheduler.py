@@ -111,12 +111,26 @@ def job_morning_brief() -> None:
             discord_bot.alert_macro_bearish(macro_ctx)
             return
 
-        # Screener
+        # Screener — trả về (MarketContext, list[CandidateStock])
         _log("Chạy screener...")
-        screen_result = screener.run_screener(date=date)
-        should_trade  = screen_result.get("should_trade", False)
-        candidates    = screen_result.get("candidates", [])
-        market_state  = screen_result.get("market_state", "?")
+        market_ctx, raw_candidates = screener.run_screener()
+        should_trade = market_ctx.should_trade
+        market_state = market_ctx.trend
+        # Chuyển CandidateStock → dict để orchestrator dùng
+        mkt_dict = {
+            "trend":          market_ctx.trend,
+            "vni_change_pct": market_ctx.vni_change_pct,
+            "sideway_zone":   market_ctx.sideway_zone,
+        }
+        candidates = [
+            {
+                "symbol":         c.symbol,
+                "setup_type":     c.setup_type,
+                "priority_score": c.priority_score,
+                "market_context": mkt_dict,
+            }
+            for c in raw_candidates
+        ]
         _log(f"Screener: {market_state} | {len(candidates)} candidates | should_trade={should_trade}")
 
         if not should_trade:

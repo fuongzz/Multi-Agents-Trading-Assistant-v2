@@ -78,7 +78,7 @@ def analyze(symbol: str, date: str | None = None) -> dict:
     current_price = ind.get("current_price")
     prompt = f"""Phân tích kỹ thuật mã {symbol} ngày {date}.
 
-Giá hiện tại: {current_price:,.0f} VNĐ
+Giá hiện tại: {_fmt(current_price)} VNĐ
 
 === Moving Averages ===
 MA20:  {_fmt(ind.get('ma20'))}
@@ -172,5 +172,5 @@ def _fallback_result(ind: dict) -> dict:
         "resistance_levels": ind.get("resistance_levels", []),
         "confluence_score": score,
         "setup_quality": quality,
-        "technical_summary": f"MA trend: {ind.get('ma_trend')}, RSI: {ind.get('rsi', 'N/A'):.1f}" if ind.get('rsi') else "Dữ liệu indicators.",
+        "technical_summary": f"MA trend: {ind.get('ma_trend')}, RSI: {ind.get('rsi'):.1f}" if ind.get('rsi') else "Dữ liệu indicators.",
     }

@@ -426,5 +426,11 @@ if __name__ == "__main__":
     if WEBHOOK_URL:
         print("\n=== Gửi Daily Brief thật ===")
         alert_daily_brief(macro)
+
+        print("\n=== Gửi Signal Alert thật ===")
+        alert_signal(fake_state)
+
+        print("\n=== Gửi Batch Summary thật ===")
+        alert_batch_summary(fake_results)
     else:
         print("\n[discord] DISCORD_WEBHOOK_URL chưa set — chỉ test formatter")
