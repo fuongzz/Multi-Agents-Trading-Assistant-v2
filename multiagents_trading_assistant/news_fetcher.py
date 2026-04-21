@@ -18,6 +18,8 @@ import importlib.metadata  # FIX: pandas-ta-openbb AttributeError Python 3.11
 import json
 import re
 import time
+
+import pandas as pd
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -209,17 +211,17 @@ def detect_volume_anomaly(symbol: str, date: str, lookback: int = 3) -> bool:
         if df is None or df.empty or "volume" not in df.columns:
             return False
 
-        # Tính TB20
-        df = df.sort_index()
+        # Tính TB20 — date là cột thường, sort theo cột
+        df = df.sort_values("date").reset_index(drop=True)
         df["vol_ma20"] = df["volume"].rolling(20, min_periods=10).mean()
 
         # Lấy lookback ngày gần nhất trước date
         try:
-            cutoff = datetime.strptime(date, "%Y-%m-%d")
-        except ValueError:
-            cutoff = datetime.now()
+            cutoff = pd.Timestamp(date)
+        except Exception:
+            cutoff = pd.Timestamp.now()
 
-        recent = df[df.index <= cutoff].tail(lookback)
+        recent = df[df["date"] <= cutoff].tail(lookback)
         if recent.empty:
             return False
 

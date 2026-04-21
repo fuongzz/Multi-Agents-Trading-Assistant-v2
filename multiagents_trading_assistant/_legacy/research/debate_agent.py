@@ -180,38 +180,19 @@ Tổng hợp khách quan và trả về JSON theo schema đã định."""
 
 def _run_text_agent(prompt: str, system: str) -> str:
     """
-    Gọi Sonnet và trả về text thô (không parse JSON).
+    Gọi Anthropic Sonnet và trả về text thô (không parse JSON).
     Bull/Bear arguments là prose, không phải JSON.
     """
-    import anthropic
-    import os
-    from dotenv import load_dotenv
-    from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+    from multiagents_trading_assistant.agent import _get_client, MODEL_SONNET, MAX_TOKENS_SONNET
 
-    load_dotenv()
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise EnvironmentError("Thiếu ANTHROPIC_API_KEY")
-
-    client = anthropic.Anthropic(api_key=api_key)
-
-    @retry(
-        retry=retry_if_exception_type((anthropic.APIError, anthropic.APITimeoutError)),
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=2, min=4, max=30),
-        reraise=True,
+    client = _get_client()
+    response = client.messages.create(
+        model=MODEL_SONNET,
+        max_tokens=MAX_TOKENS_SONNET,
+        system=system,
+        messages=[{"role": "user", "content": prompt}],
     )
-    def _call():
-        from multiagents_trading_assistant.agent import MODEL_SONNET
-        response = client.messages.create(
-            model=MODEL_SONNET,
-            max_tokens=1024,
-            system=system,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return response.content[0].text
-
-    return _call()
+    return response.content[0].text.strip()
 
 
 def _build_analyst_context(state: dict) -> str:

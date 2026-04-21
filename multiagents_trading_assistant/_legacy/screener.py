@@ -5,7 +5,7 @@ Chạy TRƯỚC toàn bộ multi-agent pipeline để tiết kiệm API cost.
 Không pass screener → không gọi LLM nào.
 
 Flow:
-  VN100 (100 mã)
+  VN30 (30 mã)
     → [1] Market Context  — VN-Index đang UPTREND / SIDEWAY / DOWNTREND?
     → [2] Signal Scanner  — Chạy 5 chiến lược song song trên từng mã
     → [3] Rank & Filter   — Chấm priority_score, lấy top 10
@@ -18,13 +18,13 @@ from statistics import mean
 
 import pandas as pd
 
-from fetcher import (
+from multiagents_trading_assistant.fetcher import (
     get_ohlcv,
     get_ohlcv_batch,
     get_vnindex,
-    get_vn100_symbols,
+    get_vn30_symbols,
 )
-from indicators import compute_indicators, compute_support_resistance
+from multiagents_trading_assistant.indicators import compute_indicators, compute_support_resistance
 
 
 # ──────────────────────────────────────────────
@@ -430,7 +430,7 @@ def run_screener(
     """
     # Lấy danh sách mã nếu không truyền vào
     if symbols is None:
-        symbols = get_vn100_symbols()
+        symbols = get_vn30_symbols()
 
     print(f"[screener] Bắt đầu scan {len(symbols)} mã...")
 

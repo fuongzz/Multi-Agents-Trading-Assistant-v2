@@ -91,7 +91,7 @@ Pha MA: {ind.get('ma_phase', 'UNKNOWN')}
 RSI(14): {_fmt(ind.get('rsi'))}
 Tín hiệu RSI: {ind.get('rsi_signal', 'UNKNOWN')}
 MACD line:   {_fmt(ind.get('macd'))}
-MACD signal: {_fmt(ind.get('macd_signal_label'))}
+MACD signal: {_fmt(ind.get('macd_signal'))}
 MACD hist:   {_fmt(ind.get('macd_hist'))}
 Tín hiệu MACD: {ind.get('macd_signal_label', 'UNKNOWN')}
 
@@ -172,5 +172,5 @@ def _fallback_result(ind: dict) -> dict:
         "resistance_levels": ind.get("resistance_levels", []),
         "confluence_score": score,
         "setup_quality": quality,
-        "technical_summary": f"MA trend: {ind.get('ma_trend')}, RSI: {ind.get('rsi'):.1f}" if ind.get('rsi') else "Dữ liệu indicators.",
+        "technical_summary": f"MA trend: {ind.get('ma_trend')}, RSI: {float(ind.get('rsi')):.1f}" if ind.get('rsi') is not None else "Dữ liệu indicators.",
     }

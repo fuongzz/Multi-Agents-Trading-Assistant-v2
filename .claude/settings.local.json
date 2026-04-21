@@ -7,7 +7,9 @@
       "Bash(PYTHONIOENCODING=utf-8 py -3.11 multiagents_trading_assistant/agents/macro_agent.py)",
       "Bash(PYTHONIOENCODING=utf-8 py -3.11 multiagents_trading_assistant/risk_manager.py)",
       "Bash(PYTHONIOENCODING=utf-8 py -3.11 multiagents_trading_assistant/discord_bot.py)",
-      "Bash(PYTHONIOENCODING=utf-8 py -3.11 multiagents_trading_assistant/main.py --help)"
+      "Bash(PYTHONIOENCODING=utf-8 py -3.11 multiagents_trading_assistant/main.py --help)",
+      "Bash(python -m multiagents_trading_assistant.main --symbol VCB --no-discord)",
+      "Bash(python -c ' *)"
     ]
   }
 }

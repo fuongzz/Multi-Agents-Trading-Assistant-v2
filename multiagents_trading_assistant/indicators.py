@@ -3,6 +3,14 @@ import importlib.metadata  # FIX: pandas-ta-openbb AttributeError Python 3.11
 import pandas as pd
 import pandas_ta as ta
 
+from multiagents_trading_assistant.fetcher import get_ohlcv
+
+
+def compute_indicators_from_symbol(symbol: str, n_days: int = 200) -> dict:
+    """Convenience: lấy OHLCV rồi tính indicators trong 1 bước."""
+    df = get_ohlcv(symbol, n_days)
+    return compute_indicators(df)
+
 
 def compute_indicators(df: pd.DataFrame) -> dict:
     """
@@ -31,20 +39,30 @@ def compute_indicators(df: pd.DataFrame) -> dict:
     result["rsi"] = _last(rsi_series)
 
     # ── MACD(12,26,9) ──
+    # pandas_ta columns: MACD_12_26_9, MACDh_12_26_9, MACDs_12_26_9
     macd_df = ta.macd(close, fast=12, slow=26, signal=9)
     if macd_df is not None and not macd_df.empty:
-        result["macd"]        = _last(macd_df.iloc[:, 0])   # MACD line
-        result["macd_signal"] = _last(macd_df.iloc[:, 2])   # Signal line
-        result["macd_hist"]   = _last(macd_df.iloc[:, 1])   # Histogram
+        macd_cols = macd_df.columns.tolist()
+        macd_line = next((c for c in macd_cols if c.startswith("MACD_")),  None)
+        macd_sig  = next((c for c in macd_cols if c.startswith("MACDs_")), None)
+        macd_hist = next((c for c in macd_cols if c.startswith("MACDh_")), None)
+        result["macd"]        = _last(macd_df[macd_line])  if macd_line else None
+        result["macd_signal"] = _last(macd_df[macd_sig])   if macd_sig  else None
+        result["macd_hist"]   = _last(macd_df[macd_hist])  if macd_hist else None
     else:
         result["macd"] = result["macd_signal"] = result["macd_hist"] = None
 
     # ── Bollinger Bands(20,2) ──
+    # pandas_ta columns: BBL_20_2.0 (lower), BBM_20_2.0 (mid), BBU_20_2.0 (upper)
     bb = ta.bbands(close, length=20, std=2)
     if bb is not None and not bb.empty:
-        result["bb_upper"] = _last(bb.iloc[:, 0])
-        result["bb_mid"]   = _last(bb.iloc[:, 1])
-        result["bb_lower"] = _last(bb.iloc[:, 2])
+        bb_cols = bb.columns.tolist()
+        bbl = next((c for c in bb_cols if c.startswith("BBL_")), None)
+        bbm = next((c for c in bb_cols if c.startswith("BBM_")), None)
+        bbu = next((c for c in bb_cols if c.startswith("BBU_")), None)
+        result["bb_upper"] = _last(bb[bbu]) if bbu else None
+        result["bb_mid"]   = _last(bb[bbm]) if bbm else None
+        result["bb_lower"] = _last(bb[bbl]) if bbl else None
     else:
         result["bb_upper"] = result["bb_mid"] = result["bb_lower"] = None
 
