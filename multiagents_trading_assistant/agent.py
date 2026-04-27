@@ -19,6 +19,16 @@ import re
 import anthropic
 from dotenv import load_dotenv
 
+# LangSmith tracing — optional, graceful fallback nếu chưa cài hoặc chưa set key
+try:
+    from langsmith import traceable
+except ImportError:
+    def traceable(fn=None, **kwargs):   # noqa: E301
+        """Passthrough decorator khi langsmith chưa được cài."""
+        if fn is not None:
+            return fn
+        return lambda f: f
+
 # Load .env từ thư mục gốc project
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 
@@ -74,6 +84,7 @@ def _parse_json_response(text: str) -> dict:
 # run_agent — Sonnet (Debate, Trader)
 # ──────────────────────────────────────────────
 
+@traceable(run_type="llm", name="claude-sonnet | Trader/Debate")
 def run_agent(
     prompt: str,
     system: str,
@@ -145,6 +156,7 @@ def run_agent(
 # run_agent_lite — Haiku (PTKT, FA, Sentiment, ForeignFlow)
 # ──────────────────────────────────────────────
 
+@traceable(run_type="llm", name="claude-haiku | Analyst")
 def run_agent_lite(
     prompt: str,
     system: str,

@@ -61,6 +61,27 @@ _SUSPICIOUS_CREDIBILITY_THRESHOLD = 0.5  # credibility_score tổng < ngưỡng 
 
 
 # ──────────────────────────────────────────────
+# Retry helper
+# ──────────────────────────────────────────────
+
+def _retry_request(url: str, max_attempts: int = 3) -> requests.Response:
+    """requests.get với exponential backoff retry (1s → 2s → 4s)."""
+    last_exc: Exception = RuntimeError("No attempts made")
+    for attempt in range(max_attempts):
+        try:
+            resp = requests.get(url, headers=_HEADERS, timeout=_TIMEOUT)
+            resp.raise_for_status()
+            return resp
+        except requests.RequestException as e:
+            last_exc = e
+            if attempt < max_attempts - 1:
+                wait = 2 ** attempt
+                print(f"[news_fetcher] Attempt {attempt + 1} thất bại, thử lại sau {wait}s: {e}")
+                time.sleep(wait)
+    raise last_exc
+
+
+# ──────────────────────────────────────────────
 # Public API — tin cơ bản theo mã
 # ──────────────────────────────────────────────
 
@@ -91,23 +112,34 @@ def get_stock_news(symbol: str, days: int = 3, max_articles: int = 20) -> list[d
     print(f"[news_fetcher] Crawl tin tức {symbol} ({days} ngày)...")
     articles: list[dict] = []
 
-    # Crawl CafeF
+    # Nguồn 1: CafeF (retry 3 lần bên trong _crawl_cafef)
+    cafef_ok = False
     try:
         cafef_articles = _crawl_cafef(symbol, days)
         articles.extend(cafef_articles)
+        cafef_ok = bool(cafef_articles)
         print(f"[news_fetcher] CafeF: {len(cafef_articles)} bài")
     except Exception as e:
-        print(f"[news_fetcher] Lỗi CafeF: {e}")
+        print(f"[news_fetcher] CafeF thất bại hoàn toàn: {e}")
 
     time.sleep(1)
 
-    # Crawl VnExpress
+    # Nguồn 2: VnExpress — luôn thử để bổ sung bài, hoặc fallback khi CafeF trống
     try:
         vnexpress_articles = _crawl_vnexpress(symbol, days)
         articles.extend(vnexpress_articles)
         print(f"[news_fetcher] VnExpress: {len(vnexpress_articles)} bài")
     except Exception as e:
-        print(f"[news_fetcher] Lỗi VnExpress: {e}")
+        print(f"[news_fetcher] VnExpress thất bại hoàn toàn: {e}")
+
+    # Nguồn 3: Stale cache — fallback cuối khi cả hai crawler đều trống
+    if not articles:
+        stale = _load_stale_cache(symbol)
+        if stale:
+            print(f"[news_fetcher] Fallback stale cache: {len(stale)} bài (dữ liệu cũ)")
+            return stale[:max_articles]
+        print(f"[news_fetcher] Không lấy được tin {symbol}, trả về rỗng")
+        return []
 
     _save_cache(cache_key, articles)
     print(f"[news_fetcher] Tổng: {len(articles)} bài cho {symbol}")
@@ -357,8 +389,7 @@ def _crawl_cafef(symbol: str, days: int) -> list[dict]:
     articles = []
 
     try:
-        resp = requests.get(url, headers=_HEADERS, timeout=_TIMEOUT)
-        resp.raise_for_status()
+        resp = _retry_request(url)
         soup = BeautifulSoup(resp.text, "html.parser")
 
         cutoff = datetime.now() - timedelta(days=days)
@@ -433,8 +464,7 @@ def _crawl_cafef_market_section() -> list[dict]:
     today = datetime.now().strftime("%Y-%m-%d")
 
     try:
-        resp = requests.get(url, headers=_HEADERS, timeout=_TIMEOUT)
-        resp.raise_for_status()
+        resp = _retry_request(url)
         soup = BeautifulSoup(resp.text, "html.parser")
 
         items = soup.select("div.tlitem, div.item-news, li.item, article")
@@ -510,8 +540,7 @@ def _crawl_vnexpress(symbol: str, days: int) -> list[dict]:
     articles = []
 
     try:
-        resp = requests.get(url, headers=_HEADERS, timeout=_TIMEOUT)
-        resp.raise_for_status()
+        resp = _retry_request(url)
         soup = BeautifulSoup(resp.text, "html.parser")
 
         cutoff = datetime.now() - timedelta(days=days)
@@ -583,8 +612,7 @@ def _crawl_vietstock_nhandinh() -> list[dict]:
     today = datetime.now().strftime("%Y-%m-%d")
 
     try:
-        resp = requests.get(url, headers=_HEADERS, timeout=_TIMEOUT)
-        resp.raise_for_status()
+        resp = _retry_request(url)
         soup = BeautifulSoup(resp.text, "html.parser")
 
         # Vietstock dùng nhiều layout khác nhau — thử các selector phổ biến
@@ -666,8 +694,7 @@ def _crawl_ssi_research() -> list[dict]:
     today = datetime.now().strftime("%Y-%m-%d")
 
     try:
-        resp = requests.get(url, headers=_HEADERS, timeout=_TIMEOUT)
-        resp.raise_for_status()
+        resp = _retry_request(url)
         soup = BeautifulSoup(resp.text, "html.parser")
 
         # SSI dùng nhiều framework khác nhau qua các phiên bản
@@ -809,6 +836,23 @@ def _load_cache(key: str) -> list | None:
             return json.loads(p.read_text(encoding="utf-8"))
         except Exception:
             return None
+    return None
+
+
+def _load_stale_cache(symbol: str) -> list | None:
+    """Tìm cache cũ nhất còn tồn tại cho symbol (bất kỳ ngày nào).
+
+    Dùng làm fallback cuối cùng khi tất cả crawler đều thất bại.
+    """
+    matches = sorted(CACHE_DIR.glob(f"{symbol}_*_news.json"), reverse=True)
+    for p in matches:
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+            if data:
+                print(f"[news_fetcher] Dùng stale cache: {p.name}")
+                return data
+        except Exception:
+            continue
     return None
 
 

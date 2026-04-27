@@ -35,20 +35,49 @@ _CHROMA_PATH = Path(__file__).parent.parent / "cache" / "chromadb"
 # ──────────────────────────────────────────────
 
 L3_VN_RULES = {
+    # ── Biên độ giá (Price band) ──
     "price_band_hose":     7.0,    # % biên độ HOSE
     "price_band_hnx":     10.0,    # % biên độ HNX
-    "settlement_days":     3,      # T+3
+    "price_band_upcom":   15.0,    # % biên độ UPCoM
+
+    # ── Thanh toán (Settlement) ──
+    # T+2.5: mua xong chiều T+2 mới có hàng để bán — không trade scalping kiểu Forex
+    "settlement_days":     2,      # blocking 2 ngày (T+2.5, không phải T+3)
+    "settlement_note":     "T+2.5 — hàng về chiều T+2. KHÔNG scalping, không kỳ vọng exit T+0/T+1.",
+
+    # ── Short selling ──
     "short_selling":       False,  # Không short
-    "atc_start":          "14:25", # ATC bắt đầu
-    "atc_end":            "14:30", # ATC kết thúc
+
+    # ── Giờ giao dịch ──
+    "atc_start":          "14:25",
+    "atc_end":            "14:30",
     "morning_open":       "09:00",
     "morning_close":      "11:30",
     "afternoon_open":     "13:00",
     "afternoon_close":    "14:30",
+
+    # ── Circuit breaker ──
     "circuit_breaker_pct": -3.0,   # VNI giảm > 3% → dừng
+
+    # ── Foreign room ──
     "room_critical_pct":   95.0,   # Foreign room > 95% → không mua
     "room_high_pct":       90.0,   # Foreign room > 90% → giảm sizing 50%
     "room_medium_pct":     80.0,   # Foreign room > 80% → giảm sizing 20%
+
+    # ── Dòng tiền khối ngoại & tự doanh ──
+    # Ở VN, khối ngoại và tự doanh CTCK ảnh hưởng tâm lý rất lớn.
+    # Agent cần feed dữ liệu mua/bán ròng hàng ngày và tôn trọng chiều dòng tiền.
+    "foreign_net_strong_buy_b":    20.0,  # tỷ VNĐ/phiên mua ròng → tín hiệu tích cực mạnh
+    "foreign_net_strong_sell_b":  -20.0,  # tỷ VNĐ/phiên bán ròng → áp lực, giảm sizing
+    "proprietary_net_signal_b":    10.0,  # tỷ VNĐ — tự doanh mua ròng → hỗ trợ tâm lý thị trường
+    "flow_note":  "Khối ngoại & tự doanh dẫn dắt tâm lý HOSE. Ưu tiên chiều dòng tiền trước technical.",
+
+    # ── Ngưỡng nhốt sàn/trần ──
+    # Khi giá gần biên độ floor, thanh khoản suy giảm — không mua khi gần sàn
+    "near_floor_threshold_pct":  -5.0,   # Giảm > 5% trong phiên → gần sàn, rủi ro kẹt lệnh
+    "near_ceil_threshold_pct":    5.0,   # Tăng > 5% trong phiên → gần trần, không đuổi giá
+
+    # ── Sizing limits ──
     "max_nav_per_stock":   10.0,   # Tối đa 10% NAV / cổ phiếu
     "max_positions":       10,     # Tối đa 10 vị thế đồng thời
 }
@@ -150,8 +179,8 @@ class L1Memory:
         return [t for t in history if t.get("trade_date", "") >= cutoff]
 
     def get_t3_status(self, symbol: str) -> bool:
-        """True nếu đã mua trong T+3 — không mua lại."""
-        buys = db.get_buys_last_n_days(symbol, 3)
+        """True nếu đã mua trong 2 ngày qua — T+2.5 (hàng về chiều T+2)."""
+        buys = db.get_buys_last_n_days(symbol, 2)
         return len(buys) > 0
 
 
@@ -269,9 +298,13 @@ class L2Memory:
         where = {"symbol": symbol} if symbol else None
 
         try:
+            count = self._collection.count()
+            if count == 0:
+                return []
+            n_safe = min(n_results, count)
             results = self._collection.query(
                 query_texts=[query],
-                n_results=n_results,
+                n_results=n_safe,
                 where=where,
             )
 
@@ -349,7 +382,7 @@ class MemorySystem:
         return self.l1.get_positions()
 
     def is_t3_blocked(self, symbol: str) -> bool:
-        """True nếu không được mua do T+3."""
+        """True nếu không được mua do T+2.5 (đã mua trong 2 ngày qua)."""
         return self.l1.get_t3_status(symbol)
 
     def get_decision_history(self, symbol: str, days: int = 7) -> list[dict]:

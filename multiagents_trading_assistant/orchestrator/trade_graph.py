@@ -4,6 +4,7 @@ Flow:
   load_macro
     → [technical | flow | sentiment]  (parallel)
     → synthesis
+    → retrieve_context   ← Hybrid RAG: internal (L1+L2) + external (Vietstock KB) song song
     → trader_trade
     → risk_trade
     → format_output → END
@@ -13,6 +14,7 @@ Early exit: market_context.should_trade = False → END (skip pipeline).
 
 import asyncio
 import json
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Any
@@ -26,6 +28,10 @@ from multiagents_trading_assistant.agents.trade import (
 from multiagents_trading_assistant.nodes import trader_trade, risk_trade
 from multiagents_trading_assistant.formatters.trade_output import format_trade_signal
 from multiagents_trading_assistant.services import output_service
+from multiagents_trading_assistant.services.memory_service import (
+    retrieve_trade_context,
+    retrieve_knowledge,
+)
 
 
 _BASE_DIR = Path(__file__).resolve().parent.parent
@@ -52,6 +58,13 @@ class TradeState(TypedDict, total=False):
 
     # Synthesis
     synthesis: dict
+
+    # Hybrid RAG context (retrieved before trader_trade)
+    # {
+    #   "internal": {recent_decisions, similar_setups, has_position, t3_blocked, ...},
+    #   "external": {fundamental_summary, historical_stats},
+    # }
+    memory_context: dict
 
     # Decision
     trader_decision: dict
@@ -125,6 +138,47 @@ def run_synthesis(state: TradeState) -> dict:
     return {"synthesis": result}
 
 
+def run_retrieve_context(state: TradeState) -> dict:
+    """Hybrid RAG: truy xuất internal (L1+L2) + external (Vietstock KB) song song."""
+    symbol     = state.get("symbol", "")
+    setup_type = state.get("setup_type", "")
+    ma_trend   = state.get("technical_analysis", {}).get("ma_trend", "UNKNOWN")
+    confluence = float(state.get("synthesis", {}).get("confluence_score") or 50.0)
+    date       = state.get("date", "")
+
+    internal = {}
+    external = {"fundamental_summary": "", "historical_stats": ""}
+
+    def _internal():
+        return retrieve_trade_context(symbol, setup_type, ma_trend, confluence)
+
+    def _external():
+        return retrieve_knowledge(symbol, date)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        fut_int = pool.submit(_internal)
+        fut_ext = pool.submit(_external)
+        try:
+            internal = fut_int.result(timeout=15)
+        except Exception as e:
+            print(f"[trade_graph] internal memory fail: {e}")
+        try:
+            external = fut_ext.result(timeout=15)
+        except Exception as e:
+            print(f"[trade_graph] external knowledge fail: {e}")
+
+    ctx = {"internal": internal, "external": external}
+    print(
+        f"[trade_graph] context: "
+        f"{len(internal.get('recent_decisions', []))} recent, "
+        f"{len(internal.get('similar_setups', []))} similar, "
+        f"pos={internal.get('has_position')}, t3={internal.get('t3_blocked')}, "
+        f"fund={'✓' if external.get('fundamental_summary') else '–'}, "
+        f"stats={'✓' if external.get('historical_stats') else '–'}"
+    )
+    return {"memory_context": ctx}
+
+
 def run_trader(state: TradeState) -> dict:
     return trader_trade.decide(state)
 
@@ -158,20 +212,22 @@ def _safe(name: str, fn, *args, **kwargs) -> Any:
 
 def build_graph():
     g = StateGraph(TradeState)
-    g.add_node("load_macro", load_macro)
-    g.add_node("run_analysts", run_analysts)
-    g.add_node("synthesis", run_synthesis)
-    g.add_node("trader_trade", run_trader)
-    g.add_node("risk_trade", run_risk)
-    g.add_node("format_output", run_format)
+    g.add_node("load_macro",        load_macro)
+    g.add_node("run_analysts",      run_analysts)
+    g.add_node("synthesis",         run_synthesis)
+    g.add_node("retrieve_context",  run_retrieve_context)
+    g.add_node("trader_trade",      run_trader)
+    g.add_node("risk_trade",        run_risk)
+    g.add_node("format_output",     run_format)
 
     g.set_entry_point("load_macro")
-    g.add_edge("load_macro", "run_analysts")
-    g.add_edge("run_analysts", "synthesis")
-    g.add_edge("synthesis", "trader_trade")
-    g.add_edge("trader_trade", "risk_trade")
-    g.add_edge("risk_trade", "format_output")
-    g.add_edge("format_output", END)
+    g.add_edge("load_macro",       "run_analysts")
+    g.add_edge("run_analysts",     "synthesis")
+    g.add_edge("synthesis",        "retrieve_context")
+    g.add_edge("retrieve_context", "trader_trade")
+    g.add_edge("trader_trade",     "risk_trade")
+    g.add_edge("risk_trade",       "format_output")
+    g.add_edge("format_output",    END)
     return g.compile()
 
 
@@ -194,7 +250,7 @@ def run_pipeline(
         "symbol": symbol, "date": date, "setup_type": setup_type,
         "market_context": market_context or {}, "macro_context": {},
         "technical_analysis": {}, "foreign_flow_analysis": {}, "sentiment_analysis": {},
-        "synthesis": {}, "trader_decision": {}, "risk_output": {},
+        "synthesis": {}, "memory_context": {}, "trader_decision": {}, "risk_output": {},
         "formatted_text": "", "error": None,
     }
 

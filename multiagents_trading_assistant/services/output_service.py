@@ -9,8 +9,12 @@ thêm bước gọi webhook.
 """
 
 import json
+import os
+import traceback
 from datetime import datetime
 from pathlib import Path
+
+import requests
 
 _BASE_DIR     = Path(__file__).resolve().parent.parent
 _SIGNAL_DIR   = _BASE_DIR / "cache" / "signals"
@@ -83,6 +87,55 @@ def write_summary(pipeline: str, total: int, actionable: int, date: str) -> None
 # ──────────────────────────────────────────────
 # Internal
 # ──────────────────────────────────────────────
+
+def send_pipeline_alert(
+    pipeline: str,
+    error: Exception | str,
+    symbol: str | None = None,
+    date: str | None = None,
+) -> None:
+    """Gửi Discord alert khi pipeline fail.
+
+    Dùng webhook — không cần bot token. Gọi từ pipeline_runner trong except block.
+    Không raise exception — alert không được làm crash thêm.
+    """
+    webhook_url = os.getenv("DISCORD_WEBHOOK_URL", "")
+    if not webhook_url:
+        print("[output_service] DISCORD_WEBHOOK_URL chưa set — bỏ qua alert")
+        return
+
+    date_str   = date or datetime.now().strftime("%Y-%m-%d %H:%M")
+    symbol_str = f" | {symbol}" if symbol else ""
+    err_text   = str(error)[:800]
+    tb_text    = traceback.format_exc()[-600:] if not isinstance(error, str) else ""
+
+    # Color: đỏ cho pipeline fail, vàng cho symbol fail riêng lẻ
+    color = 0xFF4444 if symbol is None else 0xFFA500
+
+    payload = {
+        "embeds": [{
+            "title":       f"⚠️ [{pipeline.upper()}] Pipeline Alert{symbol_str}",
+            "description": f"**Lỗi:** {err_text}",
+            "color":       color,
+            "fields": [
+                {"name": "Thời gian", "value": date_str, "inline": True},
+                {"name": "Pipeline",  "value": pipeline, "inline": True},
+            ],
+            "footer": {"text": "AI Trading Assistant — Auto Monitor"},
+        }]
+    }
+    if tb_text:
+        payload["embeds"][0]["fields"].append(
+            {"name": "Traceback", "value": f"```{tb_text}```", "inline": False}
+        )
+
+    try:
+        resp = requests.post(webhook_url, json=payload, timeout=5)
+        if resp.status_code not in (200, 204):
+            print(f"[output_service] Discord alert HTTP {resp.status_code}")
+    except Exception as e:
+        print(f"[output_service] Discord alert fail: {e}")
+
 
 def _write_json(path: Path, state: dict) -> None:
     """Serialize state (skip non-JSON-serializable values)."""

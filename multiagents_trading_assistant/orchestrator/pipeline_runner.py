@@ -9,14 +9,18 @@ Chế độ --no-schedule / run_once=True: chạy một lần rồi thoát (dùn
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from multiagents_trading_assistant import database as db
 from multiagents_trading_assistant.orchestrator.investment_graph import run_pipeline as run_invest
 from multiagents_trading_assistant.orchestrator.trade_graph import run_pipeline as run_trade
 from multiagents_trading_assistant.screener.invest_screener import run_screener as invest_screener
 from multiagents_trading_assistant.screener.trade_screener import run_screener as trade_screener
 from multiagents_trading_assistant.services import output_service
+from multiagents_trading_assistant.services.output_service import send_pipeline_alert
+from multiagents_trading_assistant.services.memory_service import save_trade_decision
 
 _VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 
@@ -35,6 +39,17 @@ def run_investment_pipeline(
 ) -> list[dict]:
     date = date or _today()
     print(f"\n{'=' * 60}\n[runner] INVESTMENT PIPELINE — {date}\n{'=' * 60}")
+    try:
+        return _run_investment_pipeline_inner(symbol, date)
+    except Exception as e:
+        send_pipeline_alert("invest", e, date=date)
+        raise
+
+
+def _run_investment_pipeline_inner(
+    symbol: str | None,
+    date: str,
+) -> list[dict]:
 
     if symbol:
         candidates_sym = [symbol]
@@ -45,8 +60,12 @@ def run_investment_pipeline(
     results = []
     for sym in candidates_sym:
         print(f"\n[runner] → Invest: {sym}")
-        state = run_invest(symbol=sym, date=date)
-        results.append(state)
+        try:
+            state = run_invest(symbol=sym, date=date)
+            results.append(state)
+        except Exception as e:
+            print(f"[runner] Invest {sym} FAIL: {e}")
+            send_pipeline_alert("invest", e, symbol=sym, date=date)
 
     _print_invest_summary(results, date)
     return results
@@ -61,22 +80,42 @@ def run_trade_pipeline(
     date: str | None = None,
 ) -> list[dict]:
     date = date or _today()
+    db.init_db()
     print(f"\n{'=' * 60}\n[runner] TRADE PIPELINE — {date}\n{'=' * 60}")
+    try:
+        return _run_trade_pipeline_inner(symbol, date)
+    except Exception as e:
+        send_pipeline_alert("trade", e, date=date)
+        raise
+
+
+def _run_trade_pipeline_inner(
+    symbol: str | None,
+    date: str,
+) -> list[dict]:
 
     if symbol:
         candidates_sym = [(symbol, "UNKNOWN", {})]
     else:
-        candidates = trade_screener()
+        _market_ctx, candidates = trade_screener()
         candidates_sym = [
-            (c.symbol, getattr(c, "setup_type", "UNKNOWN"), {})
+            (c.symbol, c.setup_type, asdict(c.market_context))
             for c in candidates
         ]
 
     results = []
     for sym, setup, mkt_ctx in candidates_sym:
         print(f"\n[runner] → Trade: {sym} ({setup})")
-        state = run_trade(symbol=sym, setup_type=setup, market_context=mkt_ctx, date=date)
-        results.append(state)
+        try:
+            state = run_trade(symbol=sym, setup_type=setup, market_context=mkt_ctx, date=date)
+            results.append(state)
+            try:
+                save_trade_decision(state)
+            except Exception as e:
+                print(f"[runner] memory save fail ({sym}): {e}")
+        except Exception as e:
+            print(f"[runner] Trade {sym} FAIL: {e}")
+            send_pipeline_alert("trade", e, symbol=sym, date=date)
 
     _print_trade_summary(results, date)
     return results
@@ -107,16 +146,36 @@ def start_scheduler() -> None:
         CronTrigger(hour=8, minute=30, timezone=_VN_TZ),
         id="trade_daily",
     )
+    scheduler.add_job(
+        _run_cleanup,
+        CronTrigger(day_of_week="sun", hour=2, minute=0, timezone=_VN_TZ),
+        id="cleanup_weekly",
+    )
 
     print("[runner] APScheduler started:")
     print("  - Investment : Thứ 2 08:00 VN")
     print("  - Trade      : Hàng ngày 08:30 VN")
+    print("  - Cleanup    : Chủ nhật 02:00 VN")
     print("  Ctrl+C để dừng.\n")
 
     try:
         scheduler.start()
     except (KeyboardInterrupt, SystemExit):
         print("\n[runner] Scheduler dừng.")
+
+
+# ──────────────────────────────────────────────
+# Cleanup
+# ──────────────────────────────────────────────
+
+def _run_cleanup() -> None:
+    print(f"\n[runner] CLEANUP — {_today()}")
+    try:
+        stats = db.cleanup_old_data(news_keep_days=90, decisions_keep_days=180)
+        print(f"[runner] Cleanup OK: {stats}")
+    except Exception as e:
+        print(f"[runner] Cleanup fail: {e}")
+        send_pipeline_alert("cleanup", e, date=_today())
 
 
 # ──────────────────────────────────────────────

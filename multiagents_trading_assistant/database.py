@@ -142,7 +142,7 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_outcomes_news_id
                 ON news_outcomes(news_id);
         """)
-    print(f"[database] Đã khởi tạo DB tại: {DB_PATH}")
+    print(f"[database] DB ready: {DB_PATH}")
 
 
 # ──────────────────────────────────────────────
@@ -530,6 +530,83 @@ def get_suspicious_news(symbol: str, date: str) -> list[dict]:
             ORDER BY nh.created_at DESC
         """, (symbol, date)).fetchall()
         return [dict(r) for r in rows]
+
+
+# ──────────────────────────────────────────────
+# CLEANUP — xóa dữ liệu cũ định kỳ
+# ──────────────────────────────────────────────
+
+def cleanup_old_data(
+    news_keep_days: int = 90,
+    decisions_keep_days: int = 180,
+) -> dict:
+    """Xóa dữ liệu cũ khỏi SQLite + cache JSON + ChromaDB news_articles.
+
+    Args:
+        news_keep_days:      Giữ news_history N ngày gần nhất (default 90)
+        decisions_keep_days: Giữ decisions N ngày gần nhất (default 180)
+
+    Returns:
+        dict thống kê: {"news_deleted", "decisions_deleted", "cache_deleted", "chroma_deleted"}
+    """
+    import shutil
+    from pathlib import Path
+
+    stats = {"news_deleted": 0, "decisions_deleted": 0, "cache_deleted": 0, "chroma_deleted": 0}
+
+    news_cutoff      = (datetime.now() - timedelta(days=news_keep_days)).strftime("%Y-%m-%d")
+    decision_cutoff  = (datetime.now() - timedelta(days=decisions_keep_days)).strftime("%Y-%m-%d")
+    cache_cutoff     = datetime.now().timestamp() - 7 * 86400  # 7 ngày tính theo mtime
+
+    # ── SQLite: news_history ──
+    try:
+        with get_connection() as conn:
+            cur = conn.execute(
+                "DELETE FROM news_history WHERE date < ?", (news_cutoff,)
+            )
+            stats["news_deleted"] = cur.rowcount
+    except Exception as e:
+        print(f"[database] cleanup news_history fail: {e}")
+
+    # ── SQLite: decisions ──
+    try:
+        with get_connection() as conn:
+            cur = conn.execute(
+                "DELETE FROM decisions WHERE date < ?", (decision_cutoff,)
+            )
+            stats["decisions_deleted"] = cur.rowcount
+    except Exception as e:
+        print(f"[database] cleanup decisions fail: {e}")
+
+    # ── Cache JSON: xóa file OHLCV/news cũ hơn 7 ngày ──
+    cache_dir = Path(__file__).parent / "cache"
+    try:
+        for f in cache_dir.glob("*.json"):
+            if f.stat().st_mtime < cache_cutoff:
+                f.unlink(missing_ok=True)
+                stats["cache_deleted"] += 1
+    except Exception as e:
+        print(f"[database] cleanup cache fail: {e}")
+
+    # ── ChromaDB: xóa news_articles cũ ──
+    try:
+        from multiagents_trading_assistant.memory.knowledge_base import get_knowledge_base
+        kb = get_knowledge_base()
+        if kb._news is not None:
+            old = kb._news.get(where={"date": {"$lt": news_cutoff}})
+            ids_to_del = old.get("ids", [])
+            if ids_to_del:
+                kb._news.delete(ids=ids_to_del)
+                stats["chroma_deleted"] = len(ids_to_del)
+    except Exception as e:
+        print(f"[database] cleanup ChromaDB fail: {e}")
+
+    print(
+        f"[database] Cleanup xong — "
+        f"news={stats['news_deleted']}, decisions={stats['decisions_deleted']}, "
+        f"cache={stats['cache_deleted']}, chroma={stats['chroma_deleted']}"
+    )
+    return stats
 
 
 # ──────────────────────────────────────────────

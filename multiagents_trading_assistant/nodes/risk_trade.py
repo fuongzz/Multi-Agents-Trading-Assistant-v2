@@ -69,24 +69,32 @@ def check(state: dict) -> dict:
             sizing *= 0.8
             warnings.append(f"Room {room_pct:.0f}% (MEDIUM) — sizing ×0.8")
 
-    # Rule 3: T+3
+    # Rule 3: T+2.5 — hàng về chiều T+2, không mua lại trong 2 ngày
     if action == "MUA" and symbol:
         try:
-            recent = db.get_buys_last_n_days(symbol, 3)
+            recent = db.get_buys_last_n_days(symbol, 2)
             if recent:
                 latest = recent[0].get("trade_date", "?")
-                return _override(action, "CHỜ", f"Đã mua {symbol} {latest} — chưa qua T+3", warnings, 0.0)
+                return _override(action, "CHỜ", f"Đã mua {symbol} {latest} — chưa qua T+2.5", warnings, 0.0)
         except Exception as e:
-            print(f"[risk_trade] T+3 check skipped: {e}")
+            print(f"[risk_trade] T+2.5 check skipped: {e}")
 
-    # Rule 4: Biên độ giá
-    stk_chg = abs(mkt.get("stock_day_change_pct", 0) or 0)
+    # Rule 4: Biên độ giá — HOSE ±7%, HNX ±10%, UPCoM ±15%
+    raw_chg = mkt.get("stock_day_change_pct", 0) or 0
+    stk_chg = abs(raw_chg)
     exch = mkt.get("exchange", "HOSE")
-    limit = 7.0 if exch == "HOSE" else 10.0
+    if exch == "HOSE":
+        limit = 7.0
+    elif exch == "HNX":
+        limit = 10.0
+    else:  # UPCoM
+        limit = 15.0
     used = (stk_chg / limit) * 100
     if used > 71.4:
         sizing *= 0.5
         warnings.append(f"Đã dùng {stk_chg:.1f}%/{limit}% biên — sizing ×0.5")
+    if raw_chg <= -(limit * 0.72):
+        warnings.append(f"Gần sàn ({raw_chg:.1f}%/{limit}%) — rủi ro nhốt sàn, mất thanh khoản")
 
     # Rule 5: Trading window
     if action == "MUA":
