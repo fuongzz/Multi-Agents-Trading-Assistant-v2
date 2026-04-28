@@ -396,6 +396,29 @@ def get_price_board(symbols: list[str]) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def get_live_price(symbols: list[str]) -> dict[str, float]:
+    """Lấy giá khớp lệnh hiện tại, KHÔNG cache — dùng cho intraday monitor.
+
+    Returns:
+        {symbol: price} — chỉ gồm các mã lấy được giá.
+    """
+    try:
+        _throttle()
+        raw = _Trading(source="VCI").price_board(symbols_list=symbols)
+        raw.columns = ["_".join(str(c) for c in col).strip("_") for col in raw.columns]
+
+        result: dict[str, float] = {}
+        for _, row in raw.iterrows():
+            sym   = row.get("listing_symbol")
+            price = row.get("match_match_price")
+            if sym and price and float(price) > 0:
+                result[str(sym)] = float(price)
+        return result
+    except Exception as e:
+        print(f"[fetcher] get_live_price fail: {e}")
+        return {}
+
+
 # ──────────────────────────────────────────────
 # Fundamentals (P/E, P/B, ROE, EPS)
 # ──────────────────────────────────────────────

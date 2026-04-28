@@ -21,6 +21,7 @@ from multiagents_trading_assistant.screener.trade_screener import run_screener a
 from multiagents_trading_assistant.services import output_service
 from multiagents_trading_assistant.services.output_service import send_pipeline_alert
 from multiagents_trading_assistant.services.memory_service import save_trade_decision
+from multiagents_trading_assistant.orchestrator.session_monitor import run_session_monitor
 
 _VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 
@@ -151,12 +152,23 @@ def start_scheduler() -> None:
         CronTrigger(day_of_week="sun", hour=2, minute=0, timezone=_VN_TZ),
         id="cleanup_weekly",
     )
+    scheduler.add_job(
+        run_session_monitor,
+        CronTrigger(
+            day_of_week="mon-fri",
+            hour="9-11,13-14",
+            minute="0,15,30,45",
+            timezone=_VN_TZ,
+        ),
+        id="session_monitor",
+    )
 
     print("[runner] APScheduler started:")
-    print("  - Investment : Thứ 2 08:00 VN")
-    print("  - Trade      : Hàng ngày 08:30 VN")
-    print("  - Cleanup    : Chủ nhật 02:00 VN")
-    print("  Ctrl+C để dừng.\n")
+    print("  - Investment    : Thu 2 08:00 VN")
+    print("  - Trade         : Hang ngay 08:30 VN")
+    print("  - Session mon.  : Moi 15 phut (09:00-14:45)")
+    print("  - Cleanup       : Chu nhat 02:00 VN")
+    print("  Ctrl+C de dung.\n")
 
     try:
         scheduler.start()

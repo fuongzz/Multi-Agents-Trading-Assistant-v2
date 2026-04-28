@@ -41,15 +41,7 @@ _GREY   = "\x1b[90m"
 # ──────────────────────────────────────────────
 
 def write_invest_signal(state: dict, formatted_text: str) -> Path:
-    """In invest signal ra stdout + ghi JSON.
-
-    Args:
-        state:          InvestState cuối pipeline
-        formatted_text: text đã format sẵn từ formatters/invest_output.py
-
-    Returns:
-        path file JSON đã ghi
-    """
+    """In invest signal ra stdout + ghi JSON + gửi Discord."""
     date   = state.get("date", datetime.now().strftime("%Y-%m-%d"))
     symbol = state.get("symbol", "UNKNOWN")
 
@@ -59,11 +51,15 @@ def write_invest_signal(state: dict, formatted_text: str) -> Path:
     out_path = _INVEST_DIR / f"{date}_{symbol}.json"
     _write_json(out_path, state)
     print(f"{_GREY}  → saved: {out_path.relative_to(_BASE_DIR)}{_RESET}\n")
+
+    webhook = os.getenv("DISCORD_WEBHOOK_INVEST") or os.getenv("DISCORD_WEBHOOK_URL", "")
+    _send_signal_to_discord(webhook, _invest_embed(state))
+
     return out_path
 
 
 def write_trade_signal(state: dict, formatted_text: str) -> Path:
-    """In trade signal ra stdout + ghi JSON."""
+    """In trade signal ra stdout + ghi JSON + gửi Discord."""
     date   = state.get("date", datetime.now().strftime("%Y-%m-%d"))
     symbol = state.get("symbol", "UNKNOWN")
 
@@ -73,6 +69,10 @@ def write_trade_signal(state: dict, formatted_text: str) -> Path:
     out_path = _TRADE_DIR / f"{date}_{symbol}.json"
     _write_json(out_path, state)
     print(f"{_GREY}  → saved: {out_path.relative_to(_BASE_DIR)}{_RESET}\n")
+
+    webhook = os.getenv("DISCORD_WEBHOOK_TRADE") or os.getenv("DISCORD_WEBHOOK_URL", "")
+    _send_signal_to_discord(webhook, _trade_embed(state))
+
     return out_path
 
 
@@ -87,6 +87,111 @@ def write_summary(pipeline: str, total: int, actionable: int, date: str) -> None
 # ──────────────────────────────────────────────
 # Internal
 # ──────────────────────────────────────────────
+
+def _send_signal_to_discord(webhook_url: str, embed: dict) -> None:
+    """POST 1 embed lên Discord webhook. Không raise exception."""
+    if not webhook_url:
+        return
+    try:
+        resp = requests.post(webhook_url, json={"embeds": [embed]}, timeout=5)
+        if resp.status_code not in (200, 204):
+            print(f"[output_service] Discord signal HTTP {resp.status_code}")
+    except Exception as e:
+        print(f"[output_service] Discord signal fail: {e}")
+
+
+def _trade_embed(state: dict) -> dict:
+    """Build Discord embed cho Trade signal."""
+    symbol  = state.get("symbol", "?")
+    date    = state.get("date", "?")
+    setup   = state.get("setup_type", "?")
+    trader  = state.get("trader_decision", {})
+    risk    = state.get("risk_output", {})
+    synth   = state.get("synthesis", {})
+
+    action  = risk.get("final_action") or trader.get("action", "CHO")
+    icon    = {"MUA": "🟢", "CHO": "🟡", "TRANH": "🔴"}.get(action, "⚪")
+    color   = {"MUA": 0xFF8C00, "CHO": 0xFFCC00, "TRANH": 0xFF4444}.get(action, 0x888888)
+
+    conf    = synth.get("confluence_score", "?")
+    reason  = str(trader.get("primary_reason", ""))[:200]
+    override = risk.get("override_reason", "")
+
+    fields = [
+        {"name": "Setup",       "value": setup,              "inline": True},
+        {"name": "Confluence",  "value": f"{conf}/100",      "inline": True},
+        {"name": "Confidence",  "value": trader.get("confidence", "?"), "inline": True},
+    ]
+
+    if action == "MUA" and trader.get("entry_zone"):
+        ez  = trader["entry_zone"]
+        sl  = trader.get("stop_loss")
+        tp  = trader.get("take_profit")
+        rr  = trader.get("rr_ratio", "?")
+        pos = int((trader.get("position_pct", 0) or 0) * risk.get("sizing_modifier", 1.0))
+        fields += [
+            {"name": "Entry",   "value": f"{ez[0]:,.0f} – {ez[1]:,.0f}", "inline": True},
+            {"name": "SL",      "value": f"{sl:,.0f}" if sl else "N/A",   "inline": True},
+            {"name": "TP",      "value": f"{tp:,.0f}" if tp else "N/A",   "inline": True},
+            {"name": "R:R",     "value": str(rr),  "inline": True},
+            {"name": "Size",    "value": f"{pos}% NAV", "inline": True},
+        ]
+
+    if reason:
+        fields.append({"name": "Ly do", "value": reason, "inline": False})
+    if override:
+        fields.append({"name": "Risk override", "value": override, "inline": False})
+
+    return {
+        "title":       f"{icon} [TRADE] {symbol} — {action}",
+        "description": f"Ngay: {date}",
+        "color":       color,
+        "fields":      fields,
+        "footer":      {"text": "AI Trading Assistant"},
+    }
+
+
+def _invest_embed(state: dict) -> dict:
+    """Build Discord embed cho Invest signal."""
+    symbol  = state.get("symbol", "?")
+    date    = state.get("date", "?")
+    trader  = state.get("trader_decision", {})
+    risk    = state.get("risk_output", {})
+    val     = state.get("valuation_analysis", {})
+
+    action  = risk.get("final_action") or trader.get("action", "CHO")
+    icon    = {"MUA": "🟢", "CHO": "🟡", "TRANH": "🔴"}.get(action, "⚪")
+    color   = {"MUA": 0x00AA88, "CHO": 0xFFCC00, "TRANH": 0xFF4444}.get(action, 0x888888)
+
+    target  = trader.get("target_price")
+    mos     = val.get("margin_of_safety")
+    horizon = trader.get("holding_horizon", "?")
+    reason  = str(trader.get("primary_reason", ""))[:200]
+    exit_c  = str(trader.get("exit_condition", ""))[:150]
+    override = risk.get("override_reason", "")
+
+    fields = [
+        {"name": "Horizon",    "value": horizon,                              "inline": True},
+        {"name": "Confidence", "value": trader.get("confidence", "?"),        "inline": True},
+        {"name": "Target",     "value": f"{target:,.0f}" if target else "N/A","inline": True},
+    ]
+    if mos is not None:
+        fields.append({"name": "Margin of Safety", "value": f"{mos:.1f}%", "inline": True})
+    if reason:
+        fields.append({"name": "Luan diem",    "value": reason,  "inline": False})
+    if exit_c:
+        fields.append({"name": "Exit khi nao", "value": exit_c,  "inline": False})
+    if override:
+        fields.append({"name": "Risk override","value": override, "inline": False})
+
+    return {
+        "title":       f"{icon} [INVEST] {symbol} — {action}",
+        "description": f"Ngay: {date}",
+        "color":       color,
+        "fields":      fields,
+        "footer":      {"text": "AI Trading Assistant"},
+    }
+
 
 def send_pipeline_alert(
     pipeline: str,

@@ -30,46 +30,62 @@ def format_trade_signal(state: dict) -> str:
     sizing = risk.get("sizing_modifier", 1.0)
 
     lines = [
-        f"📙 [TRADE] {symbol} — {icon} {action}  ({setup}, confluence {confluence}/100, {quality})",
-        f"   Ngày: {date}",
+        f"{'='*55}",
+        f"[TRADE] {symbol} | {icon} {action}",
+        f"  Setup: {setup} | Confluence: {confluence}/100 | Quality: {quality}",
+        f"  Ngay:  {date} | Confidence: {trader.get('confidence', '?')}",
+        f"{'='*55}",
     ]
 
+    # Entry / SL / TP — chỉ khi MUA
     if action == "MUA" and trader.get("entry_zone"):
-        ez = trader["entry_zone"]
-        sl = trader.get("stop_loss")
-        tp = trader.get("take_profit")
-        rr = trader.get("rr_ratio", "?")
+        ez  = trader["entry_zone"]
+        sl  = trader.get("stop_loss")
+        tp  = trader.get("take_profit")
+        rr  = trader.get("rr_ratio", "?")
         pos = int((trader.get("position_pct", 0) or 0) * sizing)
-        entry_mid = (ez[0] + ez[1]) / 2
-
-        sl_pct = (sl - entry_mid) / entry_mid * 100 if sl else 0
-        tp_pct = (tp - entry_mid) / entry_mid * 100 if tp else 0
-
+        mid = (ez[0] + ez[1]) / 2
+        sl_pct = (sl - mid) / mid * 100 if sl else 0
+        tp_pct = (tp - mid) / mid * 100 if tp else 0
         lines += [
-            f"   Entry: {ez[0]:,.0f}–{ez[1]:,.0f}",
-            f"   SL:    {sl:,.0f} ({sl_pct:+.1f}%)" if sl else "   SL:    N/A",
-            f"   TP:    {tp:,.0f} ({tp_pct:+.1f}%)" if tp else "   TP:    N/A",
-            f"   R:R:   {rr} | Position: {pos}% NAV | Horizon: {trader.get('holding_horizon', '1-4 tuần')}",
+            f"  Entry:  {ez[0]:,.0f} – {ez[1]:,.0f}",
+            f"  SL:     {sl:,.0f} ({sl_pct:+.1f}%)" if sl else "  SL:     N/A",
+            f"  TP:     {tp:,.0f} ({tp_pct:+.1f}%)" if tp else "  TP:     N/A",
+            f"  R:R:    {rr} | Size: {pos}% NAV | Hold: {trader.get('holding_horizon','1-4 tuan')}",
+            f"{'-'*55}",
         ]
 
-    lines.append(f"   Confidence: {trader.get('confidence', '?')}")
-    lines.append(f"   Lý do: {trader.get('primary_reason', '')}")
+    # Lý do — luôn hiển thị dù MUA hay CHO
+    reason = trader.get("primary_reason", "")
+    if reason:
+        lines.append(f"  Ly do:  {reason}")
 
+    # Drivers / Blockers
     if drivers:
-        lines.append(f"   Drivers (+): {' | '.join(drivers[:3])}")
+        lines.append(f"  (+):    {' | '.join(drivers[:3])}")
     if blockers:
-        lines.append(f"   Blockers (-): {' | '.join(blockers[:3])}")
+        lines.append(f"  (-):    {' | '.join(blockers[:3])}")
 
+    # Tại sao CHO/TRANH — note riêng
+    if action in ("CHO", "TRANH"):
+        note = trader.get("trader_note", "")
+        if note:
+            lines.append(f"  Note:   {note}")
+
+    # Dòng ngoại
     if flow.get("flow_trend"):
-        lines.append(f"   NN: {flow.get('flow_trend')} | Room: {flow.get('room_status', '?')}")
+        lines.append(f"  NN:     {flow.get('flow_trend')} | Room: {flow.get('room_status','?')}")
 
-    if override:
-        lines.append(f"   ⚠ Risk override: {override}")
-    if warnings:
-        lines.append(f"   ⚠ Warnings: {' | '.join(warnings[:2])}")
-
+    # Rủi ro
     risks = trader.get("risks", [])
     if risks:
-        lines.append(f"   Rủi ro: {' | '.join(risks[:2])}")
+        lines.append(f"  Risk:   {' | '.join(risks[:2])}")
 
+    # Override / warnings
+    if override:
+        lines.append(f"  [!] Risk override: {override}")
+    if warnings:
+        lines.append(f"  [!] Warnings: {' | '.join(warnings[:2])}")
+
+    lines.append(f"{'='*55}")
     return "\n".join(lines)
