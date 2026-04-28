@@ -33,7 +33,7 @@ except ImportError:
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 # ── Model theo CLAUDE.md §5 ──
-MODEL_SONNET = os.getenv("MODEL_SONNET", "claude-sonnet-4-5")         # Debate, Trader
+MODEL_SONNET = os.getenv("MODEL_SONNET", "claude-sonnet-4-6")         # Debate, Trader
 MODEL_HAIKU  = os.getenv("MODEL_HAIKU",  "claude-haiku-4-5-20251001")  # PTKT, FA, Sentiment, ForeignFlow
 
 # ── Giới hạn token ──

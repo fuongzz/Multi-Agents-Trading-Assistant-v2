@@ -9,6 +9,8 @@ Chế độ --no-schedule / run_once=True: chạy một lần rồi thoát (dùn
 
 from __future__ import annotations
 
+import subprocess
+import sys
 from dataclasses import asdict
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -170,10 +172,132 @@ def start_scheduler() -> None:
     print("  - Cleanup       : Chu nhat 02:00 VN")
     print("  Ctrl+C de dung.\n")
 
+    _send_startup_notification()
+
+    # Kiem tra code moi moi 1 gio — tu restart neu co commit moi
+    scheduler.add_job(
+        _check_and_restart_if_new_code,
+        CronTrigger(minute=0, timezone=_VN_TZ),
+        id="code_update_check",
+    )
+
     try:
         scheduler.start()
     except (KeyboardInterrupt, SystemExit):
-        print("\n[runner] Scheduler dừng.")
+        print("\n[runner] Scheduler dung.")
+
+
+# ──────────────────────────────────────────────
+# Startup notification + Auto-update check
+# ──────────────────────────────────────────────
+
+def _git_commit() -> str:
+    """Lay commit hash hien tai (7 ky tu dau)."""
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            stderr=subprocess.DEVNULL,
+        ).decode().strip()
+    except Exception:
+        return "unknown"
+
+
+def _git_commit_message() -> str:
+    """Lay commit message hien tai."""
+    try:
+        return subprocess.check_output(
+            ["git", "log", "-1", "--pretty=%s"],
+            stderr=subprocess.DEVNULL,
+        ).decode().strip()[:80]
+    except Exception:
+        return ""
+
+
+def _send_startup_notification() -> None:
+    """Gui Discord khi scheduler khoi dong — hien thi version dang chay."""
+    import os, requests as _req
+    webhook = os.getenv("DISCORD_WEBHOOK_URL", "")
+    if not webhook:
+        return
+
+    commit  = _git_commit()
+    msg     = _git_commit_message()
+    now_str = datetime.now(tz=_VN_TZ).strftime("%Y-%m-%d %H:%M")
+
+    payload = {
+        "embeds": [{
+            "title":       "AI Trading Assistant — Online",
+            "description": f"Scheduler khoi dong thanh cong",
+            "color":       0x00AA88,
+            "fields": [
+                {"name": "Version",   "value": f"`{commit}`", "inline": True},
+                {"name": "Commit",    "value": msg or "—",    "inline": True},
+                {"name": "Thoi gian", "value": now_str,       "inline": True},
+                {"name": "Jobs",      "value": "Trade 08:30 | Invest T2 08:00 | Monitor 15min | Cleanup CN 02:00", "inline": False},
+            ],
+            "footer": {"text": "AI Trading Assistant"},
+        }]
+    }
+    try:
+        _req.post(webhook, json=payload, timeout=5)
+        print(f"[runner] Startup notification sent (commit: {commit})")
+    except Exception as e:
+        print(f"[runner] Startup notification fail: {e}")
+
+
+def _check_and_restart_if_new_code() -> None:
+    """Kiem tra code moi tren GitHub moi 1 gio. Restart process neu co commit moi."""
+    print(f"[runner] Code update check — {datetime.now(tz=_VN_TZ).strftime('%H:%M')}")
+
+    commit_before = _git_commit()
+
+    try:
+        # Fetch origin, khong merge
+        subprocess.run(
+            ["git", "fetch", "origin", "main"],
+            capture_output=True, timeout=15,
+        )
+        # So sanh local HEAD vs origin/main
+        behind = subprocess.check_output(
+            ["git", "rev-list", "HEAD..origin/main", "--count"],
+            stderr=subprocess.DEVNULL,
+        ).decode().strip()
+
+        if behind == "0":
+            print(f"[runner] Code up-to-date (commit: {commit_before})")
+            return
+
+        print(f"[runner] Phat hien {behind} commit moi — dang pull va restart...")
+
+        subprocess.run(
+            ["git", "pull", "origin", "main"],
+            capture_output=True, timeout=30,
+        )
+
+        commit_after = _git_commit()
+        msg = _git_commit_message()
+
+        # Notify Discord truoc khi restart
+        import os, requests as _req
+        webhook = os.getenv("DISCORD_WEBHOOK_URL", "")
+        if webhook:
+            try:
+                _req.post(webhook, json={"embeds": [{
+                    "title":       "Code moi — Dang restart...",
+                    "description": f"{commit_before} → {commit_after}",
+                    "color":       0x5865F2,
+                    "fields": [{"name": "Commit moi", "value": msg or "—", "inline": False}],
+                    "footer":      {"text": "AI Trading Assistant"},
+                }]}, timeout=5)
+            except Exception:
+                pass
+
+        # Restart process — run.bat se tu dong khoi dong lai
+        print("[runner] Restarting process for code update...")
+        sys.exit(0)
+
+    except Exception as e:
+        print(f"[runner] Code update check fail: {e}")
 
 
 # ──────────────────────────────────────────────

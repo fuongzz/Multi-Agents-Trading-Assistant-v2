@@ -76,7 +76,7 @@ multiagents_trading_assistant/
     llm_service.py           — Provider abstraction (Haiku / Sonnet)
     data_service.py          — vnstock + FiinQuantX wrapper (dùng chung)
     memory_service.py        — ChromaDB operations (dùng chung)
-    discord_service.py       — send_to_channel() cho #invest-signal và #trade-signal
+    output_service.py        — send_to_channel(), send_pipeline_alert(), Discord + JSON output
   formatters/
     invest_embed.py          — Discord embed màu xanh, format weekly
     trade_embed.py           — Discord embed màu cam, format daily + SL/TP
@@ -130,8 +130,8 @@ class TradeState(TypedDict):
 | Agent | Model | Lý do |
 |---|---|---|
 | Fundamental, Valuation, Macro, Technical, Flow, Sentiment, Synthesis | `claude-haiku-4-5-20251001` | Nhanh + rẻ |
-| Bull debate, Bear debate | `claude-sonnet-4-5` | Reasoning thesis sâu |
-| Trader Invest, Trader Trade | `claude-sonnet-4-5` | Quyết định cuối |
+| Bull debate, Bear debate | `claude-sonnet-4-6` | Reasoning thesis sâu |
+| Trader Invest, Trader Trade | `claude-sonnet-4-6` | Quyết định cuối |
 
 ---
 
