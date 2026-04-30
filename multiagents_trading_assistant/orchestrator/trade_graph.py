@@ -2,11 +2,13 @@
 
 Flow:
   load_macro
+    → portfolio_monitor  (chạy 1 lần/ngày — symbol đầu tiên)
     → [technical | flow | sentiment]  (parallel)
     → synthesis
     → retrieve_context   ← Hybrid RAG: internal (L1+L2) + external (Vietstock KB) song song
     → trader_trade
     → risk_trade
+    → persist_trade      (tự động ghi nhận MUA vào DB)
     → format_output → END
 
 Early exit: market_context.should_trade = False → END (skip pipeline).
@@ -26,6 +28,8 @@ from multiagents_trading_assistant.agents.trade import (
     technical_agent, flow_agent, sentiment_agent, synthesis_agent,
 )
 from multiagents_trading_assistant.nodes import trader_trade, risk_trade
+from multiagents_trading_assistant.nodes.portfolio_monitor import run_portfolio_monitor
+from multiagents_trading_assistant.nodes.persist_trade import run_persist_trade
 from multiagents_trading_assistant.formatters.trade_output import format_trade_signal
 from multiagents_trading_assistant.services import output_service
 from multiagents_trading_assistant.services.memory_service import (
@@ -69,6 +73,9 @@ class TradeState(TypedDict, total=False):
     # Decision
     trader_decision: dict
     risk_output: dict
+
+    # Portfolio management
+    portfolio_summary: dict
 
     # Output
     formatted_text: str
@@ -213,20 +220,24 @@ def _safe(name: str, fn, *args, **kwargs) -> Any:
 def build_graph():
     g = StateGraph(TradeState)
     g.add_node("load_macro",        load_macro)
+    g.add_node("portfolio_monitor", run_portfolio_monitor)
     g.add_node("run_analysts",      run_analysts)
     g.add_node("synthesis",         run_synthesis)
     g.add_node("retrieve_context",  run_retrieve_context)
     g.add_node("trader_trade",      run_trader)
     g.add_node("risk_trade",        run_risk)
+    g.add_node("persist_trade",     run_persist_trade)
     g.add_node("format_output",     run_format)
 
     g.set_entry_point("load_macro")
-    g.add_edge("load_macro",       "run_analysts")
+    g.add_edge("load_macro",       "portfolio_monitor")
+    g.add_edge("portfolio_monitor","run_analysts")
     g.add_edge("run_analysts",     "synthesis")
     g.add_edge("synthesis",        "retrieve_context")
     g.add_edge("retrieve_context", "trader_trade")
     g.add_edge("trader_trade",     "risk_trade")
-    g.add_edge("risk_trade",       "format_output")
+    g.add_edge("risk_trade",       "persist_trade")
+    g.add_edge("persist_trade",    "format_output")
     g.add_edge("format_output",    END)
     return g.compile()
 
@@ -251,6 +262,7 @@ def run_pipeline(
         "market_context": market_context or {}, "macro_context": {},
         "technical_analysis": {}, "foreign_flow_analysis": {}, "sentiment_analysis": {},
         "synthesis": {}, "memory_context": {}, "trader_decision": {}, "risk_output": {},
+        "portfolio_summary": {},
         "formatted_text": "", "error": None,
     }
 

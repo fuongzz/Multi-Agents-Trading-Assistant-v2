@@ -2,9 +2,11 @@
 fetcher.py — Data layer: lấy toàn bộ dữ liệu cho pipeline.
 
 Sources:
-  - VCI (primary)   : vnstock.explorer.vci.Quote
+  - DNSE (primary)  : REST GET /price/ohlc (LightSpeed API)
+  - VCI (fallback)  : vnstock.explorer.vci.Quote
   - KBS (fallback)  : vnstock.Quote(source="KBS")
   - FiinQuantX      : fundamentals (P/E, P/B, ROE, EPS, growth, industry)
+  - FiinQuantX      : foreign flow net5d/net20d
   - yfinance        : global macro (S&P500, DXY, Oil, Gold, USD/VND)
 
 Functions:
@@ -21,7 +23,8 @@ import json
 import os
 import sys
 import time
-from datetime import date as _date, datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import date as _date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -43,6 +46,9 @@ from vnstock import Quote as _KBSQuote, Vnstock, Trading as _Trading
 
 # ── yfinance (global macro) ──
 import yfinance as yf
+
+# ── DNSE LightSpeed API ──
+from multiagents_trading_assistant.services.dnse_client import _get_dnse_client
 
 
 # ──────────────────────────────────────────────
@@ -184,6 +190,12 @@ def _date_range(n_days: int) -> tuple[str, str]:
     return start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
 
 
+def _to_unix_ts(date_str: str) -> int:
+    """Convert 'YYYY-MM-DD' sang Unix timestamp (UTC midnight)."""
+    dt = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    return int(dt.timestamp())
+
+
 def _normalize_df(df: pd.DataFrame, n_days: int) -> pd.DataFrame:
     """Chuẩn hóa tên cột, lấy n_days nến cuối."""
     df = df.rename(columns={"time": "date", "ticker": "symbol"})
@@ -196,12 +208,27 @@ def _normalize_df(df: pd.DataFrame, n_days: int) -> pd.DataFrame:
 
 def _fetch_single(symbol: str, n_days: int) -> pd.DataFrame:
     """
-    Lấy OHLCV 1 mã. VCI trước, KBS nếu lỗi.
-    Trả về DataFrame trống nếu cả 2 đều thất bại.
+    Lấy OHLCV 1 mã. DNSE trước, VCI nếu lỗi, KBS nếu VCI cũng lỗi.
+    Trả về DataFrame trống nếu cả 3 đều thất bại.
     """
     start, end = _date_range(n_days)
 
-    # ── VCI ──
+    # ── DNSE (primary) ──
+    try:
+        client = _get_dnse_client()
+        if client is not None:
+            from_ts = _to_unix_ts(start)
+            to_ts   = _to_unix_ts(end) + 86400  # +1 ngày để include ngày cuối
+            df = client.get_ohlcv(symbol, from_ts, to_ts, resolution="1D")
+            if df is not None and not df.empty:
+                df = _normalize_df(df, n_days)
+                print(f"[fetcher] DNSE ✓ {symbol}: {len(df)} nến")
+                return df
+            print(f"[fetcher] DNSE trống {symbol} — thử VCI...")
+    except Exception as e:
+        print(f"[fetcher] DNSE ✗ {symbol}: {e} — thử VCI...")
+
+    # ── VCI fallback ──
     try:
         _throttle()
         df = _VCIQuote(symbol).history(start=start, end=end, interval="1D")
@@ -307,7 +334,56 @@ def get_vnindex(n_days: int = 200) -> pd.DataFrame:
     Returns:
         DataFrame với columns [date, open, high, low, close, volume]
     """
-    return get_ohlcv("VNINDEX", n_days)
+    key    = f"VNINDEX_{_TODAY}_ohlcv_{n_days}"
+    cached = _load_cache(key)
+    if cached is not None:
+        print("[fetcher] Cache ✓ VNINDEX")
+        return _records_to_df(cached)
+
+    start, end = _date_range(n_days)
+    df = pd.DataFrame()
+
+    # ── DNSE (primary, type=INDEX) ──
+    try:
+        client = _get_dnse_client()
+        if client is not None:
+            from_ts = _to_unix_ts(start)
+            to_ts   = _to_unix_ts(end) + 86400
+            df = client.get_ohlcv("VNINDEX", from_ts, to_ts, resolution="1D", asset_type="INDEX")
+            if df is not None and not df.empty:
+                df = _normalize_df(df, n_days)
+                print(f"[fetcher] DNSE ✓ VNINDEX: {len(df)} nến")
+    except Exception as e:
+        print(f"[fetcher] DNSE ✗ VNINDEX: {e} — thử vnstock...")
+
+    # ── vnstock fallback ──
+    if df.empty:
+        try:
+            _throttle()
+            raw = _VCIQuote("VNINDEX").history(start=start, end=end, interval="1D")
+            if raw is not None and not raw.empty:
+                df = _normalize_df(raw, n_days)
+                print(f"[fetcher] VCI ✓ VNINDEX: {len(df)} nến")
+        except Exception as e:
+            print(f"[fetcher] VCI ✗ VNINDEX: {e}")
+
+    if not df.empty:
+        _save_cache(key, _df_to_records(df))
+    return df
+
+
+def get_vnmidcap(n_days: int = 200) -> pd.DataFrame:
+    """
+    Lấy OHLCV VN Mid-Cap Index. Cache theo ngày.
+
+    Dùng để phát hiện VNI bị méo bởi VinGroup — khi VNI và VNMidCap
+    phân kỳ xu hướng, tham chiếu VNMidCap đáng tin hơn cho thị trường rộng.
+
+    Returns:
+        DataFrame với columns [date, open, high, low, close, volume]
+        DataFrame trống nếu symbol không hỗ trợ.
+    """
+    return get_ohlcv("VNMIDCAP", n_days)
 
 
 # ──────────────────────────────────────────────
@@ -349,6 +425,127 @@ def get_vn100_symbols() -> list[str]:
         "TCH", "TPB", "VCB", "VCG", "VCI", "VGC", "VHC", "VHM", "VIB", "VIC",
         "VIX", "VJC", "VND", "VNM", "VPB", "VPI", "VPL", "VRE", "VSC", "VTP",
     ]
+
+
+def get_all_symbols() -> list[str]:
+    """
+    Lấy toàn bộ mã cổ phiếu niêm yết HOSE từ DNSE instruments API.
+    Fallback về vnstock Listing nếu DNSE không khả dụng.
+    Cache theo ngày.
+
+    Returns:
+        Danh sách mã cổ phiếu HOSE (thường ~400 mã).
+    """
+    key    = f"all_symbols_{_TODAY}"
+    cached = _load_cache(key)
+    if cached is not None:
+        symbols = [r["symbol"] for r in cached if r.get("symbol")]
+        print(f"[fetcher] Cache ✓ all_symbols: {len(symbols)} mã")
+        return symbols
+
+    # ── vnstock Listing (primary — đầy đủ nhất) ──
+    try:
+        from vnstock import Listing
+        df = Listing().symbols_by_group("HOSE")
+        symbols = df.tolist() if hasattr(df, "tolist") else df["symbol"].tolist()
+        if len(symbols) >= 100:
+            print(f"[fetcher] vnstock Listing ✓: {len(symbols)} mã HOSE")
+            _save_cache(key, [{"symbol": s} for s in symbols])
+            return symbols
+    except Exception as e:
+        print(f"[fetcher] vnstock Listing ✗: {e} — thử DNSE instruments...")
+
+    # ── DNSE instruments fallback ──
+    try:
+        client = _get_dnse_client()
+        if client is not None:
+            symbols: list[str] = []
+            offset = 0
+            limit = 200
+            while True:
+                status, body = client.get_instruments(
+                    market_id="STO",
+                    limit=limit,
+                    offset=offset,
+                )
+                if status != 200 or not body:
+                    break
+                data = json.loads(body)
+                items = data.get("data", []) if isinstance(data, dict) else data
+                if not items:
+                    break
+                for item in items:
+                    sym = item.get("symbol")
+                    if sym and len(sym) == 3 and sym.isalpha():
+                        symbols.append(str(sym).upper())
+                total = data.get("total", 0) if isinstance(data, dict) else 0
+                offset += limit
+                if offset >= (total or offset + 1):
+                    break
+            if len(symbols) >= 100:
+                print(f"[fetcher] DNSE instruments ✓: {len(symbols)} mã HOSE")
+                _save_cache(key, [{"symbol": s} for s in symbols])
+                return symbols
+    except Exception as e:
+        print(f"[fetcher] DNSE instruments ✗: {e}")
+
+    return get_vn100_symbols()
+
+
+def get_liquid_symbols(
+    min_avg_vol: int = 500_000,
+    n_days: int = 20,
+    max_workers: int = 20,
+) -> list[str]:
+    """
+    Lấy danh sách mã có thanh khoản trung bình >= min_avg_vol cổ/ngày.
+    Fetch OHLCV song song (ThreadPoolExecutor) để nhanh hơn.
+    Cache theo ngày.
+
+    Args:
+        min_avg_vol: Volume trung bình tối thiểu (mặc định 500k)
+        n_days:      Số ngày tính trung bình (mặc định 20)
+        max_workers: Số thread song song (mặc định 20)
+
+    Returns:
+        Danh sách mã đủ điều kiện, sort theo avg volume giảm dần.
+    """
+    cache_key = f"liquid_symbols_{_TODAY}_{min_avg_vol}_{n_days}"
+    cached = _load_cache(cache_key)
+    if cached is not None:
+        symbols = [r["symbol"] for r in cached if r.get("symbol")]
+        print(f"[fetcher] Cache ✓ liquid_symbols: {len(symbols)} mã (vol≥{min_avg_vol:,})")
+        return symbols
+
+    all_syms = get_all_symbols()
+    print(f"[fetcher] Lọc thanh khoản {len(all_syms)} mã (vol≥{min_avg_vol:,}, {n_days}d) — {max_workers} workers...")
+
+    liquid: list[tuple[str, float]] = []  # (symbol, avg_vol)
+
+    def _fetch_avg_vol(sym: str) -> tuple[str, float]:
+        df = _fetch_single(sym, n_days)
+        if df.empty:
+            return sym, 0.0
+        avg = float(df["volume"].tail(n_days).mean())
+        return sym, avg
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(_fetch_avg_vol, s): s for s in all_syms}
+        done = 0
+        for future in as_completed(futures):
+            done += 1
+            sym, avg_vol = future.result()
+            if avg_vol >= min_avg_vol:
+                liquid.append((sym, avg_vol))
+            if done % 50 == 0:
+                print(f"[fetcher] Đã xử lý {done}/{len(all_syms)} mã, liquid={len(liquid)}...")
+
+    liquid.sort(key=lambda x: x[1], reverse=True)
+    result = [sym for sym, _ in liquid]
+
+    print(f"[fetcher] Liquid symbols: {len(result)}/{len(all_syms)} mã đủ vol≥{min_avg_vol:,}")
+    _save_cache(cache_key, [{"symbol": s} for s in result])
+    return result
 
 
 # ──────────────────────────────────────────────
@@ -399,24 +596,72 @@ def get_price_board(symbols: list[str]) -> pd.DataFrame:
 def get_live_price(symbols: list[str]) -> dict[str, float]:
     """Lấy giá khớp lệnh hiện tại, KHÔNG cache — dùng cho intraday monitor.
 
+    Thứ tự ưu tiên:
+      1. DNSE WebSocket cache (instant, real-time tick)
+      2. DNSE REST 1m OHLCV (candle gần nhất, ~1-2 phút trễ)
+      3. VCI price_board (fallback cuối)
+
     Returns:
         {symbol: price} — chỉ gồm các mã lấy được giá.
     """
-    try:
-        _throttle()
-        raw = _Trading(source="VCI").price_board(symbols_list=symbols)
-        raw.columns = ["_".join(str(c) for c in col).strip("_") for col in raw.columns]
+    result: dict[str, float] = {}
+    missing = list(symbols)
 
-        result: dict[str, float] = {}
-        for _, row in raw.iterrows():
-            sym   = row.get("listing_symbol")
-            price = row.get("match_match_price")
-            if sym and price and float(price) > 0:
-                result[str(sym)] = float(price)
-        return result
+    # ── 1. DNSE WebSocket cache ──
+    try:
+        from multiagents_trading_assistant.services.dnse_ws_price import (
+            get_ws_price, is_connected,
+        )
+        if is_connected():
+            still_missing = []
+            for sym in missing:
+                p = get_ws_price(sym, max_age_seconds=60.0)
+                if p is not None:
+                    result[sym] = p
+                else:
+                    still_missing.append(sym)
+            missing = still_missing
+            if result:
+                print(f"[fetcher] get_live_price WS ✓ {len(result)} mã, còn {len(missing)} cần REST")
     except Exception as e:
-        print(f"[fetcher] get_live_price fail: {e}")
-        return {}
+        print(f"[fetcher] get_live_price WS: {e}")
+
+    # ── 2. DNSE REST 1m fallback ──
+    if missing:
+        try:
+            client = _get_dnse_client()
+            if client is not None:
+                now_ts  = int(time.time())
+                from_ts = now_ts - 300  # 5 phút buffer
+                still_missing = []
+                for sym in missing:
+                    df = client.get_ohlcv(sym, from_ts, now_ts, resolution="1")
+                    if df is not None and not df.empty:
+                        result[sym] = float(df["close"].iloc[-1])
+                    else:
+                        still_missing.append(sym)
+                if len(missing) - len(still_missing) > 0:
+                    print(f"[fetcher] get_live_price DNSE REST ✓ {len(missing) - len(still_missing)} mã")
+                missing = still_missing
+        except Exception as e:
+            print(f"[fetcher] get_live_price DNSE REST: {e}")
+
+    # ── 3. VCI fallback ──
+    if missing:
+        try:
+            _throttle()
+            raw = _Trading(source="VCI").price_board(symbols_list=missing)
+            raw.columns = ["_".join(str(c) for c in col).strip("_") for col in raw.columns]
+            for _, row in raw.iterrows():
+                sym   = row.get("listing_symbol")
+                price = row.get("match_match_price")
+                if sym and price and float(price) > 0:
+                    result[str(sym)] = float(price)
+            print(f"[fetcher] get_live_price VCI fallback {len(missing)} mã")
+        except Exception as e:
+            print(f"[fetcher] get_live_price VCI fail: {e}")
+
+    return result
 
 
 # ──────────────────────────────────────────────

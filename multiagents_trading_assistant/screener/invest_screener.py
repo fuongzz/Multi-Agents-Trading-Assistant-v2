@@ -13,7 +13,7 @@ import importlib.metadata  # noqa: F401
 from dataclasses import dataclass
 
 from multiagents_trading_assistant.services.data_service import (
-    get_ohlcv_batch, get_vn30_symbols,
+    get_ohlcv_batch, get_vn30_symbols, get_liquid_symbols,
 )
 from multiagents_trading_assistant import fetcher
 from multiagents_trading_assistant.agents.invest.fundamental_agent import (
@@ -37,9 +37,9 @@ def run_screener(
     max_candidates: int = 7,
 ) -> list[InvestCandidate]:
     if symbols is None:
-        symbols = get_vn30_symbols()
+        symbols = get_liquid_symbols(min_avg_vol=300_000)
 
-    print(f"[invest_screener] Scan {len(symbols)} mã (FA criteria)...")
+    print(f"[invest_screener] Scan {len(symbols)} mã (FA criteria, vol≥300k)...")
 
     ohlcv_map = get_ohlcv_batch(symbols, n_days=30)
     candidates: list[InvestCandidate] = []

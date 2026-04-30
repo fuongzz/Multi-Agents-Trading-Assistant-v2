@@ -1,13 +1,14 @@
 """
 database.py — SQLite interface cho AI Trading Assistant.
 
-6 bảng chính:
+7 bảng chính:
   - positions          : vị thế đang giữ
   - decisions          : lịch sử AI ra quyết định
   - trades             : lịch sử MUA/BÁN thực tế (dùng cho T+3 check)
   - news_history       : lịch sử tin tức + sentiment
   - news_outcomes      : kết quả giá sau T+1/3/5/20 của mỗi tin
   - source_credibility : thống kê độ tin cậy theo nguồn báo
+  - portfolio_config   : cấu hình danh mục (NAV, thresholds)
 """
 
 import json
@@ -141,7 +142,41 @@ def init_db() -> None:
             -- Index cho news_outcomes
             CREATE INDEX IF NOT EXISTS idx_outcomes_news_id
                 ON news_outcomes(news_id);
+
+            -- Cấu hình danh mục (NAV, thresholds)
+            CREATE TABLE IF NOT EXISTS portfolio_config (
+                key        TEXT PRIMARY KEY,
+                value      TEXT NOT NULL,
+                updated_at TEXT DEFAULT (datetime('now','localtime'))
+            );
         """)
+    # Mở rộng bảng positions — thêm cột portfolio management
+    _alter_columns = [
+        ("positions", "peak_price",   "REAL"),
+        ("positions", "last_checked", "TEXT"),
+        ("trades",    "exit_price",   "REAL"),
+        ("trades",    "exit_date",    "TEXT"),
+        ("trades",    "exit_reason",  "TEXT"),
+        ("trades",    "realized_pnl", "REAL"),
+        ("trades",    "realized_rr",  "REAL"),
+    ]
+    with get_connection() as conn:
+        for table, col, col_type in _alter_columns:
+            try:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
+            except sqlite3.OperationalError:
+                pass  # column already exists
+
+        # Seed portfolio_config nếu chưa có
+        conn.execute("""
+            INSERT OR IGNORE INTO portfolio_config (key, value)
+            VALUES ('total_nav_vnd', '1000000000')
+        """)
+        conn.execute("""
+            INSERT OR IGNORE INTO portfolio_config (key, value)
+            VALUES ('momentum_drawdown_pct', '3.0')
+        """)
+
     print(f"[database] DB ready: {DB_PATH}")
 
 
@@ -211,6 +246,90 @@ def remove_position(symbol: str) -> None:
     """Xóa vị thế sau khi BÁN hết."""
     with get_connection() as conn:
         conn.execute("DELETE FROM positions WHERE symbol = ?", (symbol,))
+
+
+def update_position_peak(symbol: str, peak_price: float) -> None:
+    """Cập nhật đỉnh giá của vị thế — dùng để tính momentum drawdown."""
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE positions SET peak_price = ?, last_checked = date('now','localtime') WHERE symbol = ?",
+            (peak_price, symbol),
+        )
+
+
+def update_position_sl(symbol: str, new_sl: float) -> None:
+    """Nâng trailing SL của vị thế — gọi khi session_monitor phát hiện profit target đạt."""
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE positions SET sl = ?, last_checked = date('now','localtime') WHERE symbol = ?",
+            (new_sl, symbol),
+        )
+
+
+def close_position(
+    symbol: str,
+    exit_price: float,
+    exit_date: str,
+    exit_reason: str,
+    entry_price: float,
+    quantity: int,
+    strategy: str = None,
+) -> None:
+    """
+    Đóng vị thế: ghi BÁN vào trades với các trường exit, rồi xóa khỏi positions.
+
+    exit_reason: SL_HIT / TP_HIT / MOMENTUM_LOSS / MANUAL
+    """
+    risk = entry_price - (entry_price * 0.05)  # fallback nếu không có sl
+    pnl = (exit_price - entry_price) * quantity
+    rr = (exit_price - entry_price) / max(entry_price - risk, 1) if entry_price > risk else None
+
+    with get_connection() as conn:
+        conn.execute("""
+            INSERT INTO trades
+                (symbol, action, price, quantity, trade_date, strategy, note,
+                 exit_price, exit_date, exit_reason, realized_pnl, realized_rr)
+            VALUES (?, 'BÁN', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (symbol, exit_price, quantity, exit_date, strategy,
+              f"Auto exit: {exit_reason}",
+              exit_price, exit_date, exit_reason, pnl, rr))
+        conn.execute("DELETE FROM positions WHERE symbol = ?", (symbol,))
+
+
+def get_closed_trades(limit: int = 100) -> list[dict]:
+    """Lấy lịch sử giao dịch đã đóng (BÁN rows) — dùng cho thống kê hiệu suất."""
+    with get_connection() as conn:
+        rows = conn.execute("""
+            SELECT * FROM trades
+            WHERE action = 'BÁN'
+            ORDER BY trade_date DESC
+            LIMIT ?
+        """, (limit,)).fetchall()
+        return [dict(r) for r in rows]
+
+
+# ──────────────────────────────────────────────
+# PORTFOLIO CONFIG
+# ──────────────────────────────────────────────
+
+def get_portfolio_config(key: str, default=None) -> str | None:
+    """Đọc một cấu hình danh mục theo key."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT value FROM portfolio_config WHERE key = ?", (key,)
+        ).fetchone()
+        return row["value"] if row else default
+
+
+def set_portfolio_config(key: str, value: str) -> None:
+    """Ghi/cập nhật một cấu hình danh mục."""
+    with get_connection() as conn:
+        conn.execute("""
+            INSERT INTO portfolio_config (key, value)
+            VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value,
+                                           updated_at = datetime('now','localtime')
+        """, (key, value))
 
 
 # ──────────────────────────────────────────────

@@ -17,32 +17,51 @@ import importlib.metadata  # noqa: F401
 from multiagents_trading_assistant.services.llm_service import run_agent
 
 
-_SYSTEM_PROMPT = """Bạn là Trader đầu cơ ngắn hạn (1-4 tuần) thị trường VN.
-Nhiệm vụ: dựa trên technical + flow + sentiment + synthesis, ra quyết định MUA/CHỜ/TRÁNH với entry_zone/SL/TP cụ thể.
+_SYSTEM_PROMPT = """Bạn là Trader đầu cơ thị trường VN theo triết lý price-action.
+Nhiệm vụ: dựa trên technical + flow + sentiment + synthesis, ra quyết định MUA/CHỜ/TRÁNH với entry_zone và SL kỹ thuật.
+
+=== Triết lý giữ lệnh (QUAN TRỌNG) ===
+- KHÔNG exit theo thời gian (không có "5 phiên" hay "1 tuần").
+- Cổ phiếu tăng → để nó tăng. Trailing SL tự bảo vệ lãi khi giá mạnh.
+- Chỉ xem xét thoát khi price action nói "dừng":
+    • SL trailing bị chạm (swing low dưới entry giảm sâu)
+    • Double top xuất hiện (2 đỉnh ngang nhau, pull back qua midpoint)
+    • MA20 bị phá 2 nến liên tiếp + MA20 đang dốc xuống
+    • Cấu trúc HH+HL bị phá (giá đóng dưới prior swing low 2 nến liên tiếp)
+- initial_target chỉ là mục tiêu tham chiếu — KHÔNG đặt lệnh bán tự động tại đó.
+  Khi giá đạt initial_target, nâng SL lên để khoá lợi nhuận, tiếp tục giữ.
 
 === Quy tắc bắt buộc ===
 1. action chỉ nhận: "MUA" | "CHỜ" | "TRÁNH"
 2. entry_zone: [low, high] — vùng giá entry hợp lệ (không single price)
-3. SL ≤ 7% dưới low của entry_zone (HOSE), ≤ 10% (HNX), ≤ 15% (UPCoM)
-4. TP: Risk/Reward ≥ 2 — (TP - entry_mid) ≥ 2 × (entry_mid - SL)
+3. stop_loss ≤ 5% dưới low của entry_zone — đặt dưới swing low kỹ thuật gần nhất
+4. initial_target: tham chiếu R:R ≥ 1.5 — dùng để tính trail_sl_guide, KHÔNG phải hard TP
 5. KHÔNG mua gần kháng cự — high của entry_zone phải cách resistance gần nhất ≥ 3%
-6. holding_horizon cố định: "1-4 tuần" (Trade pipeline không hold dài hơn)
-7. position_pct: 2-5% NAV — cao confluence → 5%, thấp → 2%
-8. Confluence < 50 → bắt buộc CHỜ hoặc TRÁNH
-9. Không setup rõ → CHỜ, entry_zone/SL/TP = null
-10. T+2.5 — KHÔNG trade scalping: hàng về chiều T+2, không thể exit T+0/T+1. Holding ≥ 3 ngày là minimum thực tế.
-11. Nhốt sàn/trần: cổ phiếu đã dùng >70% biên độ xuống trong phiên → thanh khoản kém, KHÔNG mua. Đặt SL phải có dư địa thoát lệnh.
-12. Khối ngoại & tự doanh: dòng tiền "Tây" và CTCK có ảnh hưởng tâm lý lớn trên HOSE. Ưu tiên MUA khi khối ngoại mua ròng ≥ 20 tỷ/phiên. Thận trọng khi tự doanh bán ròng mạnh.
+6. position_pct theo confluence:
+   - Confluence ≥ 70 → 5% NAV
+   - Confluence 55–69 → 3% NAV
+   - Confluence < 55 → 2% NAV
+7. Confluence < 50 → bắt buộc CHỜ hoặc TRÁNH
+8. Không setup rõ → CHỜ, entry_zone/stop_loss/initial_target = null
+9. T+2.5 — không scalp: hàng về chiều T+2, không exit T+0/T+1. Hold tối thiểu qua T+3.
+10. Nhốt sàn/trần: cổ phiếu đã tăng ≥ 5% hoặc dùng >70% biên độ xuống → KHÔNG mua.
+11. Khối ngoại & tự doanh: ưu tiên MUA khi NN mua ròng ≥ 20 tỷ/phiên. Thận trọng khi tự doanh bán mạnh.
+12. trail_sl_guide: gợi ý nâng SL khi lãi đạt các mức — dùng swing low gần nhất làm tham chiếu.
 
 === Output schema (JSON hợp lệ DUY NHẤT) ===
 {
   "action": "MUA" | "CHỜ" | "TRÁNH",
   "entry_zone": [<float>, <float>] | null,
   "stop_loss": <float|null>,
-  "take_profit": <float|null>,
+  "initial_target": <float|null>,
   "rr_ratio": <float|null>,
   "position_pct": <int 0-5>,
-  "holding_horizon": "1-4 tuần",
+  "trail_sl_guide": {
+    "at_5pct_gain":  <float|null>,
+    "at_10pct_gain": <float|null>,
+    "at_20pct_gain": <float|null>
+  },
+  "reversal_watchlist": [<str> — dấu hiệu cần theo dõi để thoát],
   "confidence": "THẤP" | "TRUNG_BÌNH" | "CAO",
   "primary_reason": <str — 1-2 câu tiếng Việt>,
   "risks": [<str>, ...],
@@ -62,7 +81,9 @@ def decide(state: dict) -> dict:
         print(f"[trader_trade] {symbol} → {result.get('action')} | conf={result.get('confidence')} | pos={result.get('position_pct')}%")
         if result.get("entry_zone"):
             ez = result["entry_zone"]
-            print(f"[trader_trade]   entry={ez[0]:,.0f}-{ez[1]:,.0f} | SL={result.get('stop_loss'):,.0f} | TP={result.get('take_profit'):,.0f} | R:R={result.get('rr_ratio')}")
+            tgt = result.get("initial_target")
+            tgt_str = f"{tgt:,.0f}" if tgt else "N/A"
+            print(f"[trader_trade]   entry={ez[0]:,.0f}-{ez[1]:,.0f} | SL={result.get('stop_loss'):,.0f} | target={tgt_str} | R:R={result.get('rr_ratio')}")
         return {"trader_decision": result}
     except Exception as e:
         print(f"[trader_trade] LLM error: {e} — fallback CHỜ")
@@ -97,8 +118,16 @@ def _build_prompt(state: dict) -> str:
         f"Giá hiện tại: {_fmt(current_price)} VNĐ",
         f"Sàn: {mkt.get('exchange', 'HOSE')}",
         "",
-        "=== VN-Index ===",
-        f"Trend: {mkt.get('trend', '?')} | Δhôm nay: {mkt.get('vni_change_pct', '?')}%",
+        "=== Trạng thái thị trường ===",
+        f"VNI: {mkt.get('trend', '?')} ({_fmt_pct(mkt.get('vni_change_pct'))}) | "
+        f"VNMidCap: {mkt.get('vnmidcap_trend', '?')} ({_fmt_pct(mkt.get('vnmidcap_change_pct'))})",
+        f"Tham chiếu quyết định: {mkt.get('reference_index', 'VNINDEX')} → {mkt.get('reference_trend', mkt.get('trend', '?'))}",
+        *(
+            [f"⚠ Méo chỉ số: {mkt.get('distortion_note', '')}"]
+            if mkt.get("is_index_distorted")
+            else []
+        ),
+        f"VinGroup đóng góp VNI hôm nay: ≈ {mkt.get('vingroup_contribution_pct', 0):+.2f}%",
         "",
         "=== Synthesis (rule-based) ===",
         f"Confluence: {synth.get('confluence_score', '?')}/100 ({synth.get('setup_quality', '?')})",
@@ -128,43 +157,122 @@ def _build_prompt(state: dict) -> str:
         "=== Hướng dẫn entry/SL/TP theo setup ===",
     ]
 
-    if setup in ("BREAKOUT",):
-        lines += [
-            "BREAKOUT: entry_zone = [giá hiện tại, giá hiện tại × 1.01]",
-            "SL = support gần nhất hoặc -5% entry_low",
-            "TP = resistance kế tiếp hoặc entry_mid + 2×(entry_mid - SL)",
-        ]
-    elif setup in ("RETEST",):
-        lines += [
-            "RETEST: entry_zone = vùng support đã break (±1%)",
-            "SL = -1.5×ATR dưới entry_low",
-            "TP = đỉnh gần nhất hoặc R:R ≥ 2",
-        ]
-    elif setup in ("MA_PULLBACK",):
-        lines += [
-            "MA_PULLBACK: entry_zone = [MA20-1%, MA20+1%]",
-            "SL = MA60 hoặc -1.5×ATR",
-            "TP = đỉnh trước hoặc R:R ≥ 2",
-        ]
-    elif setup in ("RSI_BOUNCE",):
-        lines += [
-            "RSI_BOUNCE: entry_zone = [giá hiện tại, +1%]",
-            "SL = -5% entry_low",
-            "TP = MA20 hoặc R:R ≥ 2",
-        ]
-    elif setup in ("SPRING",):
-        lines += [
-            "SPRING: entry_zone quanh đáy giả vừa hồi",
+    setup_guides = {
+        "BREAKOUT": [
+            "entry_zone = [giá hiện tại, giá hiện tại × 1.01]",
+            "SL = support gần nhất hoặc -3% entry_low (không quá 5%)",
+            "initial_target = resistance kế tiếp hoặc entry_mid + 1.5×(entry_mid - SL)",
+        ],
+        "FLAG_PENNANT": [
+            "entry_zone = [đỉnh vùng nén, đỉnh vùng nén × 1.01]",
+            "SL = đáy vùng nén hoặc -3% entry_low",
+            "TP = đỉnh cột cờ hoặc entry_mid + 1.5×(entry_mid - SL)",
+        ],
+        "BB_SQUEEZE": [
+            "entry_zone = [BB upper, BB upper × 1.01] — chờ giá vượt BB upper",
+            "SL = BB mid hoặc -3% entry_low",
+            "TP = entry_mid + 1.5×(entry_mid - SL) hoặc resistance gần nhất",
+        ],
+        "RETEST": [
+            "entry_zone = vùng support đã break (±1%)",
+            "SL = -1.5×ATR dưới entry_low (không quá 5%)",
+            "TP = đỉnh gần nhất hoặc R:R ≥ 1.5",
+        ],
+        "SPRING": [
+            "entry_zone = quanh đáy giả vừa hồi (±1%)",
             "SL = dưới đáy giả 2-3%",
-            "TP = top range trước đó",
-        ]
+            "initial_target = top range trước đó",
+        ],
+        "GOLDEN_CROSS": [
+            "entry_zone = [MA20, MA20 × 1.015]",
+            "SL = MA50 hoặc -3% entry_low",
+            "initial_target = resistance gần nhất hoặc R:R ≥ 1.5",
+        ],
+        "DOUBLE_BOTTOM": [
+            "entry_zone = [neckline, neckline × 1.02]",
+            "SL = đáy thứ 2 hoặc -4% entry_low",
+            "initial_target = neckline + (neckline - đáy) — measured move",
+        ],
+        "MOMENTUM_SURGE": [
+            "entry_zone = [giá hiện tại, giá hiện tại × 1.01]",
+            "SL = đáy nến hôm qua hoặc -3% entry_low",
+            "TP = resistance kế tiếp hoặc R:R ≥ 1.5",
+        ],
+        "MACD_CROSSOVER": [
+            "entry_zone = [giá hiện tại, giá hiện tại × 1.01]",
+            "SL = support gần nhất hoặc -3% entry_low",
+            "initial_target = resistance gần nhất hoặc R:R ≥ 1.5",
+        ],
+        "MA_PULLBACK": [
+            "entry_zone = [MA20-1%, MA20+1%]",
+            "SL = MA60 hoặc -1.5×ATR (không quá 5%)",
+            "TP = đỉnh trước hoặc R:R ≥ 1.5",
+        ],
+        "INSIDE_BAR": [
+            "entry_zone = [đỉnh inside bar, đỉnh inside bar × 1.01]",
+            "SL = đáy inside bar hoặc -3% entry_low",
+            "initial_target = resistance gần nhất hoặc R:R ≥ 1.5",
+        ],
+        "NR7": [
+            "entry_zone = [đỉnh nến NR7, đỉnh nến NR7 × 1.01]",
+            "SL = đáy nến NR7 — range hẹp nên SL tự nhiên rất gần",
+            "initial_target = resistance gần nhất hoặc R:R ≥ 1.5",
+        ],
+        "HAMMER": [
+            "entry_zone = [close nến hammer, close × 1.01]",
+            "SL = đáy bóng hammer hoặc -3% entry_low",
+            "initial_target = MA20 hoặc resistance gần nhất",
+        ],
+        "RSI_BOUNCE": [
+            "entry_zone = [giá hiện tại, giá hiện tại × 1.01]",
+            "SL = -3% entry_low (không quá 5%)",
+            "initial_target = MA20 hoặc R:R ≥ 1.5",
+        ],
+        # ── Price Action setups ──
+        "PIN_BAR": [
+            "entry_zone = [close nến pin bar, close × 1.005] — vào gần close xác nhận",
+            "SL = đáy bóng wick (low của nến pin bar) — tự nhiên và chặt",
+            "TP = resistance gần nhất hoặc R:R ≥ 1.5 tính từ SL",
+            "Lưu ý: pin bar hợp lệ khi đang tại key S/R level — không vào khi giá giữa chừng",
+        ],
+        "BULLISH_ENGULFING": [
+            "entry_zone = [close nến engulfing, close × 1.005]",
+            "SL = low của nến engulfing hoặc low nến đỏ trước — chọn cái thấp hơn",
+            "initial_target = resistance gần nhất hoặc R:R ≥ 1.5",
+            "Lưu ý: engulfing mạnh nhất khi tại support sau downswing — không chase sau khi đã tăng 3%+",
+        ],
+        "TREND_PULLBACK": [
+            "entry_zone = vùng old breakout level (kháng cự cũ vừa thành support mới) ±1%",
+            "SL = -1.5×ATR dưới entry_low, hoặc dưới đáy nến xác nhận (không quá 4%)",
+            "initial_target = đỉnh gần nhất (recent high) — measured move về lại đỉnh cũ",
+            "Lưu ý: setup thuận xu hướng — chỉ vào khi uptrend rõ (HH+HL) và volume cạn trong pullback",
+        ],
+        "BREAKOUT_RETEST_ENTRY": [
+            "entry_zone = vùng breakout level ±1% (kháng cự vừa bị phá → test lại làm support)",
+            "SL = -1.5×ATR dưới entry_low (không quá 4%) — nếu retest fail thì thoát sớm",
+            "initial_target = measured move = entry + (breakout high - breakout level)",
+            "Lưu ý: chỉ vào khi volume retest khô (< 0.8× TB20) và nến đóng xanh xác nhận support giữ",
+        ],
+    }
+    guide = setup_guides.get(setup)
+    if guide:
+        lines += [f"{setup}: {g}" for g in guide]
     else:
-        lines += ["Tự xác định entry/SL/TP phù hợp."]
+        lines += ["Tự xác định entry/SL/TP phù hợp với setup. SL ≤ 5% entry_low."]
 
     lines += [
         "",
-        f"Lưu ý: biên độ {({'HOSE': '±7%', 'HNX': '±10%'}.get(mkt.get('exchange', 'HOSE'), '±15%'))} và T+2.5 (không scalping).",
-        "Trả JSON theo schema. Nếu không đủ điều kiện → CHỜ với entry_zone/SL/TP=null.",
+        "=== Hướng dẫn Trailing SL ===",
+        "trail_sl_guide: gợi ý mức SL mới khi lãi đạt ngưỡng, tính từ swing low gần nhất.",
+        "  at_5pct_gain  → nâng SL lên entry (hòa vốn) hoặc swing low gần nhất - ATR×0.5",
+        "  at_10pct_gain → SL = swing low ngay trước đó (7-10 bar) - ATR×0.5",
+        "  at_20pct_gain → SL = swing low rộng hơn (15-20 bar) - ATR×0.5, cho trend thở",
+        "",
+        "reversal_watchlist: liệt kê 2-3 dấu hiệu kỹ thuật cụ thể cần theo dõi để xem xét thoát.",
+        "  Ví dụ: 'Nến đỏ đóng dưới MA20 lần thứ 2', 'Double top tại kháng cự X', 'RSI phân kỳ giảm'",
+        "",
+        f"Lưu ý: biên độ {({'HOSE': '±7%', 'HNX': '±10%'}.get(mkt.get('exchange', 'HOSE'), '±15%'))} và T+2.5.",
+        "Trả JSON theo schema. Nếu không đủ điều kiện → CHỜ với entry_zone/stop_loss/initial_target=null.",
     ]
     return "\n".join(lines)
 
@@ -260,16 +368,15 @@ def _validate(result: dict, state: dict) -> dict:
     confidence = result.get("confidence", "THẤP")
     max_pos = {"THẤP": 2, "TRUNG_BÌNH": 3, "CAO": 5}.get(confidence, 2)
     result["position_pct"] = min(int(result.get("position_pct") or 0), max_pos)
-    result["holding_horizon"] = "1-4 tuần"
 
-    # Tính rr_ratio nếu thiếu
-    if action == "MUA" and result.get("entry_zone") and result.get("stop_loss") and result.get("take_profit"):
+    # Tính rr_ratio từ initial_target (không phải hard TP)
+    if action == "MUA" and result.get("entry_zone") and result.get("stop_loss") and result.get("initial_target"):
         ez = result["entry_zone"]
         entry_mid = (ez[0] + ez[1]) / 2
-        sl = result["stop_loss"]
-        tp = result["take_profit"]
+        sl  = result["stop_loss"]
+        tgt = result["initial_target"]
         if entry_mid > sl:
-            result["rr_ratio"] = round((tp - entry_mid) / (entry_mid - sl), 2)
+            result["rr_ratio"] = round((tgt - entry_mid) / (entry_mid - sl), 2)
 
         # Hard rule: không mua gần kháng cự
         tech = state.get("technical_analysis", {})
@@ -281,17 +388,19 @@ def _validate(result: dict, state: dict) -> dict:
                 print(f"[trader_trade] ⚠ entry_high quá gần R ({room_pct:.1f}%) → CHỜ")
                 result.update({
                     "action": "CHỜ", "entry_zone": None, "stop_loss": None,
-                    "take_profit": None, "rr_ratio": None, "position_pct": 0,
+                    "initial_target": None, "rr_ratio": None, "position_pct": 0,
                     "primary_reason": f"Entry quá gần R ({room_pct:.1f}%) — chờ pullback.",
                 })
 
     if result.get("action") == "CHỜ":
         result.setdefault("entry_zone", None)
         result.setdefault("stop_loss", None)
-        result.setdefault("take_profit", None)
+        result.setdefault("initial_target", None)
         result.setdefault("rr_ratio", None)
         result["position_pct"] = 0
 
+    result.setdefault("trail_sl_guide", {})
+    result.setdefault("reversal_watchlist", [])
     result.setdefault("risks", [])
     result.setdefault("trader_note", "")
     return result
@@ -299,8 +408,9 @@ def _validate(result: dict, state: dict) -> dict:
 
 def _fallback(err: str) -> dict:
     return {
-        "action": "CHỜ", "entry_zone": None, "stop_loss": None, "take_profit": None,
-        "rr_ratio": None, "position_pct": 0, "holding_horizon": "1-4 tuần",
+        "action": "CHỜ", "entry_zone": None, "stop_loss": None, "initial_target": None,
+        "rr_ratio": None, "position_pct": 0,
+        "trail_sl_guide": {}, "reversal_watchlist": [],
         "confidence": "THẤP", "primary_reason": f"LLM lỗi — CHỜ. {err}".strip(),
         "risks": ["trader_trade fail"], "trader_note": "Fallback.",
     }
@@ -308,3 +418,12 @@ def _fallback(err: str) -> dict:
 
 def _fmt(v) -> str:
     return "N/A" if v is None else f"{v:,.2f}"
+
+
+def _fmt_pct(v) -> str:
+    if v is None or v == "?":
+        return "?"
+    try:
+        return f"{float(v):+.2f}%"
+    except (TypeError, ValueError):
+        return str(v)

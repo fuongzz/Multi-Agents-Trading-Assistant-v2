@@ -98,7 +98,7 @@ def _run_trade_pipeline_inner(
 ) -> list[dict]:
 
     if symbol:
-        candidates_sym = [(symbol, "UNKNOWN", {})]
+        candidates_sym = [(symbol, "UNKNOWN", {"_portfolio_checked": False})]
     else:
         _market_ctx, candidates = trade_screener()
         candidates_sym = [
@@ -107,7 +107,9 @@ def _run_trade_pipeline_inner(
         ]
 
     results = []
-    for sym, setup, mkt_ctx in candidates_sym:
+    for i, (sym, setup, mkt_ctx) in enumerate(candidates_sym):
+        # portfolio_monitor chỉ chạy với symbol đầu tiên trong batch mỗi ngày
+        mkt_ctx["_portfolio_checked"] = (i > 0)
         print(f"\n[runner] → Trade: {sym} ({setup})")
         try:
             state = run_trade(symbol=sym, setup_type=setup, market_context=mkt_ctx, date=date)
@@ -159,7 +161,7 @@ def start_scheduler() -> None:
         CronTrigger(
             day_of_week="mon-fri",
             hour="9-11,13-14",
-            minute="0,15,30,45",
+            minute="*/5",
             timezone=_VN_TZ,
         ),
         id="session_monitor",
@@ -168,9 +170,12 @@ def start_scheduler() -> None:
     print("[runner] APScheduler started:")
     print("  - Investment    : Thu 2 08:00 VN")
     print("  - Trade         : Hang ngay 08:30 VN")
-    print("  - Session mon.  : Moi 15 phut (09:00-14:45)")
+    print("  - Session mon.  : Moi 5 phut (09:00-14:35) — real-time risk")
     print("  - Cleanup       : Chu nhat 02:00 VN")
     print("  Ctrl+C de dung.\n")
+
+    # Khởi động DNSE WebSocket price feed (background thread)
+    _start_ws_price_feed()
 
     _send_startup_notification()
 
@@ -233,7 +238,7 @@ def _send_startup_notification() -> None:
                 {"name": "Version",   "value": f"`{commit}`", "inline": True},
                 {"name": "Commit",    "value": msg or "—",    "inline": True},
                 {"name": "Thoi gian", "value": now_str,       "inline": True},
-                {"name": "Jobs",      "value": "Trade 08:30 | Invest T2 08:00 | Monitor 15min | Cleanup CN 02:00", "inline": False},
+                {"name": "Jobs",      "value": "Trade 08:30 | Invest T2 08:00 | Risk monitor 5min | Cleanup CN 02:00", "inline": False},
             ],
             "footer": {"text": "AI Trading Assistant"},
         }]
@@ -303,6 +308,21 @@ def _check_and_restart_if_new_code() -> None:
 # ──────────────────────────────────────────────
 # Cleanup
 # ──────────────────────────────────────────────
+
+def _start_ws_price_feed() -> None:
+    """Khởi động DNSE WebSocket price feed với toàn bộ liquid symbols."""
+    try:
+        from multiagents_trading_assistant.services.data_service import get_liquid_symbols
+        from multiagents_trading_assistant.services.dnse_ws_price import start_ws_price_feed
+        symbols = get_liquid_symbols(min_avg_vol=300_000)
+        if symbols:
+            start_ws_price_feed(symbols)
+            print(f"[runner] DNSE WebSocket price feed started — {len(symbols)} mã")
+        else:
+            print("[runner] WS price feed: không lấy được symbol list")
+    except Exception as e:
+        print(f"[runner] WS price feed start fail: {e}")
+
 
 def _run_cleanup() -> None:
     print(f"\n[runner] CLEANUP — {_today()}")

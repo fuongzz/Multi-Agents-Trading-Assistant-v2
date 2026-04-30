@@ -261,3 +261,119 @@ def _clean_for_json(obj):
         return obj
     # fallback — stringify
     return str(obj)
+
+
+# ──────────────────────────────────────────────
+# Portfolio management — exit alerts & summary
+# ──────────────────────────────────────────────
+
+def send_exit_alert(exit_signal: dict) -> None:
+    """Gửi Discord alert khi một vị thế được đóng (SL/TP/momentum)."""
+    webhook = os.getenv("DISCORD_WEBHOOK_TRADE") or os.getenv("DISCORD_WEBHOOK_URL", "")
+
+    symbol = exit_signal.get("symbol", "?")
+    exit_type = exit_signal.get("exit_type", "UNKNOWN")
+    entry_price = exit_signal.get("entry_price", 0)
+    current_price = exit_signal.get("current_price", 0)
+    pnl_pct = exit_signal.get("unrealized_pnl_pct", 0)
+    pnl_vnd = exit_signal.get("unrealized_pnl_vnd", 0)
+    sl = exit_signal.get("sl")
+    tp = exit_signal.get("tp")
+    days_held = exit_signal.get("days_held", 0)
+    strategy = exit_signal.get("strategy", "?")
+
+    # Màu theo loại thoát
+    color_map = {"SL_HIT": 0xFF4444, "TP_HIT": 0x00CC66, "MOMENTUM_LOSS": 0xFF8C00}
+    color = color_map.get(exit_type, 0x888888)
+
+    icon_map = {"SL_HIT": "🔴", "TP_HIT": "🟢", "MOMENTUM_LOSS": "🟠"}
+    icon = icon_map.get(exit_type, "⚪")
+
+    pnl_sign = "+" if pnl_pct >= 0 else ""
+    fields = [
+        {"name": "Lý do",   "value": exit_type,                              "inline": True},
+        {"name": "Giá vào", "value": f"{entry_price:,.0f}",                  "inline": True},
+        {"name": "Giá ra",  "value": f"{current_price:,.0f}",                "inline": True},
+        {"name": "P&L",     "value": f"{pnl_sign}{pnl_pct:.1f}% ({pnl_sign}{pnl_vnd:,.0f} VNĐ)", "inline": True},
+        {"name": "Giữ",     "value": f"{days_held} ngày",                    "inline": True},
+        {"name": "Setup",   "value": strategy,                               "inline": True},
+    ]
+    if sl:
+        fields.append({"name": "SL", "value": f"{sl:,.0f}", "inline": True})
+    if tp:
+        fields.append({"name": "TP", "value": f"{tp:,.0f}", "inline": True})
+
+    embed = {
+        "title":       f"{icon} [EXIT] {symbol} — {exit_type}",
+        "color":       color,
+        "fields":      fields,
+        "footer":      {"text": "AI Trading Assistant — Portfolio Monitor"},
+    }
+
+    # stdout
+    print(f"\n{_RED if exit_type == 'SL_HIT' else _GREEN}{_BOLD}══ EXIT SIGNAL ══{_RESET}")
+    print(f"  {symbol} | {exit_type} | {pnl_sign}{pnl_pct:.1f}% @ {current_price:,.0f}")
+
+    _send_signal_to_discord(webhook, embed)
+
+
+def send_portfolio_summary(positions: list[dict], stats: dict, date: str) -> None:
+    """Gửi Discord embed tóm tắt danh mục hàng sáng."""
+    webhook = os.getenv("DISCORD_WEBHOOK_TRADE") or os.getenv("DISCORD_WEBHOOK_URL", "")
+
+    open_count = len(positions)
+    win_rate = stats.get("win_rate", 0)
+    total_trades = stats.get("total_trades", 0)
+    total_pnl = stats.get("total_realized_pnl_vnd", 0)
+    avg_rr = stats.get("avg_realized_rr", 0)
+    wins = stats.get("win_trades", 0)
+
+    pnl_sign = "+" if total_pnl >= 0 else ""
+
+    if open_count == 0:
+        description = "Không có vị thế đang mở."
+    else:
+        description = f"**{open_count} vị thế đang mở** | Win rate: {win_rate:.0f}% ({total_trades} GD đã đóng)"
+
+    fields = []
+    for pos in positions[:5]:  # tối đa 5
+        sym = pos.get("symbol", "?")
+        entry = pos.get("entry_price", 0)
+        current = pos.get("current_price", entry)
+        pnl = pos.get("unrealized_pnl_pct", 0)
+        sl_dist = pos.get("distance_to_sl_pct")
+        tp_dist = pos.get("distance_to_tp_pct")
+
+        pnl_str = f"{'+' if pnl >= 0 else ''}{pnl:.1f}%"
+        sl_str = f"SL -{abs(sl_dist):.1f}%" if sl_dist is not None else ""
+        tp_str = f"TP +{tp_dist:.1f}%" if tp_dist is not None else ""
+        detail = f"{entry:,.0f}→{current:,.0f} | P&L {pnl_str}"
+        if sl_str:
+            detail += f" | {sl_str}"
+        if tp_str:
+            detail += f" | {tp_str}"
+
+        fields.append({"name": sym, "value": detail, "inline": False})
+
+    if len(positions) > 5:
+        fields.append({"name": "...", "value": f"và {len(positions)-5} vị thế khác", "inline": False})
+
+    fields.append({
+        "name": "Tổng kết",
+        "value": f"Realized P&L: {pnl_sign}{total_pnl:,.0f} VNĐ | Avg R:R: {avg_rr:.2f} | Win: {wins}/{total_trades}",
+        "inline": False,
+    })
+
+    embed = {
+        "title":       f"📊 Portfolio — {date}",
+        "description": description,
+        "color":       0x5865F2,
+        "fields":      fields,
+        "footer":      {"text": "AI Trading Assistant — Portfolio Monitor"},
+    }
+
+    # stdout
+    print(f"\n{_TEAL}{_BOLD}══ PORTFOLIO SUMMARY {date} ══{_RESET}")
+    print(f"  Đang giữ: {open_count} | Win rate: {win_rate:.0f}% | Realized P&L: {pnl_sign}{total_pnl:,.0f} VNĐ")
+
+    _send_signal_to_discord(webhook, embed)

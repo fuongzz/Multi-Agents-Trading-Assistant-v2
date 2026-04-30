@@ -30,6 +30,9 @@ plotly>=5.20.0
 # === Scheduler ===
 apscheduler>=3.10.0
 
+# === WebSocket (DNSE real-time price feed) ===
+websockets>=13.0
+
 # === Utilities ===
 python-dotenv>=1.0.0
 tenacity>=8.2.0

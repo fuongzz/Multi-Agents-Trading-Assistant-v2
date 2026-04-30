@@ -1,0 +1,452 @@
+symbol,setup_type,signal_date,entry_date,entry_price,stop_loss,take_profit,exit_date,exit_price,exit_reason,pnl_pct,holding_bars,reasons
+BCM,TREND_PULLBACK,2024-03-12,2024-03-13,65.94,63.0,70.0,2024-03-18,63.0,SL,-4.46,3,Uptrend: 66 > MA20(63) > MA60(61) | Breakout vùng 64 → recent high 67 | Pullback về vùng breakout (cách +2.9%)
+BCM,PIN_BAR,2024-04-12,2024-04-15,59.26,57.0,63.0,2024-04-15,57.0,SL,-3.81,0,Pin Bar: wick dưới 1 (3.3× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 59 (cách 0.1%)
+BCM,BULLISH_ENGULFING,2024-05-09,2024-05-10,56.64,54.0,61.0,2024-05-15,57.0,TIMEOUT,0.18,3,Engulfing: [53–56] nuốt [53–53] (body 6.6%) | Volume xanh 3.4× bar đỏ | Tại support 55
+BCM,BREAKOUT_RETEST_ENTRY,2024-05-23,2024-05-24,61.97,59.0,66.0,2024-05-24,59.0,SL,-4.79,0,Breakout 3 bars trước tại level 61 | Retest thành công (cách +2.1%) | Nến đóng xanh — support giữ vững
+BCM,BREAKOUT_RETEST_ENTRY,2024-05-27,2024-05-28,60.9,58.0,65.0,2024-06-04,60.0,TIMEOUT,-0.95,5,Breakout 5 bars trước tại level 61 | Retest thành công (cách -1.3%) | Nến đóng xanh — support giữ vững
+BCM,BREAKOUT_RETEST_ENTRY,2024-06-04,2024-06-05,61.0,58.0,66.0,2024-06-12,62.0,TIMEOUT,1.9,5,Breakout 11 bars trước tại level 61 | Retest thành công (cách -1.0%) | Volume cạn 0.49× TB20
+BCM,PIN_BAR,2024-06-19,2024-06-20,60.9,59.0,64.0,2024-06-25,61.0,TIMEOUT,0.16,3,Pin Bar: wick dưới 1 (7.7× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 60 (cách 1.2%)
+BCM,TREND_PULLBACK,2024-07-02,2024-07-03,62.16,59.0,67.0,2024-07-10,63.0,TIMEOUT,1.72,5,Uptrend: 62 > MA20(62) > MA60(58) | Breakout vùng 63 → recent high 64 | Pullback về vùng breakout (cách -1.2%) | Volume cạn — áp lực bán suy yếu
+BCM,TREND_PULLBACK,2024-07-10,2024-07-11,63.9,61.0,68.0,2024-07-17,64.0,TSL,0.16,4,Uptrend: 63 > MA20(62) > MA60(59) | Breakout vùng 63 → recent high 65 | Pullback về vùng breakout (cách +1.1%) | Volume cạn — áp lực bán suy yếu
+BCM,BREAKOUT_RETEST_ENTRY,2024-07-18,2024-07-19,65.36,62.0,70.0,2024-07-26,67.0,TSL,2.37,5,Breakout 3 bars trước tại level 65 | Retest thành công (cách +1.2%) | Nến đóng xanh — support giữ vững
+BCM,TREND_PULLBACK,2024-08-02,2024-08-05,64.87,62.0,69.0,2024-08-06,65.0,TSL,0.2,1,Uptrend: 67 > MA20(66) > MA60(62) | Breakout vùng 65 → recent high 71 | Pullback về vùng breakout (cách +3.2%)
+BCM,TREND_PULLBACK,2024-08-06,2024-08-07,68.75,65.0,74.0,2024-08-14,70.0,TIMEOUT,1.4,5,Uptrend: 69 > MA20(66) > MA60(63) | Breakout vùng 66 → recent high 71 | Pullback về vùng breakout (cách +3.6%)
+BCM,BREAKOUT_RETEST_ENTRY,2024-08-14,2024-08-15,69.81,66.0,76.0,2024-08-22,70.0,TIMEOUT,-0.14,5,Breakout 14 bars trước tại level 67 | Retest thành công (cách +4.2%) | Nến đóng xanh — support giữ vững
+BCM,BULLISH_ENGULFING,2024-08-29,2024-08-30,69.13,66.0,74.0,2024-09-06,70.0,TIMEOUT,0.84,3,Engulfing: [67–69] nuốt [67–68] (body 3.3%) | Volume xanh 1.2× bar đỏ
+BCM,PIN_BAR,2024-09-18,2024-09-19,69.13,67.0,72.0,2024-09-24,70.0,TIMEOUT,0.84,3,Pin Bar: wick dưới 1 (6.4× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại MA60 (67)
+BCM,BULLISH_ENGULFING,2024-10-29,2024-10-30,64.68,63.0,67.0,2024-11-04,65.0,TIMEOUT,0.0,3,Engulfing: [63–65] nuốt [63–63] (body 2.1%) | Volume xanh 1.7× bar đỏ | Tại support 64
+BCM,PIN_BAR,2024-11-04,2024-11-05,64.68,63.0,67.0,2024-11-08,65.0,TIMEOUT,1.22,3,Pin Bar: wick dưới 1 (13.7× thân) | Đóng gần đỉnh nến (7% từ đỉnh) | Tại support 64 (cách 1.1%) | Tại MA200 (63)
+BCM,BREAKOUT_RETEST_ENTRY,2024-11-11,2024-11-12,66.35,65.0,68.0,2024-11-18,65.0,SL,-2.03,4,Breakout 4 bars trước tại level 66 | Retest thành công (cách +0.2%) | Nến đóng xanh — support giữ vững
+BCM,BREAKOUT_RETEST_ENTRY,2024-11-18,2024-11-19,66.25,64.0,70.0,2024-11-19,64.0,SL,-3.4,0,Breakout 3 bars trước tại level 67 | Retest thành công (cách -1.3%) | Nến đóng xanh — support giữ vững
+BCM,PIN_BAR,2024-11-25,2024-11-26,64.29,62.0,68.0,2024-11-29,65.0,TIMEOUT,1.68,3,Pin Bar: wick dưới 1 (6.8× thân) | Đóng gần đỉnh nến (13% từ đỉnh) | Tại support 64 (cách 0.9%) | Tại MA200 (64)
+BCM,PIN_BAR,2024-12-13,2024-12-16,66.55,65.0,69.0,2024-12-19,65.0,TIMEOUT,-1.77,3,Pin Bar: wick dưới 1 (3.9× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 66 (cách 0.8%) | Tại MA60 (66)
+BCM,BULLISH_ENGULFING,2024-12-20,2024-12-23,66.84,65.0,70.0,2024-12-26,69.0,TIMEOUT,2.51,3,Engulfing: [65–67] nuốt [65–66] (body 1.8%) | Volume xanh 1.1× bar đỏ | Tại support 66
+BCM,BREAKOUT_RETEST_ENTRY,2024-12-27,2024-12-30,67.63,66.0,70.0,2024-12-31,68.0,TSL,0.55,1,Breakout 3 bars trước tại level 67 | Retest thành công (cách +2.6%) | Nến đóng xanh — support giữ vững
+BCM,BREAKOUT_RETEST_ENTRY,2024-12-31,2025-01-02,68.81,67.0,72.0,2025-01-07,69.0,TSL,0.28,3,Breakout 5 bars trước tại level 67 | Retest thành công (cách +4.3%) | Nến đóng xanh — support giữ vững
+BVH,BREAKOUT_RETEST_ENTRY,2024-02-29,2024-03-01,41.08,40.0,43.0,2024-03-07,43.0,TP,4.67,4,Breakout 9 bars trước tại level 41 | Retest thành công (cách +0.9%) | Nến đóng xanh — support giữ vững
+BVH,TREND_PULLBACK,2024-03-12,2024-03-13,41.66,41.0,43.0,2024-03-18,41.0,SL,-1.58,3,Uptrend: 42 > MA20(41) > MA60(39) | Breakout vùng 41 → recent high 43 | Pullback về vùng breakout (cách +0.5%)
+BVH,BREAKOUT_RETEST_ENTRY,2024-03-21,2024-03-22,41.18,40.0,43.0,2024-03-29,41.0,TIMEOUT,-0.46,5,Breakout 11 bars trước tại level 42 | Retest thành công (cách -1.2%) | Volume cạn 0.72× TB20 | Nến đóng xanh — support giữ vững
+BVH,PIN_BAR,2024-04-12,2024-04-15,40.07,39.0,42.0,2024-04-15,39.0,SL,-2.67,0,Pin Bar: wick dưới 0 (4.7× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 40 (cách 0.4%)
+BVH,BREAKOUT_RETEST_ENTRY,2024-06-04,2024-06-05,44.01,42.0,47.0,2024-06-12,44.0,TIMEOUT,0.64,5,Breakout 6 bars trước tại level 44 | Retest thành công (cách -1.2%) | Nến đóng xanh — support giữ vững
+BVH,BREAKOUT_RETEST_ENTRY,2024-06-12,2024-06-13,44.34,42.0,48.0,2024-06-20,43.0,TIMEOUT,-2.17,5,Breakout 6 bars trước tại level 45 | Retest thành công (cách -1.7%) | Volume cạn 0.47× TB20 | Nến đóng xanh — support giữ vững
+BVH,BREAKOUT_RETEST_ENTRY,2024-07-04,2024-07-05,45.16,43.0,48.0,2024-07-12,44.0,TIMEOUT,-3.41,5,Breakout 3 bars trước tại level 45 | Retest thành công (cách -0.8%) | Volume cạn 0.70× TB20 | Nến đóng xanh — support giữ vững
+BVH,BREAKOUT_RETEST_ENTRY,2024-07-16,2024-07-17,44.87,43.0,48.0,2024-07-17,43.0,SL,-4.17,0,Breakout 11 bars trước tại level 45 | Retest thành công (cách -1.6%) | Nến đóng xanh — support giữ vững
+BVH,BREAKOUT_RETEST_ENTRY,2024-07-18,2024-07-19,45.06,43.0,48.0,2024-07-22,43.0,SL,-4.57,1,Breakout 13 bars trước tại level 45 | Retest thành công (cách -0.5%) | Volume cạn 0.70× TB20 | Nến đóng xanh — support giữ vững
+BVH,BULLISH_ENGULFING,2024-07-31,2024-08-01,42.09,40.0,45.0,2024-08-05,40.0,SL,-4.97,2,Engulfing: [41–42] nuốt [41–41] (body 1.4%) | Volume xanh 1.5× bar đỏ
+BVH,BULLISH_ENGULFING,2024-08-08,2024-08-09,40.89,39.0,44.0,2024-08-14,42.0,TIMEOUT,1.52,3,Engulfing: [40–41] nuốt [41–41] (body 1.3%) | Volume xanh 1.4× bar đỏ | Tại support 40
+BVH,BREAKOUT_RETEST_ENTRY,2024-08-26,2024-08-27,43.91,42.0,47.0,2024-09-05,43.0,TIMEOUT,-2.39,5,Breakout 3 bars trước tại level 43 | Retest thành công (cách +2.4%) | Volume cạn 0.79× TB20
+BVH,BULLISH_ENGULFING,2024-10-01,2024-10-02,41.61,41.0,43.0,2024-10-04,41.0,SL,-1.47,2,Engulfing: [41–42] nuốt [41–42] (body 1.4%) | Volume xanh 2.4× bar đỏ | Tại support 41
+BVH,BREAKOUT_RETEST_ENTRY,2024-10-15,2024-10-16,41.7,41.0,43.0,2024-10-23,42.0,TIMEOUT,-0.46,5,Breakout 3 bars trước tại level 42 | Retest thành công (cách -0.5%) | Volume cạn 0.72× TB20 | Nến đóng xanh — support giữ vững
+BVH,BREAKOUT_RETEST_ENTRY,2024-10-23,2024-10-24,41.66,41.0,43.0,2024-10-31,41.0,TIMEOUT,-1.03,5,Breakout 9 bars trước tại level 42 | Retest thành công (cách -1.4%) | Volume cạn 0.67× TB20 | Nến đóng xanh — support giữ vững
+BVH,TREND_PULLBACK,2024-11-14,2024-11-15,42.38,41.0,44.0,2024-11-22,43.0,TIMEOUT,2.34,5,Uptrend: 43 > MA20(42) > MA60(42) | Breakout vùng 42 → recent high 44 | Pullback về vùng breakout (cách +0.6%) | Volume cạn — áp lực bán suy yếu
+BVH,BREAKOUT_RETEST_ENTRY,2024-11-26,2024-11-27,43.17,42.0,45.0,2024-11-29,44.0,TSL,1.02,2,Breakout 12 bars trước tại level 43 | Retest thành công (cách +0.3%) | Volume cạn 0.63× TB20
+BVH,BREAKOUT_RETEST_ENTRY,2024-12-24,2024-12-25,52.2,50.0,56.0,2024-12-31,50.0,SL,-4.21,4,Breakout 8 bars trước tại level 52 | Retest thành công (cách -0.2%) | Volume cạn 0.59× TB20
+CTG,BREAKOUT_RETEST_ENTRY,2024-03-04,2024-03-05,24.69,24.0,26.0,2024-03-08,24.0,SL,-2.79,3,Breakout 14 bars trước tại level 24 | Retest thành công (cách +4.7%) | Nến đóng xanh — support giữ vững
+CTG,BULLISH_ENGULFING,2024-03-20,2024-03-21,23.73,23.0,25.0,2024-03-25,24.0,TSL,1.14,2,Engulfing: [23–24] nuốt [23–23] (body 3.5%) | Volume xanh 1.3× bar đỏ
+CTG,PIN_BAR,2024-04-25,2024-04-26,22.33,21.0,24.0,2024-05-06,23.0,TIMEOUT,1.97,3,Pin Bar: wick dưới 0 (4.1× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 22 (cách 2.8%)
+CTG,PIN_BAR,2024-07-18,2024-07-19,22.81,22.0,24.0,2024-07-23,22.0,SL,-3.55,2,Pin Bar: wick dưới 0 (3.8× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại MA60 (22)
+CTG,BULLISH_ENGULFING,2024-09-06,2024-09-09,24.14,23.0,26.0,2024-09-12,24.0,TIMEOUT,-0.54,3,Engulfing: [24–24] nuốt [24–24] (body 2.0%) | Volume xanh 1.1× bar đỏ
+CTG,BREAKOUT_RETEST_ENTRY,2024-09-12,2024-09-13,23.87,23.0,25.0,2024-09-20,25.0,TP,4.73,5,Breakout 14 bars trước tại level 23 | Retest thành công (cách +2.3%) | Volume cạn 0.55× TB20
+CTG,BREAKOUT_RETEST_ENTRY,2024-09-23,2024-09-24,24.62,24.0,26.0,2024-09-27,25.0,TSL,1.54,3,Breakout 4 bars trước tại level 24 | Retest thành công (cách +1.1%) | Volume cạn 0.54× TB20
+CTG,TREND_PULLBACK,2024-10-03,2024-10-04,24.79,24.0,26.0,2024-10-11,25.0,TIMEOUT,0.28,5,Uptrend: 25 > MA20(25) > MA60(23) | Breakout vùng 24 → recent high 25 | Pullback về vùng breakout (cách +2.0%)
+CTG,TREND_PULLBACK,2024-10-11,2024-10-14,24.97,24.0,26.0,2024-10-21,24.0,TIMEOUT,-2.48,5,Uptrend: 25 > MA20(25) > MA60(23) | Breakout vùng 25 → recent high 25 | Pullback về vùng breakout (cách +0.7%) | Volume cạn — áp lực bán suy yếu
+CTG,PIN_BAR,2024-11-11,2024-11-12,23.87,23.0,25.0,2024-11-15,23.0,SL,-3.64,3,Pin Bar: wick dưới 1 (18.7× thân) | Đóng gần đỉnh nến (5% từ đỉnh) | Tại MA200 (23)
+CTG,BULLISH_ENGULFING,2024-11-20,2024-11-21,23.32,23.0,24.0,2024-11-21,24.0,TP,2.92,0,Engulfing: [23–23] nuốt [23–23] (body 2.9%) | Volume xanh 1.2× bar đỏ | Tại support 23
+CTG,PIN_BAR,2024-11-28,2024-11-29,24.35,24.0,25.0,2024-12-04,24.0,TIMEOUT,-0.57,3,Pin Bar: wick dưới 0 (3.4× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 24 (cách 1.2%) | Tại MA60 (24)
+CTG,BULLISH_ENGULFING,2024-12-05,2024-12-06,25.03,24.0,27.0,2024-12-11,25.0,TIMEOUT,-0.4,3,Engulfing: [24–25] nuốt [24–24] (body 3.1%) | Volume xanh 2.5× bar đỏ | Tại support 24
+CTG,BREAKOUT_RETEST_ENTRY,2024-12-11,2024-12-12,24.97,24.0,26.0,2024-12-19,25.0,TIMEOUT,-0.56,5,Breakout 5 bars trước tại level 25 | Retest thành công (cách +1.3%) | Nến đóng xanh — support giữ vững
+CTG,BREAKOUT_RETEST_ENTRY,2024-12-19,2024-12-20,24.69,24.0,26.0,2024-12-25,25.0,TSL,0.57,3,Breakout 11 bars trước tại level 25 | Retest thành công (cách +0.9%) | Nến đóng xanh — support giữ vững
+GAS,BREAKOUT_RETEST_ENTRY,2024-03-05,2024-03-06,68.01,67.0,70.0,2024-03-11,67.0,SL,-1.49,3,Breakout 12 bars trước tại level 66 | Retest thành công (cách +3.0%) | Nến đóng xanh — support giữ vững
+GAS,BREAKOUT_RETEST_ENTRY,2024-03-12,2024-03-13,67.16,66.0,69.0,2024-03-14,69.0,TP,2.74,1,Breakout 5 bars trước tại level 68 | Retest thành công (cách -1.8%) | Nến đóng xanh — support giữ vững
+GAS,BREAKOUT_RETEST_ENTRY,2024-03-14,2024-03-15,69.64,68.0,72.0,2024-03-22,69.0,TIMEOUT,-0.99,5,Breakout 7 bars trước tại level 68 | Retest thành công (cách +2.1%) | Nến đóng xanh — support giữ vững
+GAS,TREND_PULLBACK,2024-03-22,2024-03-25,68.95,67.0,72.0,2024-04-01,69.0,TIMEOUT,0.13,5,Uptrend: 69 > MA20(68) > MA60(66) | Breakout vùng 68 → recent high 70 | Pullback về vùng breakout (cách +1.5%) | Volume cạn — áp lực bán suy yếu
+GAS,TREND_PULLBACK,2024-04-01,2024-04-02,68.87,67.0,72.0,2024-04-09,68.0,TIMEOUT,-0.62,5,Uptrend: 69 > MA20(69) > MA60(66) | Breakout vùng 69 → recent high 70 | Pullback về vùng breakout (cách +0.2%) | Volume cạn — áp lực bán suy yếu
+GAS,BULLISH_ENGULFING,2024-05-23,2024-05-24,68.95,67.0,72.0,2024-05-24,67.0,SL,-2.83,0,Engulfing: [66–68] nuốt [66–66] (body 4.3%) | Volume xanh 4.8× bar đỏ | Tại support 67
+GAS,BREAKOUT_RETEST_ENTRY,2024-05-27,2024-05-28,70.24,68.0,74.0,2024-06-04,69.0,TIMEOUT,-1.47,5,Breakout 3 bars trước tại level 66 | Retest thành công (cách +4.6%) | Nến đóng xanh — support giữ vững
+GAS,BREAKOUT_RETEST_ENTRY,2024-06-04,2024-06-05,69.3,67.0,73.0,2024-06-12,69.0,TIMEOUT,-0.62,5,Breakout 5 bars trước tại level 70 | Retest thành công (cách -1.3%) | Nến đóng xanh — support giữ vững
+GAS,TREND_PULLBACK,2024-06-12,2024-06-13,69.38,67.0,73.0,2024-06-17,67.0,SL,-3.43,2,Uptrend: 69 > MA20(68) > MA60(67) | Breakout vùng 66 → recent high 70 | Pullback về vùng breakout (cách +3.9%) | Volume cạn — áp lực bán suy yếu
+GAS,BREAKOUT_RETEST_ENTRY,2024-08-02,2024-08-05,66.81,65.0,70.0,2024-08-08,70.0,TP,4.77,3,Breakout 3 bars trước tại level 68 | Retest thành công (cách -0.1%) | Nến đóng xanh — support giữ vững
+GAS,BREAKOUT_RETEST_ENTRY,2024-08-08,2024-08-09,70.24,68.0,74.0,2024-08-16,71.0,TIMEOUT,0.73,5,Breakout 7 bars trước tại level 68 | Retest thành công (cách +3.4%) | Nến đóng xanh — support giữ vững
+GAS,BREAKOUT_RETEST_ENTRY,2024-08-16,2024-08-19,70.84,69.0,74.0,2024-08-26,72.0,TIMEOUT,1.81,5,Breakout 7 bars trước tại level 68 | Retest thành công (cách +3.4%) | Nến đóng xanh — support giữ vững
+GAS,BREAKOUT_RETEST_ENTRY,2024-08-26,2024-08-27,72.38,70.0,76.0,2024-09-05,71.0,TIMEOUT,-1.42,5,Breakout 6 bars trước tại level 71 | Retest thành công (cách +1.9%) | Volume cạn 0.65× TB20
+GAS,TREND_PULLBACK,2024-09-05,2024-09-06,72.38,71.0,74.0,2024-09-13,71.0,SL,-1.91,5,Uptrend: 71 > MA20(71) > MA60(68) | Breakout vùng 71 → recent high 73 | Pullback về vùng breakout (cách +1.0%) | Volume cạn — áp lực bán suy yếu
+BID,BREAKOUT_RETEST_ENTRY,2024-03-11,2024-03-12,41.36,39.0,45.0,2024-03-18,41.0,TSL,-0.87,4,Breakout 12 bars trước tại level 41 | Retest thành công (cách +1.3%) | Volume cạn 0.72× TB20
+BID,BULLISH_ENGULFING,2024-03-20,2024-03-21,43.48,41.0,47.0,2024-03-26,43.0,TIMEOUT,-0.37,3,Engulfing: [42–43] nuốt [42–43] (body 2.7%) | Volume xanh 4.1× bar đỏ
+BID,BULLISH_ENGULFING,2024-04-11,2024-04-12,43.32,41.0,47.0,2024-04-15,41.0,SL,-5.36,1,Engulfing: [42–43] nuốt [42–43] (body 2.9%) | Volume xanh 1.9× bar đỏ
+BID,BREAKOUT_RETEST_ENTRY,2024-07-29,2024-07-30,38.7,37.0,41.0,2024-08-05,37.0,SL,-4.39,4,Breakout 9 bars trước tại level 39 | Retest thành công (cách -0.8%) | Volume cạn 0.36× TB20 | Nến đóng xanh — support giữ vững
+BID,BREAKOUT_RETEST_ENTRY,2024-08-06,2024-08-07,38.74,37.0,41.0,2024-08-14,38.0,TIMEOUT,-0.75,5,Breakout 15 bars trước tại level 39 | Retest thành công (cách -1.6%) | Volume cạn 0.68× TB20 | Nến đóng xanh — support giữ vững
+BID,BREAKOUT_RETEST_ENTRY,2024-08-23,2024-08-26,41.52,40.0,44.0,2024-08-30,40.0,SL,-3.66,4,Breakout 3 bars trước tại level 40 | Retest thành công (cách +2.7%) | Nến đóng xanh — support giữ vững
+BID,TREND_PULLBACK,2024-08-30,2024-09-04,39.64,38.0,42.0,2024-09-11,39.0,TIMEOUT,-0.4,5,Uptrend: 40 > MA20(39) > MA60(38) | Breakout vùng 40 → recent high 41 | Pullback về vùng breakout (cách +0.8%) | Volume cạn — áp lực bán suy yếu
+BID,BREAKOUT_RETEST_ENTRY,2024-09-11,2024-09-12,39.64,38.0,42.0,2024-09-19,40.0,TIMEOUT,1.54,5,Breakout 14 bars trước tại level 40 | Retest thành công (cách -1.7%) | Volume cạn 0.61× TB20
+BID,BREAKOUT_RETEST_ENTRY,2024-10-02,2024-10-03,40.7,40.0,42.0,2024-10-08,40.0,SL,-1.72,3,Breakout 4 bars trước tại level 41 | Retest thành công (cách -0.4%) | Nến đóng xanh — support giữ vững
+BID,BREAKOUT_RETEST_ENTRY,2024-10-09,2024-10-10,40.82,40.0,42.0,2024-10-17,41.0,TIMEOUT,0.71,5,Breakout 9 bars trước tại level 41 | Retest thành công (cách -1.1%) | Nến đóng xanh — support giữ vững
+BID,BREAKOUT_RETEST_ENTRY,2024-10-17,2024-10-18,41.44,40.0,44.0,2024-10-22,40.0,SL,-3.47,2,Breakout 15 bars trước tại level 41 | Retest thành công (cách +0.6%) | Nến đóng xanh — support giữ vững
+BID,PIN_BAR,2024-11-22,2024-11-25,37.35,36.0,39.0,2024-11-28,38.0,TIMEOUT,0.88,3,Pin Bar: wick dưới 0 (4.6× thân) | Đóng gần đỉnh nến (18% từ đỉnh) | Tại support 37 (cách 0.9%)
+BID,BULLISH_ENGULFING,2024-11-29,2024-12-02,38.33,37.0,40.0,2024-12-04,37.0,SL,-3.47,2,Engulfing: [38–38] nuốt [38–38] (body 1.4%) | Volume xanh 1.1× bar đỏ | Tại support 38
+ACB,BREAKOUT_RETEST_ENTRY,2024-03-26,2024-03-27,19.62,19.0,21.0,2024-04-03,20.0,TIMEOUT,0.15,5,Breakout 3 bars trước tại level 20 | Retest thành công (cách -0.2%) | Volume cạn 0.56× TB20 | Nến đóng xanh — support giữ vững
+ACB,BREAKOUT_RETEST_ENTRY,2024-05-30,2024-05-31,20.89,20.0,22.0,2024-06-07,21.0,TIMEOUT,-1.63,5,Breakout 5 bars trước tại level 20 | Retest thành công (cách +3.3%) | Nến đóng xanh — support giữ vững
+ACB,BREAKOUT_RETEST_ENTRY,2024-06-07,2024-06-10,20.55,20.0,21.0,2024-06-12,20.0,SL,-2.68,2,Breakout 11 bars trước tại level 20 | Retest thành công (cách +2.9%) | Volume cạn 0.50× TB20 | Nến đóng xanh — support giữ vững
+ACB,BREAKOUT_RETEST_ENTRY,2024-06-12,2024-06-13,20.51,20.0,21.0,2024-06-20,21.0,TIMEOUT,1.02,5,Breakout 14 bars trước tại level 20 | Retest thành công (cách +2.7%) | Nến đóng xanh — support giữ vững
+ACB,PIN_BAR,2024-06-26,2024-06-27,20.05,20.0,20.0,2024-06-27,20.0,SL,-0.25,0,Pin Bar: wick dưới 0 (3.7× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 20 (cách 0.7%) | Tại MA60 (20)
+ACB,BREAKOUT_RETEST_ENTRY,2024-07-31,2024-08-01,20.47,20.0,21.0,2024-08-02,20.0,SL,-2.44,1,Breakout 9 bars trước tại level 21 | Retest thành công (cách -1.0%) | Nến đóng xanh — support giữ vững
+ACB,BULLISH_ENGULFING,2024-08-16,2024-08-19,20.05,20.0,20.0,2024-08-19,20.0,TP,-0.25,0,Engulfing: [20–20] nuốt [20–20] (body 2.1%) | Volume xanh 2.5× bar đỏ | Tại support 20
+ACB,BULLISH_ENGULFING,2024-09-17,2024-09-18,20.47,20.0,21.0,2024-09-20,21.0,TP,2.59,2,Engulfing: [20–20] nuốt [20–20] (body 1.4%) | Volume xanh 1.1× bar đỏ | Tại support 20
+ACB,BREAKOUT_RETEST_ENTRY,2024-09-30,2024-10-01,21.51,21.0,22.0,2024-10-08,21.0,TIMEOUT,-0.93,5,Breakout 4 bars trước tại level 22 | Retest thành công (cách -0.2%) | Nến đóng xanh — support giữ vững
+ACB,TREND_PULLBACK,2024-10-08,2024-10-09,21.39,21.0,22.0,2024-10-10,22.0,TP,2.85,1,Uptrend: 21 > MA20(21) > MA60(20) | Breakout vùng 21 → recent high 22 | Pullback về vùng breakout (cách +2.8%) | Volume cạn — áp lực bán suy yếu
+ACB,BREAKOUT_RETEST_ENTRY,2024-10-11,2024-10-14,21.85,21.0,23.0,2024-10-21,22.0,TIMEOUT,-1.33,5,Breakout 3 bars trước tại level 22 | Retest thành công (cách -0.4%) | Volume cạn 0.57× TB20
+ACB,BREAKOUT_RETEST_ENTRY,2024-10-21,2024-10-22,21.56,21.0,22.0,2024-10-24,21.0,SL,-2.6,2,Breakout 9 bars trước tại level 22 | Retest thành công (cách -1.5%) | Volume cạn 0.52× TB20
+ACB,BULLISH_ENGULFING,2024-10-31,2024-11-01,21.14,21.0,21.0,2024-11-01,21.0,SL,-0.66,0,Engulfing: [21–21] nuốt [21–21] (body 1.2%) | Volume xanh 1.3× bar đỏ | Tại support 21
+ACB,BULLISH_ENGULFING,2024-11-20,2024-11-21,20.47,20.0,21.0,2024-11-26,21.0,TIMEOUT,2.05,3,Engulfing: [20–20] nuốt [20–20] (body 1.2%) | Volume xanh 1.1× bar đỏ | Tại support 20
+ACB,PIN_BAR,2024-11-29,2024-12-02,21.1,21.0,21.0,2024-12-02,21.0,SL,-0.47,0,Pin Bar: wick dưới 0 (3.0× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 21 (cách 0.2%) | Tại MA60 (21)
+GVR,BREAKOUT_RETEST_ENTRY,2024-03-06,2024-03-07,28.18,27.0,30.0,2024-03-12,29.0,TSL,2.45,3,Breakout 8 bars trước tại level 28 | Retest thành công (cách +2.5%) | Volume cạn 0.74× TB20
+GVR,BULLISH_ENGULFING,2024-04-02,2024-04-03,34.24,33.0,36.0,2024-04-04,33.0,SL,-3.62,1,Engulfing: [32–34] nuốt [32–32] (body 7.5%) | Volume xanh 2.7× bar đỏ
+GVR,BULLISH_ENGULFING,2024-04-26,2024-05-02,29.3,28.0,31.0,2024-05-06,29.0,TSL,-1.02,2,Engulfing: [28–29] nuốt [29–29] (body 3.2%) | Volume xanh 1.2× bar đỏ | Tại support 29
+GVR,BULLISH_ENGULFING,2024-05-17,2024-05-20,32.87,31.0,36.0,2024-05-23,33.0,TIMEOUT,-0.73,3,Engulfing: [32–33] nuốt [32–32] (body 2.9%) | Volume xanh 1.5× bar đỏ
+GVR,BULLISH_ENGULFING,2024-05-30,2024-05-31,35.26,33.0,39.0,2024-06-05,34.0,TIMEOUT,-2.61,3,Engulfing: [34–35] nuốt [34–35] (body 5.0%) | Volume xanh 1.2× bar đỏ
+GVR,BREAKOUT_RETEST_ENTRY,2024-06-06,2024-06-07,34.09,32.0,37.0,2024-06-14,34.0,TSL,-0.26,5,Breakout 10 bars trước tại level 33 | Retest thành công (cách +3.6%) | Volume cạn 0.60× TB20
+GVR,TREND_PULLBACK,2024-07-11,2024-07-12,36.09,34.0,39.0,2024-07-17,36.0,TSL,-0.25,3,Uptrend: 36 > MA20(34) > MA60(33) | Breakout vùng 35 → recent high 37 | Pullback về vùng breakout (cách +2.1%) | Volume cạn — áp lực bán suy yếu
+GVR,TREND_PULLBACK,2024-07-18,2024-07-19,35.21,33.0,39.0,2024-07-22,33.0,SL,-6.28,1,Uptrend: 35 > MA20(35) > MA60(33) | Breakout vùng 35 → recent high 38 | Pullback về vùng breakout (cách -0.4%) | Volume cạn — áp lực bán suy yếu
+GVR,PIN_BAR,2024-08-21,2024-08-22,34.78,33.0,37.0,2024-08-27,34.0,TIMEOUT,-1.84,3,Pin Bar: wick dưới 0 (3.5× thân) | Đóng gần đỉnh nến (7% từ đỉnh) | Tại MA60 (34)
+GVR,BREAKOUT_RETEST_ENTRY,2024-08-30,2024-09-04,33.99,32.0,37.0,2024-09-11,33.0,TIMEOUT,-2.0,5,Breakout 3 bars trước tại level 35 | Retest thành công (cách -0.3%) | Volume cạn 0.47× TB20
+GVR,BREAKOUT_RETEST_ENTRY,2024-09-16,2024-09-17,34.09,33.0,36.0,2024-09-24,35.0,TIMEOUT,3.58,5,Breakout 12 bars trước tại level 35 | Retest thành công (cách -1.6%) | Nến đóng xanh — support giữ vững
+GVR,BULLISH_ENGULFING,2024-09-24,2024-09-25,35.51,34.0,38.0,2024-09-30,35.0,TIMEOUT,-1.66,3,Engulfing: [35–35] nuốt [35–35] (body 2.1%) | Volume xanh 2.0× bar đỏ
+GVR,BREAKOUT_RETEST_ENTRY,2024-09-30,2024-10-01,35.26,34.0,37.0,2024-10-07,34.0,SL,-3.57,4,Breakout 5 bars trước tại level 35 | Retest thành công (cách +0.1%) | Volume cạn 0.75× TB20
+GVR,BREAKOUT_RETEST_ENTRY,2024-10-08,2024-10-09,34.43,33.0,37.0,2024-10-16,35.0,TIMEOUT,2.41,5,Breakout 11 bars trước tại level 35 | Retest thành công (cách -1.8%) | Volume cạn 0.53× TB20 | Nến đóng xanh — support giữ vững
+FPT,BULLISH_ENGULFING,2024-03-07,2024-03-08,81.45,79.0,85.0,2024-03-13,83.0,TSL,1.35,3,Engulfing: [80–81] nuốt [80–80] (body 2.0%) | Volume xanh 1.1× bar đỏ
+FPT,TREND_PULLBACK,2024-03-20,2024-03-21,84.31,81.0,89.0,2024-03-28,86.0,TIMEOUT,1.65,5,Uptrend: 84 > MA20(81) > MA60(75) | Breakout vùng 79 → recent high 86 | Pullback về vùng breakout (cách +5.5%)
+FPT,BREAKOUT_RETEST_ENTRY,2024-03-28,2024-03-29,85.19,83.0,88.0,2024-04-05,83.0,SL,-2.84,5,Breakout 12 bars trước tại level 82 | Retest thành công (cách +4.7%) | Nến đóng xanh — support giữ vững
+FPT,TREND_PULLBACK,2024-05-30,2024-05-31,98.8,95.0,104.0,2024-06-05,104.0,TP,5.26,3,Uptrend: 99 > MA20(97) > MA60(88) | Breakout vùng 96 → recent high 101 | Pullback về vùng breakout (cách +2.8%)
+FPT,BREAKOUT_RETEST_ENTRY,2024-06-07,2024-06-10,105.02,101.0,111.0,2024-06-12,111.0,TP,5.69,2,Breakout 4 bars trước tại level 101 | Retest thành công (cách +2.9%) | Volume cạn 0.78× TB20 | Nến đóng xanh — support giữ vững
+FPT,BULLISH_ENGULFING,2024-06-19,2024-06-20,112.71,109.0,118.0,2024-06-25,109.0,SL,-3.29,3,Engulfing: [108–111] nuốt [108–109] (body 2.7%) | Volume xanh 1.4× bar đỏ
+FPT,BREAKOUT_RETEST_ENTRY,2024-06-26,2024-06-27,111.27,107.0,118.0,2024-07-04,115.0,TIMEOUT,3.42,5,Breakout 5 bars trước tại level 112 | Retest thành công (cách -0.2%) | Nến đóng xanh — support giữ vững
+FPT,BREAKOUT_RETEST_ENTRY,2024-07-04,2024-07-05,115.34,111.0,122.0,2024-07-12,113.0,TIMEOUT,-1.69,5,Breakout 11 bars trước tại level 112 | Retest thành công (cách +2.9%) | Nến đóng xanh — support giữ vững
+FPT,TREND_PULLBACK,2024-07-12,2024-07-15,113.13,109.0,119.0,2024-07-18,109.0,SL,-3.65,3,Uptrend: 113 > MA20(112) > MA60(102) | Breakout vùng 115 → recent high 118 | Pullback về vùng breakout (cách -1.7%) | Volume cạn — áp lực bán suy yếu
+FPT,PIN_BAR,2024-09-30,2024-10-01,114.15,112.0,117.0,2024-10-04,114.0,TIMEOUT,-0.45,3,Pin Bar: wick dưới 1 (4.1× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại MA60 (111)
+FPT,TREND_PULLBACK,2024-10-15,2024-10-16,115.59,113.0,119.0,2024-10-22,113.0,SL,-2.24,4,Uptrend: 116 > MA20(115) > MA60(111) | Breakout vùng 115 → recent high 120 | Pullback về vùng breakout (cách +1.3%) | Volume cạn — áp lực bán suy yếu
+FPT,BREAKOUT_RETEST_ENTRY,2024-10-23,2024-10-24,113.73,111.0,118.0,2024-10-31,115.0,TIMEOUT,1.27,5,Breakout 10 bars trước tại level 115 | Retest thành công (cách -1.3%) | Nến đóng xanh — support giữ vững
+FPT,BREAKOUT_RETEST_ENTRY,2024-11-13,2024-11-14,116.86,114.0,121.0,2024-11-15,114.0,SL,-2.45,1,Breakout 3 bars trước tại level 117 | Retest thành công (cách +0.1%) | Nến đóng xanh — support giữ vững
+FPT,PIN_BAR,2024-11-25,2024-11-26,113.05,110.0,118.0,2024-11-27,118.0,TP,4.38,1,Pin Bar: wick dưới 1 (6.6× thân) | Đóng gần đỉnh nến (13% từ đỉnh) | Tại support 113 (cách 0.4%)
+FPT,BREAKOUT_RETEST_ENTRY,2024-11-27,2024-11-28,118.13,115.0,123.0,2024-11-29,118.0,TSL,-0.11,1,Breakout 13 bars trước tại level 117 | Retest thành công (cách +0.9%) | Nến đóng xanh — support giữ vững
+MBB,BREAKOUT_RETEST_ENTRY,2024-03-26,2024-03-27,16.13,15.0,18.0,2024-04-03,15.0,TIMEOUT,-4.22,5,Breakout 3 bars trước tại level 16 | Retest thành công (cách +2.0%) | Volume cạn 0.60× TB20 | Nến đóng xanh — support giữ vững
+MBB,BULLISH_ENGULFING,2024-06-12,2024-06-13,15.14,15.0,15.0,2024-06-13,15.0,TP,-0.92,0,Engulfing: [15–15] nuốt [15–15] (body 2.4%) | Volume xanh 2.4× bar đỏ | Tại support 15
+MBB,BREAKOUT_RETEST_ENTRY,2024-06-18,2024-06-19,15.27,15.0,16.0,2024-06-24,15.0,SL,-1.77,3,Breakout 4 bars trước tại level 15 | Retest thành công (cách +0.7%) | Volume cạn 0.66× TB20
+MBB,BREAKOUT_RETEST_ENTRY,2024-07-02,2024-07-03,14.88,14.0,16.0,2024-07-10,15.0,TIMEOUT,2.22,5,Breakout 14 bars trước tại level 15 | Retest thành công (cách -1.7%) | Volume cạn 0.69× TB20 | Nến đóng xanh — support giữ vững
+MBB,TREND_PULLBACK,2024-07-24,2024-07-25,15.57,15.0,16.0,2024-07-31,16.0,TP,2.76,4,Uptrend: 16 > MA20(15) > MA60(15) | Breakout vùng 15 → recent high 17 | Pullback về vùng breakout (cách +1.7%)
+MBB,PIN_BAR,2024-09-09,2024-09-10,15.7,15.0,17.0,2024-09-13,16.0,TIMEOUT,-0.64,3,Pin Bar: wick dưới 0 (3.3× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại MA60 (15)
+MBB,BREAKOUT_RETEST_ENTRY,2024-09-17,2024-09-18,15.86,15.0,17.0,2024-09-25,17.0,TIMEOUT,5.99,5,Breakout 12 bars trước tại level 16 | Retest thành công (cách -2.0%) | Volume cạn 0.70× TB20 | Nến đóng xanh — support giữ vững
+MBB,TREND_PULLBACK,2024-10-07,2024-10-08,16.45,16.0,17.0,2024-10-14,17.0,TP,3.34,4,Uptrend: 16 > MA20(16) > MA60(16) | Breakout vùng 16 → recent high 17 | Pullback về vùng breakout (cách +1.4%) | Volume cạn — áp lực bán suy yếu
+MBB,BREAKOUT_RETEST_ENTRY,2024-10-14,2024-10-15,16.94,16.0,18.0,2024-10-22,16.0,TIMEOUT,-2.72,5,Breakout 14 bars trước tại level 16 | Retest thành công (cách +2.4%) | Nến đóng xanh — support giữ vững
+MBB,BULLISH_ENGULFING,2024-11-20,2024-11-21,15.4,15.0,16.0,2024-11-26,16.0,TIMEOUT,2.14,3,Engulfing: [15–15] nuốt [15–15] (body 1.7%) | Volume xanh 1.3× bar đỏ | Tại support 15
+MBB,BULLISH_ENGULFING,2024-12-05,2024-12-06,16.06,16.0,16.0,2024-12-06,16.0,SL,-0.37,0,Engulfing: [16–16] nuốt [16–16] (body 2.9%) | Volume xanh 1.7× bar đỏ | Tại support 16
+MBB,BREAKOUT_RETEST_ENTRY,2024-12-31,2025-01-02,16.42,16.0,17.0,2025-01-06,16.0,SL,-2.56,2,Breakout 3 bars trước tại level 16 | Retest thành công (cách +0.8%) | Nến đóng xanh — support giữ vững
+HDB,PIN_BAR,2024-03-19,2024-03-20,13.82,13.0,15.0,2024-03-21,14.0,TSL,1.16,1,Pin Bar: wick dưới 0 (15.3× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại MA60 (13)
+HDB,BREAKOUT_RETEST_ENTRY,2024-03-26,2024-03-27,15.0,14.0,16.0,2024-04-03,14.0,TIMEOUT,-3.73,5,Breakout 4 bars trước tại level 14 | Retest thành công (cách +3.0%) | Nến đóng xanh — support giữ vững
+HDB,BREAKOUT_RETEST_ENTRY,2024-04-05,2024-04-08,14.41,14.0,15.0,2024-04-12,15.0,TP,4.09,4,Breakout 12 bars trước tại level 14 | Retest thành công (cách -0.6%) | Nến đóng xanh — support giữ vững
+HDB,PIN_BAR,2024-05-02,2024-05-03,14.6,14.0,16.0,2024-05-03,15.0,TSL,0.0,0,Pin Bar: wick dưới 0 (5.3× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại MA60 (14)
+HDB,TREND_PULLBACK,2024-05-22,2024-05-23,15.06,15.0,15.0,2024-05-23,15.0,SL,-0.4,0,Uptrend: 15 > MA20(15) > MA60(14) | Breakout vùng 15 → recent high 15 | Pullback về vùng breakout (cách +0.2%) | Volume cạn — áp lực bán suy yếu
+HDB,PIN_BAR,2024-06-28,2024-07-01,14.2,14.0,14.0,2024-07-01,14.0,TP,-1.41,0,Pin Bar: wick dưới 0 (3.8× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 14 (cách 1.4%)
+HDB,BREAKOUT_RETEST_ENTRY,2024-07-09,2024-07-10,15.58,15.0,16.0,2024-07-17,16.0,TSL,2.31,5,Breakout 5 bars trước tại level 15 | Retest thành công (cách +4.8%) | Nến đóng xanh — support giữ vững
+HDB,BREAKOUT_RETEST_ENTRY,2024-07-19,2024-07-22,15.97,15.0,17.0,2024-07-29,16.0,TIMEOUT,1.57,5,Breakout 3 bars trước tại level 16 | Retest thành công (cách +0.8%) | Volume cạn 0.73× TB20
+HDB,BREAKOUT_RETEST_ENTRY,2024-07-29,2024-07-30,16.22,16.0,17.0,2024-08-01,17.0,TP,4.81,2,Breakout 9 bars trước tại level 16 | Retest thành công (cách +2.0%) | Volume cạn 0.54× TB20 | Nến đóng xanh — support giữ vững
+HDB,BREAKOUT_RETEST_ENTRY,2024-08-06,2024-08-07,16.0,15.0,18.0,2024-08-14,17.0,TIMEOUT,4.0,5,Breakout 15 bars trước tại level 16 | Retest thành công (cách +0.4%) | Volume cạn 0.76× TB20
+HDB,BULLISH_ENGULFING,2024-08-21,2024-08-22,17.41,17.0,18.0,2024-08-27,17.0,TIMEOUT,0.0,3,Engulfing: [17–17] nuốt [17–17] (body 1.1%) | Volume xanh 1.3× bar đỏ
+HDB,TREND_PULLBACK,2024-09-04,2024-09-05,17.48,17.0,18.0,2024-09-09,17.0,SL,-2.75,2,Uptrend: 17 > MA20(17) > MA60(16) | Breakout vùng 17 → recent high 18 | Pullback về vùng breakout (cách +3.0%) | Volume cạn — áp lực bán suy yếu
+HDB,TREND_PULLBACK,2024-09-19,2024-09-20,17.28,17.0,18.0,2024-09-26,18.0,TSL,1.33,4,Uptrend: 17 > MA20(17) > MA60(16) | Breakout vùng 17 → recent high 18 | Pullback về vùng breakout (cách -0.9%)
+HDB,TREND_PULLBACK,2024-10-03,2024-10-04,17.8,17.0,19.0,2024-10-11,18.0,TIMEOUT,-1.29,5,Uptrend: 18 > MA20(17) > MA60(17) | Breakout vùng 18 → recent high 18 | Pullback về vùng breakout (cách -0.2%)
+HDB,TREND_PULLBACK,2024-10-11,2024-10-14,17.61,17.0,19.0,2024-10-21,17.0,TIMEOUT,-1.65,5,Uptrend: 18 > MA20(18) > MA60(17) | Breakout vùng 18 → recent high 18 | Pullback về vùng breakout (cách -1.3%) | Volume cạn — áp lực bán suy yếu
+HDB,PIN_BAR,2024-10-22,2024-10-23,17.35,17.0,18.0,2024-10-28,17.0,TIMEOUT,-1.33,3,Pin Bar: wick dưới 0 (5.3× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 17 (cách 2.0%) | Tại MA60 (17)
+HDB,BREAKOUT_RETEST_ENTRY,2024-12-20,2024-12-23,18.12,18.0,18.0,2024-12-23,18.0,SL,-0.66,0,Breakout 8 bars trước tại level 18 | Retest thành công (cách +0.3%) | Volume cạn 0.77× TB20
+HDB,BREAKOUT_RETEST_ENTRY,2024-12-23,2024-12-24,18.04,18.0,18.0,2024-12-24,18.0,SL,-0.22,0,Breakout 9 bars trước tại level 18 | Retest thành công (cách +0.3%) | Volume cạn 0.54× TB20
+HDB,BREAKOUT_RETEST_ENTRY,2024-12-24,2024-12-25,18.08,18.0,18.0,2024-12-25,18.0,TP,-0.44,0,Breakout 10 bars trước tại level 18 | Retest thành công (cách +0.3%) | Volume cạn 0.60× TB20
+MSN,BREAKOUT_RETEST_ENTRY,2024-02-28,2024-02-29,69.4,67.0,73.0,2024-03-05,71.0,TSL,2.59,3,Breakout 8 bars trước tại level 68 | Retest thành công (cách +0.7%) | Nến đóng xanh — support giữ vững
+MSN,BREAKOUT_RETEST_ENTRY,2024-03-15,2024-03-18,77.8,74.0,84.0,2024-03-18,74.0,SL,-4.88,0,Breakout 7 bars trước tại level 77 | Retest thành công (cách +2.1%) | Nến đóng xanh — support giữ vững
+MSN,BREAKOUT_RETEST_ENTRY,2024-03-18,2024-03-19,77.9,74.0,84.0,2024-03-26,74.0,SL,-5.01,5,Breakout 8 bars trước tại level 77 | Retest thành công (cách +1.3%) | Nến đóng xanh — support giữ vững
+MSN,BREAKOUT_RETEST_ENTRY,2024-03-27,2024-03-28,76.9,73.0,83.0,2024-04-01,73.0,SL,-5.07,2,Breakout 15 bars trước tại level 77 | Retest thành công (cách -2.0%) | Nến đóng xanh — support giữ vững
+MSN,PIN_BAR,2024-05-02,2024-05-03,68.6,65.0,74.0,2024-05-08,72.0,TIMEOUT,5.39,3,Pin Bar: wick dưới 1 (3.5× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 67 (cách 1.5%)
+MSN,BULLISH_ENGULFING,2024-05-08,2024-05-09,72.1,69.0,77.0,2024-05-14,71.0,TIMEOUT,-2.08,3,Engulfing: [71–72] nuốt [71–71] (body 2.0%) | Volume xanh 1.9× bar đỏ | Tại support 72
+MSN,BREAKOUT_RETEST_ENTRY,2024-05-23,2024-05-24,75.5,72.0,81.0,2024-05-31,77.0,TIMEOUT,1.46,5,Breakout 5 bars trước tại level 72 | Retest thành công (cách +4.7%) | Nến đóng xanh — support giữ vững
+MSN,BREAKOUT_RETEST_ENTRY,2024-06-03,2024-06-04,78.0,75.0,82.0,2024-06-11,76.0,TIMEOUT,-2.82,5,Breakout 3 bars trước tại level 76 | Retest thành công (cách +1.7%) | Nến đóng xanh — support giữ vững
+MSN,BREAKOUT_RETEST_ENTRY,2024-06-12,2024-06-13,78.5,76.0,82.0,2024-06-19,76.0,SL,-3.18,4,Breakout 10 bars trước tại level 76 | Retest thành công (cách +1.8%) | Nến đóng xanh — support giữ vững
+MSN,BULLISH_ENGULFING,2024-07-26,2024-07-29,74.8,72.0,79.0,2024-08-01,72.0,SL,-3.74,3,Engulfing: [71–74] nuốt [71–71] (body 4.2%) | Volume xanh 4.4× bar đỏ | Tại support 73
+MSN,BULLISH_ENGULFING,2024-08-08,2024-08-09,74.6,72.0,78.0,2024-08-14,76.0,TIMEOUT,2.55,3,Engulfing: [73–74] nuốt [73–73] (body 2.1%) | Volume xanh 2.6× bar đỏ | Tại support 74
+MSN,BREAKOUT_RETEST_ENTRY,2024-08-16,2024-08-19,77.8,75.0,82.0,2024-08-26,76.0,TIMEOUT,-2.06,5,Breakout 3 bars trước tại level 75 | Retest thành công (cách +2.8%) | Nến đóng xanh — support giữ vững
+MSN,BREAKOUT_RETEST_ENTRY,2024-08-27,2024-08-28,77.0,74.0,82.0,2024-09-06,74.0,SL,-3.9,5,Breakout 8 bars trước tại level 76 | Retest thành công (cách +0.4%) | Nến đóng xanh — support giữ vững
+MSN,BREAKOUT_RETEST_ENTRY,2024-09-06,2024-09-09,75.8,73.0,80.0,2024-09-16,73.0,SL,-3.69,5,Breakout 14 bars trước tại level 76 | Retest thành công (cách -0.7%) | Nến đóng xanh — support giữ vững
+MSN,BREAKOUT_RETEST_ENTRY,2024-10-08,2024-10-09,75.3,73.0,79.0,2024-10-10,78.0,TSL,3.59,1,Breakout 6 bars trước tại level 76 | Retest thành công (cách -1.7%) | Volume cạn 0.76× TB20 | Nến đóng xanh — support giữ vững
+MSN,BREAKOUT_RETEST_ENTRY,2024-10-10,2024-10-11,80.2,78.0,84.0,2024-10-18,80.0,TIMEOUT,0.25,5,Breakout 8 bars trước tại level 76 | Retest thành công (cách +4.6%) | Nến đóng xanh — support giữ vững
+MSN,BREAKOUT_RETEST_ENTRY,2024-10-21,2024-10-22,80.0,78.0,83.0,2024-10-25,78.0,SL,-2.5,3,Breakout 8 bars trước tại level 77 | Retest thành công (cách +4.2%) | Nến đóng xanh — support giữ vững
+MSN,BREAKOUT_RETEST_ENTRY,2024-10-28,2024-10-29,78.1,76.0,81.0,2024-10-31,76.0,SL,-2.69,2,Breakout 13 bars trước tại level 77 | Retest thành công (cách +1.2%) | Nến đóng xanh — support giữ vững
+MSN,BULLISH_ENGULFING,2024-11-11,2024-11-12,73.5,71.0,77.0,2024-11-15,71.0,SL,-3.4,3,Engulfing: [72–74] nuốt [72–73] (body 1.7%) | Volume xanh 1.1× bar đỏ | Tại support 73
+MSN,BULLISH_ENGULFING,2024-12-05,2024-12-06,74.1,72.0,77.0,2024-12-11,73.0,TIMEOUT,-1.89,3,Engulfing: [72–74] nuốt [72–72] (body 2.5%) | Volume xanh 1.3× bar đỏ | Tại support 73
+HPG,TREND_PULLBACK,2024-03-12,2024-03-13,22.88,22.0,24.0,2024-03-18,22.0,SL,-3.85,3,Uptrend: 23 > MA20(23) > MA60(21) | Breakout vùng 22 → recent high 24 | Pullback về vùng breakout (cách +3.4%)
+HPG,BULLISH_ENGULFING,2024-04-02,2024-04-03,22.99,22.0,24.0,2024-04-08,22.0,TIMEOUT,-2.48,3,Engulfing: [23–23] nuốt [23–23] (body 1.7%) | Volume xanh 1.3× bar đỏ
+HPG,PIN_BAR,2024-05-02,2024-05-03,21.48,21.0,22.0,2024-05-03,22.0,TP,2.42,0,Pin Bar: wick dưới 0 (7.7× thân) | Đóng gần đỉnh nến (12% từ đỉnh) | Tại support 21 (cách 2.2%)
+HPG,BULLISH_ENGULFING,2024-05-03,2024-05-06,21.86,21.0,23.0,2024-05-08,23.0,TSL,4.48,2,Engulfing: [21–22] nuốt [21–22] (body 1.0%) | Volume xanh 2.3× bar đỏ | Tại support 21
+HPG,BREAKOUT_RETEST_ENTRY,2024-05-13,2024-05-14,23.03,22.0,25.0,2024-05-21,24.0,TIMEOUT,4.78,5,Breakout 4 bars trước tại level 23 | Retest thành công (cách +0.2%) | Volume cạn 0.66× TB20
+HPG,BREAKOUT_RETEST_ENTRY,2024-05-23,2024-05-24,24.42,24.0,25.0,2024-05-24,24.0,SL,-1.72,0,Breakout 4 bars trước tại level 24 | Retest thành công (cách +2.7%) | Nến đóng xanh — support giữ vững
+HPG,BREAKOUT_RETEST_ENTRY,2024-05-27,2024-05-28,24.17,23.0,26.0,2024-06-04,24.0,TIMEOUT,1.03,5,Breakout 3 bars trước tại level 24 | Retest thành công (cách -0.7%) | Volume cạn 0.63× TB20
+HPG,BREAKOUT_RETEST_ENTRY,2024-06-04,2024-06-05,24.42,24.0,25.0,2024-06-12,25.0,TIMEOUT,1.02,5,Breakout 9 bars trước tại level 24 | Retest thành công (cách +0.7%) | Nến đóng xanh — support giữ vững
+HPG,BREAKOUT_RETEST_ENTRY,2024-06-12,2024-06-13,24.71,24.0,26.0,2024-06-20,24.0,TIMEOUT,-1.01,5,Breakout 15 bars trước tại level 24 | Retest thành công (cách +1.8%) | Volume cạn 0.75× TB20 | Nến đóng xanh — support giữ vững
+HPG,BULLISH_ENGULFING,2024-08-16,2024-08-19,21.5,21.0,22.0,2024-08-22,21.0,TIMEOUT,-0.19,3,Engulfing: [21–21] nuốt [21–21] (body 1.6%) | Volume xanh 2.2× bar đỏ | Tại support 21
+HPG,BULLISH_ENGULFING,2024-09-06,2024-09-09,21.17,21.0,21.0,2024-09-09,21.0,TP,-0.8,0,Engulfing: [21–21] nuốt [21–21] (body 1.4%) | Volume xanh 1.0× bar đỏ | Tại support 21
+HPG,BREAKOUT_RETEST_ENTRY,2024-09-30,2024-10-01,22.33,22.0,23.0,2024-10-02,22.0,SL,-1.48,1,Breakout 4 bars trước tại level 22 | Retest thành công (cách +1.3%) | Nến đóng xanh — support giữ vững
+HPG,BREAKOUT_RETEST_ENTRY,2024-10-04,2024-10-07,22.0,21.0,24.0,2024-10-14,23.0,TIMEOUT,2.45,5,Breakout 4 bars trước tại level 22 | Retest thành công (cách -0.6%) | Volume cạn 0.79× TB20
+HPG,BREAKOUT_RETEST_ENTRY,2024-10-14,2024-10-15,22.83,22.0,24.0,2024-10-22,22.0,TIMEOUT,-2.72,5,Breakout 4 bars trước tại level 22 | Retest thành công (cách +0.4%) | Volume cạn 0.73× TB20
+HPG,BREAKOUT_RETEST_ENTRY,2024-10-22,2024-10-23,22.21,22.0,23.0,2024-10-23,22.0,SL,-0.95,0,Breakout 10 bars trước tại level 22 | Retest thành công (cách -1.1%) | Volume cạn 0.76× TB20
+HPG,BREAKOUT_RETEST_ENTRY,2024-10-23,2024-10-24,22.08,22.0,22.0,2024-10-24,22.0,SL,-0.36,0,Breakout 11 bars trước tại level 22 | Retest thành công (cách -1.9%) | Volume cạn 0.59× TB20
+HPG,BREAKOUT_RETEST_ENTRY,2024-10-24,2024-10-25,22.17,22.0,22.0,2024-10-25,22.0,TP,-0.77,0,Breakout 12 bars trước tại level 22 | Retest thành công (cách -1.9%) | Volume cạn 0.70× TB20
+HPG,BREAKOUT_RETEST_ENTRY,2024-10-25,2024-10-28,22.08,22.0,22.0,2024-10-28,22.0,TP,-0.36,0,Breakout 13 bars trước tại level 22 | Retest thành công (cách -1.9%) | Volume cạn 0.44× TB20
+HPG,BREAKOUT_RETEST_ENTRY,2024-10-28,2024-10-29,22.33,22.0,23.0,2024-11-04,22.0,SL,-1.48,4,Breakout 14 bars trước tại level 22 | Retest thành công (cách -0.8%) | Volume cạn 0.59× TB20 | Nến đóng xanh — support giữ vững
+HPG,BREAKOUT_RETEST_ENTRY,2024-11-29,2024-12-02,22.46,22.0,23.0,2024-12-05,22.0,SL,-2.05,3,Breakout 15 bars trước tại level 23 | Retest thành công (cách -1.8%) | Volume cạn 0.73× TB20 | Nến đóng xanh — support giữ vững
+HPG,BULLISH_ENGULFING,2024-12-05,2024-12-06,23.21,23.0,24.0,2024-12-06,23.0,SL,-0.9,0,Engulfing: [22–23] nuốt [22–22] (body 4.3%) | Volume xanh 3.6× bar đỏ | Tại support 23
+HPG,BREAKOUT_RETEST_ENTRY,2024-12-10,2024-12-11,23.25,23.0,24.0,2024-12-11,23.0,SL,-1.08,0,Breakout 4 bars trước tại level 23 | Retest thành công (cách +0.7%) | Nến đóng xanh — support giữ vững
+HPG,BREAKOUT_RETEST_ENTRY,2024-12-18,2024-12-19,22.5,22.0,23.0,2024-12-26,22.0,TIMEOUT,0.0,5,Breakout 7 bars trước tại level 23 | Retest thành công (cách -1.8%) | Volume cạn 0.73× TB20 | Nến đóng xanh — support giữ vững
+PLX,BREAKOUT_RETEST_ENTRY,2024-02-28,2024-02-29,33.8,33.0,35.0,2024-03-07,34.0,TSL,0.56,5,Breakout 8 bars trước tại level 33 | Retest thành công (cách +2.6%) | Nến đóng xanh — support giữ vững
+PLX,TREND_PULLBACK,2024-03-12,2024-03-13,34.27,33.0,36.0,2024-03-20,35.0,TIMEOUT,1.75,5,Uptrend: 34 > MA20(33) > MA60(33) | Breakout vùng 34 → recent high 35 | Pullback về vùng breakout (cách +0.3%) | Volume cạn — áp lực bán suy yếu
+PLX,BREAKOUT_RETEST_ENTRY,2024-03-26,2024-03-27,35.43,34.0,38.0,2024-04-03,35.0,TIMEOUT,-1.19,5,Breakout 4 bars trước tại level 35 | Retest thành công (cách +0.9%) | Volume cạn 0.58× TB20 | Nến đóng xanh — support giữ vững
+PLX,TREND_PULLBACK,2024-04-03,2024-04-04,35.01,34.0,37.0,2024-04-11,34.0,SL,-2.91,5,Uptrend: 35 > MA20(35) > MA60(33) | Breakout vùng 35 → recent high 36 | Pullback về vùng breakout (cách +0.3%) | Volume cạn — áp lực bán suy yếu
+PLX,BULLISH_ENGULFING,2024-04-26,2024-05-02,33.24,32.0,35.0,2024-05-07,34.0,TSL,3.25,3,Engulfing: [33–33] nuốt [33–33] (body 1.7%) | Volume xanh 1.9× bar đỏ | Tại support 32
+PLX,BREAKOUT_RETEST_ENTRY,2024-05-15,2024-05-16,37.3,36.0,39.0,2024-05-21,36.0,SL,-3.49,3,Breakout 5 bars trước tại level 37 | Retest thành công (cách -0.8%) | Nến đóng xanh — support giữ vững
+PLX,TREND_PULLBACK,2024-05-22,2024-05-23,36.58,35.0,39.0,2024-05-23,37.0,TSL,0.0,0,Uptrend: 36 > MA20(35) > MA60(35) | Breakout vùng 35 → recent high 37 | Pullback về vùng breakout (cách +3.4%)
+PLX,BREAKOUT_RETEST_ENTRY,2024-06-07,2024-06-10,40.2,39.0,42.0,2024-06-14,40.0,TSL,-0.5,4,Breakout 10 bars trước tại level 40 | Retest thành công (cách +1.2%) | Volume cạn 0.59× TB20
+PLX,TREND_PULLBACK,2024-06-19,2024-06-20,40.54,39.0,43.0,2024-06-27,40.0,TIMEOUT,-1.43,5,Uptrend: 40 > MA20(40) > MA60(37) | Breakout vùng 40 → recent high 42 | Pullback về vùng breakout (cách -0.1%) | Volume cạn — áp lực bán suy yếu
+PLX,BULLISH_ENGULFING,2024-07-24,2024-07-25,44.51,42.0,48.0,2024-07-26,45.0,TSL,0.76,1,Engulfing: [44–45] nuốt [44–45] (body 3.2%) | Volume xanh 1.5× bar đỏ
+PLX,BREAKOUT_RETEST_ENTRY,2024-08-14,2024-08-15,47.61,45.0,52.0,2024-08-22,47.0,TIMEOUT,-0.42,5,Breakout 3 bars trước tại level 46 | Retest thành công (cách +2.5%) | Nến đóng xanh — support giữ vững
+PLX,TREND_PULLBACK,2024-08-22,2024-08-23,47.03,45.0,50.0,2024-08-30,47.0,TIMEOUT,0.0,5,Uptrend: 47 > MA20(47) > MA60(43) | Breakout vùng 46 → recent high 49 | Pullback về vùng breakout (cách +2.1%) | Volume cạn — áp lực bán suy yếu
+PLX,BREAKOUT_RETEST_ENTRY,2024-08-30,2024-09-04,46.74,45.0,49.0,2024-09-05,45.0,SL,-3.72,1,Breakout 11 bars trước tại level 48 | Retest thành công (cách -1.2%) | Volume cạn 0.45× TB20
+PLX,BULLISH_ENGULFING,2024-10-28,2024-10-29,40.16,39.0,42.0,2024-11-01,39.0,TIMEOUT,-2.19,3,Engulfing: [40–41] nuốt [40–40] (body 1.1%) | Volume xanh 1.6× bar đỏ | Tại support 40
+MWG,TREND_PULLBACK,2024-03-07,2024-03-08,48.17,46.0,51.0,2024-03-08,46.0,SL,-4.5,0,Uptrend: 48 > MA20(46) > MA60(43) | Breakout vùng 46 → recent high 49 | Pullback về vùng breakout (cách +3.4%) | Volume cạn — áp lực bán suy yếu
+MWG,TREND_PULLBACK,2024-03-12,2024-03-13,45.77,44.0,48.0,2024-03-13,46.0,TSL,0.0,0,Uptrend: 46 > MA20(46) > MA60(44) | Breakout vùng 46 → recent high 49 | Pullback về vùng breakout (cách -1.4%)
+MWG,TREND_PULLBACK,2024-03-13,2024-03-14,47.73,46.0,50.0,2024-03-15,46.0,SL,-3.62,1,Uptrend: 47 > MA20(46) > MA60(44) | Breakout vùng 46 → recent high 49 | Pullback về vùng breakout (cách +2.4%) | Volume cạn — áp lực bán suy yếu
+MWG,TREND_PULLBACK,2024-03-15,2024-03-18,46.16,44.0,49.0,2024-03-25,49.0,TP,6.15,5,Uptrend: 46 > MA20(46) > MA60(44) | Breakout vùng 46 → recent high 49 | Pullback về vùng breakout (cách -0.1%) | Volume cạn — áp lực bán suy yếu
+MWG,TREND_PULLBACK,2024-03-25,2024-03-26,47.24,45.0,51.0,2024-03-28,51.0,TP,7.96,2,Uptrend: 47 > MA20(46) > MA60(45) | Breakout vùng 46 → recent high 49 | Pullback về vùng breakout (cách +1.9%) | Volume cạn — áp lực bán suy yếu
+MWG,TREND_PULLBACK,2024-04-08,2024-04-09,48.9,46.0,53.0,2024-04-09,49.0,TSL,0.0,0,Uptrend: 49 > MA20(48) > MA60(46) | Breakout vùng 49 → recent high 50 | Pullback về vùng breakout (cách +0.0%) | Volume cạn — áp lực bán suy yếu
+MWG,BULLISH_ENGULFING,2024-04-09,2024-04-10,51.74,49.0,56.0,2024-04-15,49.0,SL,-5.3,3,Engulfing: [49–52] nuốt [49–50] (body 5.6%) | Volume xanh 3.2× bar đỏ
+MWG,BREAKOUT_RETEST_ENTRY,2024-04-24,2024-04-25,50.95,48.0,55.0,2024-04-25,51.0,TSL,0.0,0,Breakout 11 bars trước tại level 50 | Retest thành công (cách +1.3%) | Nến đóng xanh — support giữ vững
+MWG,BREAKOUT_RETEST_ENTRY,2024-04-25,2024-04-26,52.32,50.0,56.0,2024-05-06,56.0,TP,7.03,3,Breakout 12 bars trước tại level 50 | Retest thành công (cách +4.3%) | Nến đóng xanh — support giữ vững
+MWG,TREND_PULLBACK,2024-05-27,2024-05-28,59.07,56.0,64.0,2024-05-30,59.0,TSL,-0.83,2,Uptrend: 59 > MA20(58) > MA60(51) | Breakout vùng 57 → recent high 61 | Pullback về vùng breakout (cách +2.9%) | Volume cạn — áp lực bán suy yếu
+MWG,BULLISH_ENGULFING,2024-05-30,2024-05-31,61.42,58.0,67.0,2024-06-05,61.0,TIMEOUT,-1.27,3,Engulfing: [59–61] nuốt [59–60] (body 4.8%) | Volume xanh 2.1× bar đỏ
+MWG,TREND_PULLBACK,2024-06-06,2024-06-07,60.93,58.0,65.0,2024-06-14,62.0,TIMEOUT,1.12,5,Uptrend: 61 > MA20(60) > MA60(53) | Breakout vùng 59 → recent high 63 | Pullback về vùng breakout (cách +1.8%) | Volume cạn — áp lực bán suy yếu
+MWG,BREAKOUT_RETEST_ENTRY,2024-07-04,2024-07-05,64.27,62.0,68.0,2024-07-12,64.0,TIMEOUT,-0.61,5,Breakout 4 bars trước tại level 63 | Retest thành công (cách +2.5%) | Volume cạn 0.74× TB20
+MWG,TREND_PULLBACK,2024-07-15,2024-07-16,63.68,61.0,68.0,2024-07-23,62.0,TIMEOUT,-3.25,5,Uptrend: 63 > MA20(63) > MA60(60) | Breakout vùng 63 → recent high 66 | Pullback về vùng breakout (cách +1.3%) | Volume cạn — áp lực bán suy yếu
+MWG,BREAKOUT_RETEST_ENTRY,2024-08-20,2024-08-21,68.41,66.0,72.0,2024-08-28,68.0,TIMEOUT,0.0,5,Breakout 3 bars trước tại level 66 | Retest thành công (cách +4.2%) | Nến đóng xanh — support giữ vững
+MWG,BREAKOUT_RETEST_ENTRY,2024-08-28,2024-08-29,67.92,66.0,71.0,2024-09-06,66.0,SL,-2.83,4,Breakout 9 bars trước tại level 66 | Retest thành công (cách +4.0%) | Volume cạn 0.75× TB20
+MWG,BREAKOUT_RETEST_ENTRY,2024-09-06,2024-09-09,66.74,65.0,69.0,2024-09-16,65.0,TIMEOUT,-2.37,5,Breakout 14 bars trước tại level 66 | Retest thành công (cách +1.9%) | Nến đóng xanh — support giữ vững
+MWG,PIN_BAR,2024-11-06,2024-11-07,64.87,63.0,68.0,2024-11-11,63.0,SL,-2.88,2,Pin Bar: wick dưới 1 (5.9× thân) | Đóng gần đỉnh nến (14% từ đỉnh) | Tại support 64 (cách 1.0%)
+MWG,BULLISH_ENGULFING,2024-12-13,2024-12-16,60.13,58.0,63.0,2024-12-19,59.0,TIMEOUT,-1.96,3,Engulfing: [59–60] nuốt [59–59] (body 2.0%) | Volume xanh 1.5× bar đỏ | Tại support 60
+MWG,PIN_BAR,2024-12-24,2024-12-25,60.43,59.0,63.0,2024-12-30,60.0,TIMEOUT,-0.5,3,Pin Bar: wick dưới 0 (4.9× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 60 (cách 0.7%) | Tại MA200 (60)
+MWG,PIN_BAR,2024-12-31,2025-01-02,60.04,58.0,63.0,2025-01-03,58.0,SL,-3.4,1,Pin Bar: wick dưới 0 (4.4× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 60 (cách 0.2%)
+POW,BREAKOUT_RETEST_ENTRY,2024-05-22,2024-05-23,9.42,9.0,10.0,2024-05-27,9.0,TSL,0.42,2,Breakout 3 bars trước tại level 9 | Retest thành công (cách +0.9%) | Nến đóng xanh — support giữ vững
+POW,BREAKOUT_RETEST_ENTRY,2024-06-14,2024-06-17,11.32,11.0,12.0,2024-06-18,12.0,TSL,2.56,1,Breakout 9 bars trước tại level 11 | Retest thành công (cách +2.2%) | Volume cạn 0.78× TB20
+POW,BREAKOUT_RETEST_ENTRY,2024-06-21,2024-06-24,12.15,12.0,12.0,2024-06-24,12.0,SL,-1.23,0,Breakout 4 bars trước tại level 12 | Retest thành công (cách +3.9%) | Volume cạn 0.62× TB20
+POW,TREND_PULLBACK,2024-06-27,2024-06-28,12.19,12.0,12.0,2024-06-28,12.0,SL,-1.56,0,Uptrend: 12 > MA20(12) > MA60(10) | Breakout vùng 12 → recent high 13 | Pullback về vùng breakout (cách +5.4%) | Volume cạn — áp lực bán suy yếu
+POW,TREND_PULLBACK,2024-07-01,2024-07-02,12.15,12.0,12.0,2024-07-02,12.0,SL,-1.23,0,Uptrend: 12 > MA20(12) > MA60(10) | Breakout vùng 12 → recent high 13 | Pullback về vùng breakout (cách +4.0%) | Volume cạn — áp lực bán suy yếu
+POW,TREND_PULLBACK,2024-07-02,2024-07-03,12.11,12.0,12.0,2024-07-03,12.0,TP,-0.91,0,Uptrend: 12 > MA20(12) > MA60(10) | Breakout vùng 12 → recent high 13 | Pullback về vùng breakout (cách +2.5%) | Volume cạn — áp lực bán suy yếu
+POW,TREND_PULLBACK,2024-07-04,2024-07-05,12.19,12.0,12.0,2024-07-05,12.0,TP,-1.56,0,Uptrend: 12 > MA20(12) > MA60(10) | Breakout vùng 12 → recent high 13 | Pullback về vùng breakout (cách +4.3%) | Volume cạn — áp lực bán suy yếu
+POW,TREND_PULLBACK,2024-07-05,2024-07-08,12.11,12.0,12.0,2024-07-08,12.0,TP,-0.91,0,Uptrend: 12 > MA20(12) > MA60(10) | Breakout vùng 12 → recent high 13 | Pullback về vùng breakout (cách +3.3%) | Volume cạn — áp lực bán suy yếu
+POW,BULLISH_ENGULFING,2024-08-21,2024-08-22,11.41,11.0,12.0,2024-08-27,11.0,SL,-3.59,3,Engulfing: [11–11] nuốt [11–11] (body 1.8%) | Volume xanh 1.4× bar đỏ | Tại support 11
+POW,BULLISH_ENGULFING,2024-11-25,2024-11-26,10.08,10.0,10.0,2024-11-26,10.0,TP,-0.79,0,Engulfing: [9–10] nuốt [9–9] (body 6.6%) | Volume xanh 6.0× bar đỏ | Tại support 10
+POW,BREAKOUT_RETEST_ENTRY,2024-11-27,2024-11-28,10.46,10.0,11.0,2024-12-05,10.0,TIMEOUT,-1.24,5,Breakout 3 bars trước tại level 10 | Retest thành công (cách +4.1%) | Nến đóng xanh — support giữ vững
+POW,BREAKOUT_RETEST_ENTRY,2024-12-05,2024-12-06,10.37,10.0,11.0,2024-12-13,10.0,TIMEOUT,-2.41,5,Breakout 3 bars trước tại level 10 | Retest thành công (cách -0.4%) | Nến đóng xanh — support giữ vững
+POW,BREAKOUT_RETEST_ENTRY,2024-12-16,2024-12-17,10.25,10.0,11.0,2024-12-23,10.0,SL,-2.44,4,Breakout 10 bars trước tại level 10 | Retest thành công (cách -1.2%) | Volume cạn 0.51× TB20 | Nến đóng xanh — support giữ vững
+SAB,BREAKOUT_RETEST_ENTRY,2024-03-13,2024-03-14,50.45,49.0,53.0,2024-03-15,49.0,SL,-2.87,1,Breakout 6 bars trước tại level 50 | Retest thành công (cách +1.2%) | Nến đóng xanh — support giữ vững
+SAB,PIN_BAR,2024-04-16,2024-04-17,46.16,45.0,48.0,2024-04-19,45.0,SL,-2.51,1,Pin Bar: wick dưới 2 (9.5× thân) | Đóng gần đỉnh nến (10% từ đỉnh) | Tại support 46 (cách 0.3%)
+SAB,BREAKOUT_RETEST_ENTRY,2024-05-14,2024-05-15,48.18,47.0,50.0,2024-05-22,48.0,TIMEOUT,0.52,5,Breakout 5 bars trước tại level 49 | Retest thành công (cách -1.0%) | Volume cạn 0.55× TB20 | Nến đóng xanh — support giữ vững
+SAB,BREAKOUT_RETEST_ENTRY,2024-05-23,2024-05-24,50.11,49.0,52.0,2024-05-24,49.0,SL,-2.22,0,Breakout 12 bars trước tại level 49 | Retest thành công (cách +3.1%) | Nến đóng xanh — support giữ vững
+SAB,BREAKOUT_RETEST_ENTRY,2024-05-27,2024-05-28,49.44,48.0,52.0,2024-06-04,52.0,TIMEOUT,4.61,5,Breakout 3 bars trước tại level 50 | Retest thành công (cách -0.7%) | Volume cạn 0.62× TB20 | Nến đóng xanh — support giữ vững
+SAB,BREAKOUT_RETEST_ENTRY,2024-06-04,2024-06-05,52.22,50.0,56.0,2024-06-05,52.0,TSL,0.0,0,Breakout 6 bars trước tại level 50 | Retest thành công (cách +3.2%) | Nến đóng xanh — support giữ vững
+SAB,TREND_PULLBACK,2024-06-18,2024-06-19,53.57,51.0,57.0,2024-06-25,51.0,SL,-4.8,4,Uptrend: 54 > MA20(53) > MA60(49) | Breakout vùng 51 → recent high 57 | Pullback về vùng breakout (cách +4.3%) | Volume cạn — áp lực bán suy yếu
+SAB,BULLISH_ENGULFING,2024-08-16,2024-08-19,49.03,47.0,52.0,2024-08-22,50.0,TIMEOUT,1.24,3,Engulfing: [48–49] nuốt [49–49] (body 1.3%) | Volume xanh 1.1× bar đỏ | Tại support 49
+SAB,BREAKOUT_RETEST_ENTRY,2024-12-10,2024-12-11,50.68,50.0,52.0,2024-12-13,50.0,SL,-1.34,2,Breakout 3 bars trước tại level 50 | Retest thành công (cách +1.1%) | Nến đóng xanh — support giữ vững
+SAB,BREAKOUT_RETEST_ENTRY,2024-12-16,2024-12-17,50.07,49.0,52.0,2024-12-24,50.0,TIMEOUT,-0.52,5,Breakout 7 bars trước tại level 50 | Retest thành công (cách -0.3%) | Volume cạn 0.38× TB20
+SAB,BREAKOUT_RETEST_ENTRY,2024-12-26,2024-12-27,50.34,49.0,52.0,2025-01-06,49.0,SL,-2.66,5,Breakout 15 bars trước tại level 50 | Retest thành công (cách +0.4%) | Nến đóng xanh — support giữ vững
+SSB,PIN_BAR,2024-04-16,2024-04-17,19.54,19.0,20.0,2024-04-19,19.0,SL,-2.76,1,Pin Bar: wick dưới 1 (5.4× thân) | Đóng gần đỉnh nến (16% từ đỉnh) | Tại support 19 (cách 2.6%)
+SSB,PIN_BAR,2024-05-07,2024-05-08,19.41,19.0,20.0,2024-05-13,19.0,TIMEOUT,-1.34,3,Pin Bar: wick dưới 0 (4.5× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 19 (cách 2.1%)
+SSB,PIN_BAR,2024-05-15,2024-05-16,19.15,19.0,19.0,2024-05-16,19.0,TP,-0.78,0,Pin Bar: wick dưới 0 (2.6× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 19 (cách 0.8%)
+SSB,PIN_BAR,2024-05-17,2024-05-20,19.37,19.0,20.0,2024-05-23,19.0,TIMEOUT,-0.26,3,Pin Bar: wick dưới 0 (3.4× thân) | Đóng gần đỉnh nến (23% từ đỉnh) | Tại support 19 (cách 1.9%)
+SSB,PIN_BAR,2024-05-23,2024-05-24,19.32,19.0,20.0,2024-05-28,19.0,SL,-1.66,2,Pin Bar: wick dưới 0 (5.5× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 19 (cách 1.7%)
+SSB,PIN_BAR,2024-05-29,2024-05-30,18.84,18.0,20.0,2024-06-04,19.0,TIMEOUT,0.9,3,Pin Bar: wick dưới 0 (5.2× thân) | Đóng gần đỉnh nến (16% từ đỉnh) | Tại support 19 (cách 0.1%)
+SSB,PIN_BAR,2024-06-12,2024-06-13,19.01,19.0,19.0,2024-06-13,19.0,SL,-0.05,0,Pin Bar: wick dưới 0 (6.5× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 19 (cách 0.1%)
+SSB,PIN_BAR,2024-06-28,2024-07-01,18.31,17.0,20.0,2024-07-04,18.0,TIMEOUT,0.49,3,Pin Bar: wick dưới 0 (12.3× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 18 (cách 1.7%)
+SSB,PIN_BAR,2024-07-26,2024-07-29,19.32,19.0,20.0,2024-08-01,19.0,TIMEOUT,0.0,3,Pin Bar: wick dưới 0 (6.2× thân) | Đóng gần đỉnh nến (14% từ đỉnh) | Tại support 19 (cách 1.7%) | Tại MA60 (19)
+SSB,PIN_BAR,2024-08-06,2024-08-07,19.06,18.0,21.0,2024-08-12,19.0,TIMEOUT,0.47,3,Pin Bar: wick dưới 0 (5.0× thân) | Đóng gần đỉnh nến (17% từ đỉnh) | Tại support 19 (cách 1.9%) | Tại MA60 (19)
+SSB,TREND_PULLBACK,2024-08-12,2024-08-13,19.01,18.0,21.0,2024-08-20,19.0,TIMEOUT,0.0,5,Uptrend: 19 > MA20(19) > MA60(19) | Breakout vùng 19 → recent high 20 | Pullback về vùng breakout (cách +2.8%) | Volume cạn — áp lực bán suy yếu
+SSB,BREAKOUT_RETEST_ENTRY,2024-08-26,2024-08-27,19.7,19.0,21.0,2024-08-30,19.0,SL,-3.55,3,Breakout 3 bars trước tại level 20 | Retest thành công (cách -0.2%) | Nến đóng xanh — support giữ vững
+SSB,BULLISH_ENGULFING,2024-09-26,2024-09-27,17.0,16.0,18.0,2024-10-02,18.0,TIMEOUT,3.24,3,Engulfing: [17–17] nuốt [17–17] (body 2.1%) | Volume xanh 1.3× bar đỏ
+SSB,PIN_BAR,2024-12-03,2024-12-04,16.8,16.0,18.0,2024-12-09,17.0,TIMEOUT,2.98,3,Pin Bar: wick dưới 0 (4.0× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại MA60 (17)
+SSB,PIN_BAR,2024-12-12,2024-12-13,17.25,17.0,18.0,2024-12-17,17.0,SL,-1.45,2,Pin Bar: wick dưới 0 (4.0× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 17 (cách 2.3%) | Tại MA60 (17)
+SSB,PIN_BAR,2024-12-17,2024-12-18,17.1,17.0,17.0,2024-12-18,17.0,TP,-0.58,0,Pin Bar: wick dưới 0 (6.0× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 17 (cách 1.7%) | Tại MA60 (17)
+SSB,BULLISH_ENGULFING,2024-12-23,2024-12-24,16.9,16.0,18.0,2024-12-27,17.0,TIMEOUT,0.0,3,Engulfing: [17–17] nuốt [17–17] (body 1.8%) | Volume xanh 1.1× bar đỏ
+SHB,BULLISH_ENGULFING,2024-05-08,2024-05-09,8.67,8.0,10.0,2024-05-14,8.0,TIMEOUT,-3.0,3,Engulfing: [8–9] nuốt [8–9] (body 2.6%) | Volume xanh 3.3× bar đỏ
+SHB,BREAKOUT_RETEST_ENTRY,2024-05-14,2024-05-15,8.45,8.0,9.0,2024-05-22,8.0,TIMEOUT,0.0,5,Breakout 5 bars trước tại level 9 | Retest thành công (cách -1.3%) | Volume cạn 0.57× TB20
+SHB,TREND_PULLBACK,2024-05-23,2024-05-24,8.45,8.0,9.0,2024-05-31,8.0,TIMEOUT,-2.13,5,Uptrend: 9 > MA20(8) > MA60(8) | Breakout vùng 8 → recent high 9 | Pullback về vùng breakout (cách +0.5%) | Volume cạn — áp lực bán suy yếu
+SHB,BREAKOUT_RETEST_ENTRY,2024-06-06,2024-06-07,8.63,8.0,10.0,2024-06-14,8.0,TIMEOUT,-1.74,5,Breakout 15 bars trước tại level 9 | Retest thành công (cách -0.5%) | Nến đóng xanh — support giữ vững
+SHB,PIN_BAR,2024-08-02,2024-08-05,8.14,8.0,8.0,2024-08-05,8.0,SL,-1.72,0,Pin Bar: wick dưới 0 (3.8× thân) | Đóng gần đỉnh nến (21% từ đỉnh) | Tại support 8 (cách 2.6%)
+SHB,BREAKOUT_RETEST_ENTRY,2024-10-03,2024-10-04,8.29,8.0,9.0,2024-10-11,8.0,TIMEOUT,-1.33,5,Breakout 3 bars trước tại level 8 | Retest thành công (cách -0.5%) | Nến đóng xanh — support giữ vững
+SHB,TREND_PULLBACK,2024-10-11,2024-10-14,8.21,8.0,9.0,2024-10-21,8.0,TIMEOUT,-0.37,5,Uptrend: 8 > MA20(8) > MA60(8) | Breakout vùng 8 → recent high 8 | Pullback về vùng breakout (cách +1.5%) | Volume cạn — áp lực bán suy yếu
+SHB,BREAKOUT_RETEST_ENTRY,2024-10-21,2024-10-22,8.14,8.0,8.0,2024-10-22,8.0,TP,-1.72,0,Breakout 15 bars trước tại level 8 | Retest thành công (cách -1.8%) | Volume cạn 0.56× TB20
+STB,BREAKOUT_RETEST_ENTRY,2024-02-28,2024-02-29,31.6,31.0,32.0,2024-03-01,32.0,TP,1.27,1,Breakout 6 bars trước tại level 31 | Retest thành công (cách +0.5%) | Nến đóng xanh — support giữ vững
+STB,BREAKOUT_RETEST_ENTRY,2024-03-01,2024-03-04,32.1,31.0,34.0,2024-03-08,31.0,SL,-3.43,4,Breakout 8 bars trước tại level 31 | Retest thành công (cách +2.2%) | Nến đóng xanh — support giữ vững
+STB,BULLISH_ENGULFING,2024-05-23,2024-05-24,28.45,28.0,29.0,2024-05-24,29.0,TP,1.93,0,Engulfing: [28–29] nuốt [28–28] (body 2.3%) | Volume xanh 1.4× bar đỏ | Tại support 28
+STB,BREAKOUT_RETEST_ENTRY,2024-05-28,2024-05-29,28.9,28.0,30.0,2024-05-30,28.0,SL,-3.11,1,Breakout 3 bars trước tại level 29 | Retest thành công (cách +0.9%) | Nến đóng xanh — support giữ vững
+STB,BREAKOUT_RETEST_ENTRY,2024-06-03,2024-06-04,30.5,29.0,33.0,2024-06-11,31.0,TIMEOUT,2.3,5,Breakout 7 bars trước tại level 29 | Retest thành công (cách +4.0%) | Nến đóng xanh — support giữ vững
+STB,BREAKOUT_RETEST_ENTRY,2024-06-17,2024-06-18,30.55,29.0,33.0,2024-06-25,30.0,TIMEOUT,-3.11,5,Breakout 8 bars trước tại level 30 | Retest thành công (cách +1.8%) | Nến đóng xanh — support giữ vững
+STB,BREAKOUT_RETEST_ENTRY,2024-06-25,2024-06-26,29.4,28.0,31.0,2024-07-03,30.0,TIMEOUT,1.7,5,Breakout 14 bars trước tại level 30 | Retest thành công (cách -1.2%) | Volume cạn 0.70× TB20
+STB,BULLISH_ENGULFING,2024-08-16,2024-08-19,29.5,29.0,30.0,2024-08-22,30.0,TP,1.69,3,Engulfing: [29–29] nuốt [29–29] (body 1.4%) | Volume xanh 2.2× bar đỏ | Tại support 29
+STB,BREAKOUT_RETEST_ENTRY,2024-09-06,2024-09-09,29.65,29.0,31.0,2024-09-16,30.0,TIMEOUT,-0.34,5,Breakout 5 bars trước tại level 30 | Retest thành công (cách -0.2%) | Nến đóng xanh — support giữ vững
+STB,BREAKOUT_RETEST_ENTRY,2024-09-16,2024-09-17,29.65,29.0,31.0,2024-09-20,31.0,TP,4.55,3,Breakout 11 bars trước tại level 30 | Retest thành công (cách -1.3%) | Volume cạn 0.65× TB20
+STB,BREAKOUT_RETEST_ENTRY,2024-09-20,2024-09-23,30.9,30.0,32.0,2024-09-24,31.0,TSL,-0.16,1,Breakout 15 bars trước tại level 30 | Retest thành công (cách +3.0%) | Nến đóng xanh — support giữ vững
+STB,BREAKOUT_RETEST_ENTRY,2024-10-11,2024-10-14,34.1,33.0,36.0,2024-10-18,36.0,TP,5.57,4,Breakout 11 bars trước tại level 33 | Retest thành công (cách +3.2%) | Volume cạn 0.49× TB20 | Nến đóng xanh — support giữ vững
+STB,BREAKOUT_RETEST_ENTRY,2024-10-29,2024-10-30,34.2,33.0,36.0,2024-11-06,36.0,TIMEOUT,3.8,5,Breakout 8 bars trước tại level 35 | Retest thành công (cách -1.6%) | Volume cạn 0.59× TB20 | Nến đóng xanh — support giữ vững
+STB,BREAKOUT_RETEST_ENTRY,2024-11-06,2024-11-07,35.6,34.0,38.0,2024-11-11,34.0,SL,-4.49,2,Breakout 14 bars trước tại level 35 | Retest thành công (cách +2.6%) | Volume cạn 0.44× TB20 | Nến đóng xanh — support giữ vững
+STB,PIN_BAR,2024-11-13,2024-11-14,33.55,32.0,36.0,2024-11-18,32.0,SL,-4.62,2,Pin Bar: wick dưới 1 (10.0× thân) | Đóng gần đỉnh nến (9% từ đỉnh) | Tại MA60 (32)
+STB,BULLISH_ENGULFING,2024-12-05,2024-12-06,33.9,33.0,35.0,2024-12-11,34.0,TIMEOUT,-0.74,3,Engulfing: [32–34] nuốt [32–33] (body 4.9%) | Volume xanh 2.3× bar đỏ
+SSI,TREND_PULLBACK,2024-03-12,2024-03-13,25.24,24.0,27.0,2024-03-14,27.0,TP,6.97,1,Uptrend: 25 > MA20(25) > MA60(24) | Breakout vùng 24 → recent high 26 | Pullback về vùng breakout (cách +2.8%) | Volume cạn — áp lực bán suy yếu
+SSI,BREAKOUT_RETEST_ENTRY,2024-03-19,2024-03-20,25.24,24.0,27.0,2024-03-27,27.0,TIMEOUT,5.78,5,Breakout 14 bars trước tại level 25 | Retest thành công (cách +0.1%) | Volume cạn 0.50× TB20
+SSI,BULLISH_ENGULFING,2024-09-17,2024-09-18,22.82,22.0,24.0,2024-09-23,24.0,TIMEOUT,3.55,3,Engulfing: [22–23] nuốt [22–22] (body 1.9%) | Volume xanh 1.0× bar đỏ | Tại support 22
+SSI,PIN_BAR,2024-09-24,2024-09-25,23.76,23.0,25.0,2024-09-30,25.0,TP,5.22,3,Pin Bar: wick dưới 0 (4.5× thân) | Đóng gần đỉnh nến (18% từ đỉnh) | Tại support 23 (cách 2.7%) | Tại MA60 (23)
+SSI,TREND_PULLBACK,2024-10-04,2024-10-07,24.43,24.0,25.0,2024-10-14,25.0,TIMEOUT,0.53,5,Uptrend: 24 > MA20(24) > MA60(23) | Breakout vùng 24 → recent high 25 | Pullback về vùng breakout (cách +2.7%) | Volume cạn — áp lực bán suy yếu
+SSI,TREND_PULLBACK,2024-10-15,2024-10-16,24.03,23.0,26.0,2024-10-23,24.0,TIMEOUT,-0.54,5,Uptrend: 24 > MA20(24) > MA60(23) | Breakout vùng 24 → recent high 25 | Pullback về vùng breakout (cách +2.5%) | Volume cạn — áp lực bán suy yếu
+SSI,BULLISH_ENGULFING,2024-11-29,2024-12-02,21.85,21.0,23.0,2024-12-05,21.0,TSL,-2.01,3,Engulfing: [22–22] nuốt [22–22] (body 1.0%) | Volume xanh 1.1× bar đỏ | Tại support 21
+SSI,BREAKOUT_RETEST_ENTRY,2024-12-10,2024-12-11,23.36,23.0,24.0,2024-12-13,23.0,SL,-1.54,2,Breakout 3 bars trước tại level 23 | Retest thành công (cách +0.6%) | Nến đóng xanh — support giữ vững
+SSI,BREAKOUT_RETEST_ENTRY,2024-12-13,2024-12-16,23.01,22.0,25.0,2024-12-23,23.0,TIMEOUT,-0.22,5,Breakout 6 bars trước tại level 23 | Retest thành công (cách -1.1%) | Volume cạn 0.75× TB20
+SSI,BREAKOUT_RETEST_ENTRY,2024-12-23,2024-12-24,22.96,22.0,24.0,2024-12-31,23.0,TIMEOUT,0.78,5,Breakout 12 bars trước tại level 23 | Retest thành công (cách -0.9%) | Volume cạn 0.56× TB20
+SSI,BREAKOUT_RETEST_ENTRY,2024-12-31,2025-01-02,23.14,22.0,25.0,2025-01-07,22.0,SL,-4.93,3,Breakout 5 bars trước tại level 23 | Retest thành công (cách -1.2%) | Volume cạn 0.53× TB20
+TCB,TREND_PULLBACK,2024-03-12,2024-03-13,19.46,19.0,20.0,2024-03-18,19.0,SL,-2.36,3,Uptrend: 19 > MA20(19) > MA60(17) | Breakout vùng 18 → recent high 20 | Pullback về vùng breakout (cách +5.9%) | Volume cạn — áp lực bán suy yếu
+TCB,BREAKOUT_RETEST_ENTRY,2024-04-03,2024-04-04,21.97,21.0,23.0,2024-04-11,21.0,TIMEOUT,-3.05,5,Breakout 5 bars trước tại level 22 | Retest thành công (cách +1.8%) | Volume cạn 0.80× TB20
+TCB,TREND_PULLBACK,2024-04-11,2024-04-12,21.47,21.0,22.0,2024-04-12,22.0,TP,2.47,0,Uptrend: 21 > MA20(21) > MA60(19) | Breakout vùng 21 → recent high 23 | Pullback về vùng breakout (cách +0.0%)
+TCB,BREAKOUT_RETEST_ENTRY,2024-04-12,2024-04-15,22.3,21.0,24.0,2024-04-15,21.0,SL,-5.83,0,Breakout 12 bars trước tại level 22 | Retest thành công (cách +3.1%) | Nến đóng xanh — support giữ vững
+TCB,BREAKOUT_RETEST_ENTRY,2024-04-16,2024-04-17,21.49,21.0,22.0,2024-04-19,21.0,SL,-3.26,1,Breakout 14 bars trước tại level 22 | Retest thành công (cách -1.0%) | Nến đóng xanh — support giữ vững
+TCB,BREAKOUT_RETEST_ENTRY,2024-05-23,2024-05-24,22.48,22.0,23.0,2024-05-24,23.0,TP,2.31,0,Breakout 6 bars trước tại level 23 | Retest thành công (cách -1.1%) | Volume cạn 0.74× TB20 | Nến đóng xanh — support giữ vững
+TCB,BREAKOUT_RETEST_ENTRY,2024-05-24,2024-05-27,22.6,22.0,24.0,2024-06-03,23.0,TIMEOUT,1.64,5,Breakout 7 bars trước tại level 23 | Retest thành công (cách -1.4%) | Nến đóng xanh — support giữ vững
+TCB,BREAKOUT_RETEST_ENTRY,2024-06-04,2024-06-05,23.23,23.0,24.0,2024-06-05,23.0,SL,-0.99,0,Breakout 14 bars trước tại level 23 | Retest thành công (cách +1.2%) | Nến đóng xanh — support giữ vững
+TCB,BREAKOUT_RETEST_ENTRY,2024-06-12,2024-06-13,24.11,23.0,26.0,2024-06-20,24.0,TIMEOUT,0.21,5,Breakout 4 bars trước tại level 24 | Retest thành công (cách +2.1%) | Nến đóng xanh — support giữ vững
+TCB,BREAKOUT_RETEST_ENTRY,2024-06-20,2024-06-21,24.31,24.0,25.0,2024-06-21,24.0,SL,-1.28,0,Breakout 8 bars trước tại level 24 | Retest thành công (cách +1.0%) | Nến đóng xanh — support giữ vững
+TCB,PIN_BAR,2024-06-25,2024-06-26,23.33,23.0,24.0,2024-06-26,23.0,SL,-1.41,0,Pin Bar: wick dưới 1 (10.6× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại MA60 (23)
+TCB,PIN_BAR,2024-06-26,2024-06-27,23.04,22.0,25.0,2024-06-28,22.0,SL,-4.51,1,Pin Bar: wick dưới 0 (7.8× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại MA60 (23)
+TCB,PIN_BAR,2024-07-08,2024-07-09,22.7,22.0,24.0,2024-07-12,22.0,TIMEOUT,-2.16,3,Pin Bar: wick dưới 0 (6.8× thân) | Đóng gần đỉnh nến (13% từ đỉnh) | Tại MA60 (23)
+TCB,BULLISH_ENGULFING,2024-07-30,2024-07-31,22.41,22.0,23.0,2024-08-01,22.0,SL,-1.83,1,Engulfing: [22–22] nuốt [22–22] (body 1.1%) | Volume xanh 1.3× bar đỏ | Tại support 22
+TCB,BULLISH_ENGULFING,2024-08-02,2024-08-05,22.41,22.0,23.0,2024-08-05,22.0,SL,-1.83,0,Engulfing: [22–23] nuốt [22–23] (body 4.2%) | Volume xanh 1.2× bar đỏ | Tại support 22
+TCB,PIN_BAR,2024-08-15,2024-08-16,20.6,20.0,22.0,2024-08-19,21.0,TSL,1.89,1,Pin Bar: wick dưới 0 (3.8× thân) | Đóng gần đỉnh nến (21% từ đỉnh) | Tại support 20 (cách 2.9%)
+TCB,BULLISH_ENGULFING,2024-08-21,2024-08-22,21.43,21.0,22.0,2024-08-22,22.0,TP,2.66,0,Engulfing: [21–21] nuốt [21–21] (body 1.4%) | Volume xanh 1.6× bar đỏ | Tại support 21
+TCB,BREAKOUT_RETEST_ENTRY,2024-09-24,2024-09-25,23.14,23.0,23.0,2024-09-25,23.0,SL,-0.61,0,Breakout 3 bars trước tại level 23 | Retest thành công (cách +0.8%) | Nến đóng xanh — support giữ vững
+TCB,BREAKOUT_RETEST_ENTRY,2024-09-25,2024-09-26,23.19,23.0,23.0,2024-09-26,23.0,TP,-0.82,0,Breakout 4 bars trước tại level 23 | Retest thành công (cách +1.9%) | Nến đóng xanh — support giữ vững
+TCB,BREAKOUT_RETEST_ENTRY,2024-09-26,2024-09-27,23.58,23.0,24.0,2024-10-01,24.0,TP,1.78,2,Breakout 5 bars trước tại level 23 | Retest thành công (cách +3.2%) | Nến đóng xanh — support giữ vững
+TCB,TREND_PULLBACK,2024-10-07,2024-10-08,23.58,23.0,24.0,2024-10-09,24.0,TP,1.78,1,Uptrend: 24 > MA20(23) > MA60(22) | Breakout vùng 23 → recent high 24 | Pullback về vùng breakout (cách +3.4%) | Volume cạn — áp lực bán suy yếu
+TCB,BREAKOUT_RETEST_ENTRY,2024-10-09,2024-10-10,24.26,24.0,25.0,2024-10-10,24.0,SL,-1.07,0,Breakout 6 bars trước tại level 24 | Retest thành công (cách +0.0%) | Nến đóng xanh — support giữ vững
+TCB,BREAKOUT_RETEST_ENTRY,2024-10-11,2024-10-14,23.92,23.0,25.0,2024-10-21,24.0,TIMEOUT,-1.63,5,Breakout 8 bars trước tại level 24 | Retest thành công (cách -0.8%) | Volume cạn 0.72× TB20
+TCB,BREAKOUT_RETEST_ENTRY,2024-10-21,2024-10-22,23.58,23.0,24.0,2024-10-24,23.0,SL,-2.46,2,Breakout 14 bars trước tại level 24 | Retest thành công (cách -2.0%) | Volume cạn 0.52× TB20
+TCB,BULLISH_ENGULFING,2024-11-20,2024-11-21,22.21,22.0,23.0,2024-11-26,23.0,TP,3.56,3,Engulfing: [22–22] nuốt [22–22] (body 2.5%) | Volume xanh 1.5× bar đỏ | Tại support 22
+TCB,PIN_BAR,2024-12-02,2024-12-03,23.04,22.0,25.0,2024-12-06,24.0,TIMEOUT,2.13,3,Pin Bar: wick dưới 0 (4.8× thân) | Đóng gần đỉnh nến (17% từ đỉnh) | Tại support 23 (cách 0.2%) | Tại MA60 (23)
+TCB,BREAKOUT_RETEST_ENTRY,2024-12-16,2024-12-17,23.77,23.0,25.0,2024-12-24,23.0,TIMEOUT,-1.64,5,Breakout 3 bars trước tại level 24 | Retest thành công (cách +0.4%) | Volume cạn 0.67× TB20
+TCB,BREAKOUT_RETEST_ENTRY,2024-12-24,2024-12-25,23.38,23.0,24.0,2024-12-25,24.0,TP,2.65,0,Breakout 9 bars trước tại level 24 | Retest thành công (cách -0.8%) | Volume cạn 0.60× TB20
+TCB,BREAKOUT_RETEST_ENTRY,2024-12-25,2024-12-26,23.87,23.0,25.0,2025-01-03,23.0,SL,-3.64,5,Breakout 10 bars trước tại level 24 | Retest thành công (cách +1.0%) | Nến đóng xanh — support giữ vững
+TPB,TREND_PULLBACK,2024-03-05,2024-03-06,13.97,13.0,15.0,2024-03-13,14.0,TIMEOUT,-2.08,5,Uptrend: 14 > MA20(14) > MA60(13) | Breakout vùng 13 → recent high 14 | Pullback về vùng breakout (cách +4.0%) | Volume cạn — áp lực bán suy yếu
+TPB,BULLISH_ENGULFING,2024-03-20,2024-03-21,13.53,13.0,14.0,2024-03-26,14.0,TIMEOUT,1.92,3,Engulfing: [13–13] nuốt [13–13] (body 2.2%) | Volume xanh 3.6× bar đỏ | Tại support 13
+TPB,BREAKOUT_RETEST_ENTRY,2024-05-21,2024-05-22,13.25,13.0,14.0,2024-05-23,13.0,SL,-1.89,1,Breakout 3 bars trước tại level 13 | Retest thành công (cách +0.0%) | Volume cạn 0.59× TB20
+TPB,BREAKOUT_RETEST_ENTRY,2024-06-03,2024-06-04,13.07,13.0,13.0,2024-06-04,13.0,SL,-0.54,0,Breakout 11 bars trước tại level 13 | Retest thành công (cách -2.0%) | Nến đóng xanh — support giữ vững
+TPB,BREAKOUT_RETEST_ENTRY,2024-06-06,2024-06-07,13.17,13.0,13.0,2024-06-07,13.0,TP,-1.29,0,Breakout 14 bars trước tại level 13 | Retest thành công (cách -0.8%) | Nến đóng xanh — support giữ vững
+TPB,BREAKOUT_RETEST_ENTRY,2024-06-07,2024-06-10,13.14,13.0,13.0,2024-06-10,13.0,TP,-1.07,0,Breakout 15 bars trước tại level 13 | Retest thành công (cách -1.7%) | Volume cạn 0.48× TB20
+TPB,BULLISH_ENGULFING,2024-06-12,2024-06-13,13.32,13.0,14.0,2024-06-18,13.0,TIMEOUT,0.53,3,Engulfing: [13–13] nuốt [13–13] (body 1.4%) | Volume xanh 1.5× bar đỏ | Tại support 13
+TPB,PIN_BAR,2024-06-20,2024-06-21,13.43,13.0,14.0,2024-06-24,13.0,SL,-3.2,1,Pin Bar: wick dưới 0 (4.5× thân) | Đóng gần đỉnh nến (18% từ đỉnh) | Tại MA60 (13)
+TPB,PIN_BAR,2024-07-05,2024-07-08,13.09,13.0,13.0,2024-07-08,13.0,TP,-0.69,0,Pin Bar: wick dưới 0 (5.0× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 13 (cách 0.7%) | Tại MA60 (13)
+TPB,PIN_BAR,2024-07-18,2024-07-19,13.32,13.0,14.0,2024-07-23,13.0,SL,-2.4,2,Pin Bar: wick dưới 0 (4.7× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 13 (cách 2.4%) | Tại MA60 (13)
+TPB,BREAKOUT_RETEST_ENTRY,2024-07-29,2024-07-30,13.39,13.0,14.0,2024-08-01,13.0,SL,-2.91,2,Breakout 6 bars trước tại level 14 | Retest thành công (cách -1.6%) | Nến đóng xanh — support giữ vững
+TPB,BREAKOUT_RETEST_ENTRY,2024-09-17,2024-09-18,13.5,13.0,14.0,2024-09-25,14.0,TIMEOUT,2.59,5,Breakout 4 bars trước tại level 13 | Retest thành công (cách +0.8%) | Volume cạn 0.52× TB20 | Nến đóng xanh — support giữ vững
+TPB,BREAKOUT_RETEST_ENTRY,2024-10-21,2024-10-22,15.45,15.0,16.0,2024-10-29,15.0,TIMEOUT,-1.75,5,Breakout 14 bars trước tại level 15 | Retest thành công (cách +1.8%) | Volume cạn 0.49× TB20
+TPB,PIN_BAR,2024-11-13,2024-11-14,14.25,14.0,15.0,2024-11-14,14.0,SL,-1.75,0,Pin Bar: wick dưới 0 (3.4× thân) | Đóng gần đỉnh nến (9% từ đỉnh) | Tại support 14 (cách 2.4%)
+TPB,BULLISH_ENGULFING,2024-11-20,2024-11-21,14.34,14.0,15.0,2024-11-26,14.0,TIMEOUT,0.0,3,Engulfing: [14–14] nuốt [14–14] (body 2.2%) | Volume xanh 1.1× bar đỏ | Tại support 14
+VCB,BREAKOUT_RETEST_ENTRY,2024-03-06,2024-03-07,63.69,62.0,66.0,2024-03-14,63.0,TIMEOUT,-0.94,5,Breakout 6 bars trước tại level 61 | Retest thành công (cách +3.9%) | Nến đóng xanh — support giữ vững
+VCB,BREAKOUT_RETEST_ENTRY,2024-03-19,2024-03-20,61.43,60.0,64.0,2024-03-22,64.0,TP,4.18,2,Breakout 15 bars trước tại level 61 | Retest thành công (cách +0.5%) | Volume cạn 0.45× TB20
+VCB,BULLISH_ENGULFING,2024-05-28,2024-05-29,60.3,59.0,62.0,2024-05-30,59.0,SL,-2.16,1,Engulfing: [60–60] nuốt [60–60] (body 1.0%) | Volume xanh 1.3× bar đỏ | Tại support 60
+VCB,BREAKOUT_RETEST_ENTRY,2024-08-07,2024-08-08,58.24,57.0,60.0,2024-08-15,58.0,TIMEOUT,-0.12,5,Breakout 5 bars trước tại level 59 | Retest thành công (cách -1.7%) | Volume cạn 0.43× TB20 | Nến đóng xanh — support giữ vững
+VCB,BREAKOUT_RETEST_ENTRY,2024-08-15,2024-08-16,58.44,57.0,61.0,2024-08-21,61.0,TP,4.38,3,Breakout 11 bars trước tại level 59 | Retest thành công (cách -1.8%) | Volume cạn 0.62× TB20
+VCB,BREAKOUT_RETEST_ENTRY,2024-08-21,2024-08-22,61.69,60.0,64.0,2024-08-29,61.0,TIMEOUT,-1.51,5,Breakout 15 bars trước tại level 59 | Retest thành công (cách +4.0%) | Nến đóng xanh — support giữ vững
+VCB,BREAKOUT_RETEST_ENTRY,2024-08-29,2024-08-30,60.76,59.0,63.0,2024-09-10,59.0,TIMEOUT,-2.73,5,Breakout 7 bars trước tại level 60 | Retest thành công (cách +0.8%) | Nến đóng xanh — support giữ vững
+VCB,BREAKOUT_RETEST_ENTRY,2024-09-12,2024-09-13,59.63,58.0,62.0,2024-09-20,60.0,TIMEOUT,0.91,5,Breakout 15 bars trước tại level 60 | Retest thành công (cách -1.4%) | Nến đóng xanh — support giữ vững
+VCB,BREAKOUT_RETEST_ENTRY,2024-10-02,2024-10-03,61.49,60.0,64.0,2024-10-10,61.0,TIMEOUT,-0.75,5,Breakout 6 bars trước tại level 61 | Retest thành công (cách +0.8%) | Nến đóng xanh — support giữ vững
+VCB,BREAKOUT_RETEST_ENTRY,2024-10-14,2024-10-15,60.63,59.0,63.0,2024-10-22,61.0,TIMEOUT,0.12,5,Breakout 14 bars trước tại level 61 | Retest thành công (cách -0.7%) | Volume cạn 0.69× TB20
+VCB,BULLISH_ENGULFING,2024-10-31,2024-11-01,62.42,61.0,65.0,2024-11-06,62.0,TIMEOUT,-1.17,3,Engulfing: [61–62] nuốt [61–61] (body 2.3%) | Volume xanh 4.6× bar đỏ | Tại support 61
+VCB,BREAKOUT_RETEST_ENTRY,2024-11-06,2024-11-07,61.89,61.0,63.0,2024-11-14,61.0,TIMEOUT,-1.28,5,Breakout 5 bars trước tại level 61 | Retest thành công (cách +0.3%) | Nến đóng xanh — support giữ vững
+VHM,TREND_PULLBACK,2024-03-01,2024-03-04,44.05,43.0,46.0,2024-03-07,43.0,SL,-2.38,3,Uptrend: 44 > MA20(43) > MA60(42) | Breakout vùng 43 → recent high 46 | Pullback về vùng breakout (cách +1.4%)
+VHM,PIN_BAR,2024-03-07,2024-03-08,43.5,42.0,46.0,2024-03-13,43.0,TIMEOUT,-1.26,3,Pin Bar: wick dưới 0 (3.5× thân) | Đóng gần đỉnh nến (22% từ đỉnh) | Tại MA60 (42)
+VHM,PIN_BAR,2024-04-11,2024-04-12,44.5,43.0,47.0,2024-04-15,43.0,SL,-3.37,1,Pin Bar: wick dưới 0 (4.0× thân) | Đóng gần đỉnh nến (20% từ đỉnh) | Tại MA60 (43)
+VHM,BREAKOUT_RETEST_ENTRY,2024-04-16,2024-04-17,43.0,42.0,44.0,2024-04-17,42.0,SL,-2.33,0,Breakout 5 bars trước tại level 43 | Retest thành công (cách -1.4%) | Nến đóng xanh — support giữ vững
+VHM,PIN_BAR,2024-05-08,2024-05-09,41.0,40.0,42.0,2024-05-13,40.0,SL,-2.44,2,Pin Bar: wick dưới 0 (4.0× thân) | Đóng gần đỉnh nến (20% từ đỉnh) | Tại support 40 (cách 2.2%)
+VHM,PIN_BAR,2024-05-23,2024-05-24,40.4,39.0,42.0,2024-05-29,39.0,TIMEOUT,-2.35,3,Pin Bar: wick dưới 0 (3.5× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 40 (cách 1.4%)
+VHM,PIN_BAR,2024-07-01,2024-07-02,37.75,37.0,39.0,2024-07-05,38.0,TIMEOUT,1.85,3,Pin Bar: wick dưới 1 (11.0× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 37 (cách 1.9%)
+VHM,PIN_BAR,2024-07-18,2024-07-19,37.7,37.0,39.0,2024-07-24,38.0,TIMEOUT,0.4,3,Pin Bar: wick dưới 1 (2.7× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 37 (cách 1.2%)
+VHM,BREAKOUT_RETEST_ENTRY,2024-08-20,2024-08-21,39.25,38.0,41.0,2024-08-27,41.0,TP,4.46,4,Breakout 3 bars trước tại level 38 | Retest thành công (cách +4.0%) | Nến đóng xanh — support giữ vững
+VHM,BREAKOUT_RETEST_ENTRY,2024-09-11,2024-09-12,43.4,42.0,46.0,2024-09-16,42.0,SL,-3.23,2,Breakout 5 bars trước tại level 42 | Retest thành công (cách +1.2%) | Nến đóng xanh — support giữ vững
+VHM,TREND_PULLBACK,2024-09-16,2024-09-17,41.75,40.0,44.0,2024-09-17,42.0,TSL,0.0,0,Uptrend: 42 > MA20(41) > MA60(39) | Breakout vùng 40 → recent high 44 | Pullback về vùng breakout (cách +4.9%) | Volume cạn — áp lực bán suy yếu
+VHM,BREAKOUT_RETEST_ENTRY,2024-09-17,2024-09-18,44.1,42.0,47.0,2024-09-25,44.0,TIMEOUT,0.11,5,Breakout 9 bars trước tại level 42 | Retest thành công (cách +3.5%) | Nến đóng xanh — support giữ vững
+VHM,PIN_BAR,2024-10-08,2024-10-09,41.65,40.0,44.0,2024-10-14,44.0,TP,5.64,3,Pin Bar: wick dưới 1 (5.0× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 41 (cách 1.4%) | Tại MA200 (41)
+VHM,BREAKOUT_RETEST_ENTRY,2024-10-16,2024-10-17,45.1,43.0,48.0,2024-10-21,46.0,TSL,0.89,2,Breakout 3 bars trước tại level 44 | Retest thành công (cách +1.4%) | Volume cạn 0.59× TB20 | Nến đóng xanh — support giữ vững
+VJC,PIN_BAR,2024-03-28,2024-03-29,103.4,101.0,107.0,2024-04-03,101.0,SL,-2.32,3,Pin Bar: wick dưới 1 (6.5× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 103 (cách 0.2%)
+VJC,BREAKOUT_RETEST_ENTRY,2024-04-16,2024-04-17,106.1,103.0,111.0,2024-04-17,103.0,SL,-2.92,0,Breakout 3 bars trước tại level 103 | Retest thành công (cách +2.7%) | Nến đóng xanh — support giữ vững
+VJC,BREAKOUT_RETEST_ENTRY,2024-04-19,2024-04-22,103.3,100.0,108.0,2024-05-02,104.0,TIMEOUT,0.58,5,Breakout 5 bars trước tại level 103 | Retest thành công (cách +0.1%) | Nến đóng xanh — support giữ vững
+VJC,BREAKOUT_RETEST_ENTRY,2024-05-03,2024-05-06,106.2,103.0,111.0,2024-05-06,106.0,TSL,0.0,0,Breakout 12 bars trước tại level 103 | Retest thành công (cách +2.7%) | Nến đóng xanh — support giữ vững
+VJC,TREND_PULLBACK,2024-05-21,2024-05-22,112.8,109.0,118.0,2024-05-23,109.0,SL,-3.37,1,Uptrend: 112 > MA20(111) > MA60(106) | Breakout vùng 107 → recent high 119 | Pullback về vùng breakout (cách +5.1%) | Volume cạn — áp lực bán suy yếu
+VJC,BREAKOUT_RETEST_ENTRY,2024-05-23,2024-05-24,111.0,107.0,117.0,2024-05-30,107.0,SL,-3.6,4,Breakout 13 bars trước tại level 113 | Retest thành công (cách -1.8%) | Volume cạn 0.77× TB20 | Nến đóng xanh — support giữ vững
+VJC,PIN_BAR,2024-06-12,2024-06-13,106.6,103.0,112.0,2024-06-18,105.0,TIMEOUT,-1.88,3,Pin Bar: wick dưới 1 (3.5× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 105 (cách 1.2%)
+VJC,PIN_BAR,2024-07-03,2024-07-04,101.0,98.0,106.0,2024-07-09,101.0,TIMEOUT,0.4,3,Pin Bar: wick dưới 1 (4.5× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 101 (cách 0.2%)
+VJC,PIN_BAR,2024-07-18,2024-07-19,105.9,103.0,110.0,2024-07-24,108.0,TIMEOUT,1.89,3,Pin Bar: wick dưới 2 (11.5× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 105 (cách 0.7%)
+VJC,PIN_BAR,2024-08-15,2024-08-16,103.2,100.0,108.0,2024-08-21,105.0,TIMEOUT,1.65,3,Pin Bar: wick dưới 1 (12.0× thân) | Đóng gần đỉnh nến (8% từ đỉnh) | Tại support 102 (cách 0.8%)
+VJC,PIN_BAR,2024-08-23,2024-08-26,104.5,101.0,110.0,2024-08-29,105.0,TIMEOUT,0.19,3,Pin Bar: wick dưới 1 (3.5× thân) | Đóng gần đỉnh nến (22% từ đỉnh) | Tại support 104 (cách 0.5%) | Tại MA60 (104)
+VJC,TREND_PULLBACK,2024-10-16,2024-10-17,105.8,103.0,110.0,2024-10-24,104.0,TIMEOUT,-1.51,5,Uptrend: 106 > MA20(106) > MA60(105) | Breakout vùng 105 → recent high 109 | Pullback về vùng breakout (cách +0.5%)
+VJC,BREAKOUT_RETEST_ENTRY,2024-10-29,2024-10-30,103.9,102.0,107.0,2024-11-06,105.0,TIMEOUT,0.96,5,Breakout 13 bars trước tại level 106 | Retest thành công (cách -2.0%) | Volume cạn 0.77× TB20 | Nến đóng xanh — support giữ vững
+VJC,PIN_BAR,2024-11-08,2024-11-11,104.6,102.0,108.0,2024-11-14,103.0,TIMEOUT,-1.24,3,Pin Bar: wick dưới 1 (2.7× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 104 (cách 0.6%)
+VJC,PIN_BAR,2024-11-29,2024-12-02,102.6,100.0,106.0,2024-12-05,103.0,TIMEOUT,0.39,3,Pin Bar: wick dưới 2 (9.0× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 102 (cách 0.4%)
+VJC,PIN_BAR,2024-12-19,2024-12-20,100.0,98.0,103.0,2024-12-25,102.0,TIMEOUT,2.0,3,Pin Bar: wick dưới 2 (4.0× thân) | Đóng gần đỉnh nến (20% từ đỉnh) | Tại support 98 (cách 2.0%)
+VPB,BREAKOUT_RETEST_ENTRY,2024-03-01,2024-03-04,18.3,18.0,19.0,2024-03-06,18.0,SL,-1.64,2,Breakout 3 bars trước tại level 18 | Retest thành công (cách -1.0%) | Volume cạn 0.69× TB20
+VPB,PIN_BAR,2024-04-08,2024-04-09,17.89,17.0,19.0,2024-04-12,18.0,TIMEOUT,1.79,3,Pin Bar: wick dưới 0 (5.6× thân) | Đóng gần đỉnh nến (15% từ đỉnh) | Tại MA60 (18)
+VPB,BREAKOUT_RETEST_ENTRY,2024-05-23,2024-05-24,17.91,17.0,19.0,2024-05-31,18.0,TIMEOUT,-2.18,5,Breakout 4 bars trước tại level 18 | Retest thành công (cách +0.4%) | Volume cạn 0.68× TB20 | Nến đóng xanh — support giữ vững
+VPB,BREAKOUT_RETEST_ENTRY,2024-06-03,2024-06-04,17.91,17.0,19.0,2024-06-11,18.0,TIMEOUT,-0.5,5,Breakout 11 bars trước tại level 18 | Retest thành công (cách -0.6%) | Nến đóng xanh — support giữ vững
+VPB,TREND_PULLBACK,2024-06-17,2024-06-18,18.3,18.0,19.0,2024-06-19,18.0,SL,-1.64,1,Uptrend: 18 > MA20(18) > MA60(18) | Breakout vùng 18 → recent high 19 | Pullback về vùng breakout (cách -0.3%)
+VPB,TREND_PULLBACK,2024-06-19,2024-06-20,18.64,18.0,20.0,2024-06-27,18.0,TIMEOUT,-0.75,5,Uptrend: 18 > MA20(18) > MA60(18) | Breakout vùng 18 → recent high 19 | Pullback về vùng breakout (cách +1.1%)
+VPB,TREND_PULLBACK,2024-06-27,2024-06-28,18.45,18.0,19.0,2024-07-05,19.0,TIMEOUT,1.03,5,Uptrend: 18 > MA20(18) > MA60(18) | Breakout vùng 18 → recent high 19 | Pullback về vùng breakout (cách +1.1%) | Volume cạn — áp lực bán suy yếu
+VPB,BREAKOUT_RETEST_ENTRY,2024-07-05,2024-07-08,18.69,18.0,20.0,2024-07-15,18.0,TIMEOUT,-2.09,5,Breakout 12 bars trước tại level 19 | Retest thành công (cách -1.5%) | Volume cạn 0.54× TB20 | Nến đóng xanh — support giữ vững
+VPB,BULLISH_ENGULFING,2024-09-17,2024-09-18,18.16,18.0,18.0,2024-09-18,18.0,TP,-0.88,0,Engulfing: [18–18] nuốt [18–18] (body 1.7%) | Volume xanh 1.1× bar đỏ | Tại support 18
+VPB,BREAKOUT_RETEST_ENTRY,2024-10-03,2024-10-04,19.47,19.0,20.0,2024-10-10,20.0,TP,2.72,4,Breakout 5 bars trước tại level 19 | Retest thành công (cách +2.0%) | Nến đóng xanh — support giữ vững
+VPB,BREAKOUT_RETEST_ENTRY,2024-10-18,2024-10-21,20.01,19.0,22.0,2024-10-28,20.0,TIMEOUT,-2.2,5,Breakout 8 bars trước tại level 20 | Retest thành công (cách +2.2%) | Volume cạn 0.68× TB20
+VPB,BREAKOUT_RETEST_ENTRY,2024-10-28,2024-10-29,19.66,19.0,21.0,2024-11-05,19.0,TIMEOUT,-2.44,5,Breakout 14 bars trước tại level 20 | Retest thành công (cách +0.0%) | Volume cạn 0.40× TB20 | Nến đóng xanh — support giữ vững
+VPB,BULLISH_ENGULFING,2024-11-13,2024-11-14,18.59,18.0,19.0,2024-11-18,18.0,SL,-3.17,2,Engulfing: [18–19] nuốt [19–19] (body 2.1%) | Volume xanh 1.3× bar đỏ
+VPB,PIN_BAR,2024-12-03,2024-12-04,18.55,18.0,19.0,2024-12-09,19.0,TP,2.43,3,Pin Bar: wick dưới 0 (2.8× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại MA200 (18)
+VIB,BREAKOUT_RETEST_ENTRY,2024-02-28,2024-02-29,14.87,14.0,16.0,2024-03-07,15.0,TIMEOUT,-2.42,5,Breakout 10 bars trước tại level 14 | Retest thành công (cách +1.9%) | Volume cạn 0.72× TB20 | Nến đóng xanh — support giữ vững
+VIB,BREAKOUT_RETEST_ENTRY,2024-04-09,2024-04-10,15.44,15.0,16.0,2024-04-15,15.0,SL,-2.85,3,Breakout 15 bars trước tại level 15 | Retest thành công (cách +2.5%) | Volume cạn 0.72× TB20 | Nến đóng xanh — support giữ vững
+VIB,PIN_BAR,2024-05-21,2024-05-22,15.45,15.0,16.0,2024-05-24,15.0,SL,-2.91,2,Pin Bar: wick dưới 0 (6.7× thân) | Đóng gần đỉnh nến (13% từ đỉnh) | Tại MA60 (15)
+VIB,BULLISH_ENGULFING,2024-07-31,2024-08-01,14.56,14.0,15.0,2024-08-02,14.0,SL,-3.85,1,Engulfing: [14–14] nuốt [14–14] (body 2.9%) | Volume xanh 1.4× bar đỏ | Tại support 14
+VIB,PIN_BAR,2024-08-09,2024-08-12,14.26,14.0,15.0,2024-08-15,14.0,TIMEOUT,-0.28,3,Pin Bar: wick dưới 0 (3.7× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 14 (cách 2.0%)
+VIB,BREAKOUT_RETEST_ENTRY,2024-08-26,2024-08-27,14.72,14.0,16.0,2024-09-05,15.0,TIMEOUT,-1.36,5,Breakout 3 bars trước tại level 15 | Retest thành công (cách -0.1%) | Volume cạn 0.80× TB20
+VIB,BREAKOUT_RETEST_ENTRY,2024-09-06,2024-09-09,14.48,14.0,15.0,2024-09-16,14.0,TIMEOUT,-0.55,5,Breakout 10 bars trước tại level 15 | Retest thành công (cách -1.5%) | Volume cạn 0.59× TB20
+VIB,TREND_PULLBACK,2024-10-07,2024-10-08,15.4,15.0,16.0,2024-10-15,15.0,TIMEOUT,-0.26,5,Uptrend: 15 > MA20(15) > MA60(15) | Breakout vùng 15 → recent high 16 | Pullback về vùng breakout (cách +4.3%) | Volume cạn — áp lực bán suy yếu
+VIB,TREND_PULLBACK,2024-10-15,2024-10-16,15.32,15.0,16.0,2024-10-22,15.0,SL,-2.09,4,Uptrend: 15 > MA20(15) > MA60(15) | Breakout vùng 15 → recent high 16 | Pullback về vùng breakout (cách +0.5%) | Volume cạn — áp lực bán suy yếu
+VIB,PIN_BAR,2024-10-31,2024-11-01,15.12,15.0,15.0,2024-11-01,15.0,SL,-0.79,0,Pin Bar: wick dưới 0 (3.0× thân) | Đóng gần đỉnh nến (25% từ đỉnh) | Tại support 15 (cách 1.1%) | Tại MA60 (15)
+VIB,BREAKOUT_RETEST_ENTRY,2024-12-31,2025-01-02,15.76,15.0,17.0,2025-01-09,16.0,TIMEOUT,-1.27,5,Breakout 3 bars trước tại level 16 | Retest thành công (cách -0.3%) | Volume cạn 0.77× TB20
+VIC,TREND_PULLBACK,2024-02-28,2024-02-29,23.0,22.0,24.0,2024-03-07,23.0,TIMEOUT,-0.87,5,Uptrend: 23 > MA20(22) > MA60(22) | Breakout vùng 22 → recent high 24 | Pullback về vùng breakout (cách +2.8%) | Volume cạn — áp lực bán suy yếu
+VIC,TREND_PULLBACK,2024-03-07,2024-03-08,23.0,22.0,24.0,2024-03-15,22.0,TIMEOUT,-3.48,5,Uptrend: 23 > MA20(22) > MA60(22) | Breakout vùng 22 → recent high 24 | Pullback về vùng breakout (cách +5.2%) | Volume cạn — áp lực bán suy yếu
+VIC,PIN_BAR,2024-07-18,2024-07-19,20.35,20.0,21.0,2024-07-24,20.0,TIMEOUT,0.49,3,Pin Bar: wick dưới 0 (6.3× thân) | Đóng gần đỉnh nến (14% từ đỉnh) | Tại support 20 (cách 1.3%)
+VIC,PIN_BAR,2024-07-30,2024-07-31,21.15,21.0,21.0,2024-07-31,21.0,SL,-0.71,0,Pin Bar: wick dưới 0 (4.0× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 21 (cách 0.5%)
+VIC,BREAKOUT_RETEST_ENTRY,2024-08-20,2024-08-21,20.8,20.0,22.0,2024-08-27,21.0,TSL,1.2,4,Breakout 10 bars trước tại level 21 | Retest thành công (cách -1.4%) | Nến đóng xanh — support giữ vững
+VIC,TREND_PULLBACK,2024-09-04,2024-09-05,22.28,22.0,23.0,2024-09-09,22.0,SL,-1.26,2,Uptrend: 22 > MA20(21) > MA60(21) | Breakout vùng 21 → recent high 23 | Pullback về vùng breakout (cách +3.9%)
+VIC,TREND_PULLBACK,2024-09-11,2024-09-12,21.52,21.0,22.0,2024-09-19,21.0,TIMEOUT,-0.33,5,Uptrend: 22 > MA20(21) > MA60(21) | Breakout vùng 21 → recent high 23 | Pullback về vùng breakout (cách +1.5%)
+VIC,BREAKOUT_RETEST_ENTRY,2024-11-06,2024-11-07,21.0,20.0,22.0,2024-11-14,20.0,TIMEOUT,-3.1,5,Breakout 11 bars trước tại level 21 | Retest thành công (cách -1.9%) | Nến đóng xanh — support giữ vững
+VIC,BREAKOUT_RETEST_ENTRY,2024-12-11,2024-12-12,20.65,20.0,22.0,2024-12-19,20.0,TIMEOUT,-2.42,5,Breakout 4 bars trước tại level 21 | Retest thành công (cách +0.6%) | Nến đóng xanh — support giữ vững
+VIC,BREAKOUT_RETEST_ENTRY,2024-12-20,2024-12-23,20.25,20.0,21.0,2024-12-30,20.0,TIMEOUT,0.1,5,Breakout 11 bars trước tại level 21 | Retest thành công (cách -1.3%) | Volume cạn 0.75× TB20 | Nến đóng xanh — support giữ vững
+VNM,BREAKOUT_RETEST_ENTRY,2024-03-04,2024-03-05,62.87,61.0,66.0,2024-03-12,61.0,TIMEOUT,-2.77,5,Breakout 11 bars trước tại level 61 | Retest thành công (cách +2.8%) | Nến đóng xanh — support giữ vững
+VNM,BULLISH_ENGULFING,2024-04-04,2024-04-05,60.33,59.0,62.0,2024-04-10,59.0,TIMEOUT,-2.06,3,Engulfing: [59–60] nuốt [59–60] (body 2.3%) | Volume xanh 1.5× bar đỏ | Tại support 60
+VNM,PIN_BAR,2024-05-08,2024-05-09,60.06,59.0,62.0,2024-05-09,59.0,SL,-1.76,0,Pin Bar: wick dưới 1 (7.8× thân) | Đóng gần đỉnh nến (11% từ đỉnh) | Tại support 60 (cách 0.1%) | Tại MA60 (60)
+VNM,BREAKOUT_RETEST_ENTRY,2024-06-07,2024-06-10,60.51,59.0,63.0,2024-06-11,59.0,SL,-2.5,1,Breakout 3 bars trước tại level 60 | Retest thành công (cách -0.1%) | Nến đóng xanh — support giữ vững
+VNM,BREAKOUT_RETEST_ENTRY,2024-06-12,2024-06-13,59.27,58.0,61.0,2024-06-19,58.0,SL,-2.14,4,Breakout 6 bars trước tại level 60 | Retest thành công (cách -1.3%) | Volume cạn 0.79× TB20 | Nến đóng xanh — support giữ vững
+VNM,PIN_BAR,2024-07-01,2024-07-02,58.38,57.0,60.0,2024-07-05,59.0,TIMEOUT,1.82,3,Pin Bar: wick dưới 0 (2.6× thân) | Đóng gần đỉnh nến (0% từ đỉnh) | Tại support 58 (cách 0.7%)
+VNM,PIN_BAR,2024-07-18,2024-07-19,58.29,57.0,60.0,2024-07-24,58.0,TIMEOUT,-0.45,3,Pin Bar: wick dưới 0 (3.9× thân) | Đóng gần đỉnh nến (20% từ đỉnh) | Tại support 58 (cách 0.5%)
+VNM,BREAKOUT_RETEST_ENTRY,2024-08-09,2024-08-12,64.84,63.0,68.0,2024-08-19,67.0,TIMEOUT,3.69,5,Breakout 3 bars trước tại level 64 | Retest thành công (cách +0.8%) | Volume cạn 0.71× TB20 | Nến đóng xanh — support giữ vững
+VNM,BREAKOUT_RETEST_ENTRY,2024-08-21,2024-08-22,67.23,65.0,71.0,2024-08-26,65.0,SL,-3.32,2,Breakout 11 bars trước tại level 64 | Retest thành công (cách +3.6%) | Volume cạn 0.53× TB20 | Nến đóng xanh — support giữ vững
+VNM,TREND_PULLBACK,2024-08-26,2024-08-27,64.93,63.0,68.0,2024-09-05,66.0,TIMEOUT,1.77,5,Uptrend: 65 > MA20(65) > MA60(61) | Breakout vùng 63 → recent high 67 | Pullback về vùng breakout (cách +2.5%) | Volume cạn — áp lực bán suy yếu
+VNM,PIN_BAR,2024-10-02,2024-10-03,64.26,63.0,66.0,2024-10-04,63.0,SL,-1.96,1,Pin Bar: wick dưới 0 (5.1× thân) | Đóng gần đỉnh nến (16% từ đỉnh) | Tại support 64 (cách 0.3%) | Tại MA60 (63)
+VNM,BULLISH_ENGULFING,2024-12-16,2024-12-17,59.41,58.0,62.0,2024-12-20,60.0,TIMEOUT,0.15,3,Engulfing: [59–60] nuốt [59–59] (body 1.3%) | Volume xanh 1.7× bar đỏ | Tại support 59
+VRE,BREAKOUT_RETEST_ENTRY,2024-03-01,2024-03-04,26.5,25.0,29.0,2024-03-11,25.0,SL,-5.66,5,Breakout 3 bars trước tại level 26 | Retest thành công (cách +0.9%) | Nến đóng xanh — support giữ vững
+VRE,TREND_PULLBACK,2024-03-13,2024-03-14,26.05,25.0,28.0,2024-03-18,26.0,TSL,-0.77,2,Uptrend: 26 > MA20(26) > MA60(24) | Breakout vùng 26 → recent high 28 | Pullback về vùng breakout (cách -0.4%) | Volume cạn — áp lực bán suy yếu
+VRE,BREAKOUT_RETEST_ENTRY,2024-03-18,2024-03-19,28.5,27.0,31.0,2024-03-19,27.0,SL,-5.26,0,Breakout 14 bars trước tại level 26 | Retest thành công (cách +4.4%) | Nến đóng xanh — support giữ vững
+VRE,BULLISH_ENGULFING,2024-08-20,2024-08-21,18.75,18.0,20.0,2024-08-22,19.0,TSL,0.8,1,Engulfing: [18–19] nuốt [18–18] (body 2.7%) | Volume xanh 2.0× bar đỏ
+VRE,BULLISH_ENGULFING,2024-09-04,2024-09-05,19.8,19.0,21.0,2024-09-10,19.0,TIMEOUT,-3.03,3,Engulfing: [19–20] nuốt [19–19] (body 3.7%) | Volume xanh 1.5× bar đỏ | Tại support 19

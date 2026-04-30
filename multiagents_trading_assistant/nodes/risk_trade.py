@@ -1,8 +1,15 @@
 """risk_trade.py — Rule-based risk gate cho Trade pipeline.
 
-Port từ _legacy/risk_manager.py — giữ 5 hard rules VN, thêm:
-  + rr_ratio ≥ 2 → nếu không, downgrade
-  + max_loss_vnd ≤ 2% NAV (estimate)
+Hard rules VN:
+  1. Circuit breaker VNI < -3%
+  2. Foreign room > 95%
+  3. T+2.5 — không mua lại trong 2 ngày
+  4. Không mua đuổi khi mã đã tăng ≥ 5% trong phiên
+  5. Trading window
+  6. R:R ≥ 1.5 (VN thực tế: biên ±7%, thanh khoản mỏng)
+  7. Max loss ≤ 2% NAV — tính thuần túy relative:
+     position_pct × (entry - SL) / entry ≤ 2%
+     (NAV triệt tiêu → không cần biết số tuyệt đối, áp dụng cho mọi user)
 
 KHÔNG dùng LLM.
 """
@@ -14,7 +21,9 @@ from multiagents_trading_assistant import database as db
 
 
 _VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
-_NAV_DEFAULT = 1_000_000_000  # 1 tỷ giả định để check max_loss
+
+# R:R tối thiểu — 1.5 phù hợp VN (biên ±7%, thanh khoản mỏng)
+_MIN_RR = 1.5
 
 
 def _now_vn() -> time:
@@ -35,10 +44,10 @@ def _override(orig: str, new_action: str, reason: str, warnings: list, sizing: f
 def check(state: dict) -> dict:
     symbol = state.get("symbol", "")
     trader = state.get("trader_decision", {})
-    mkt = state.get("market_context", {})
-    flow = state.get("foreign_flow_analysis", {})
+    mkt    = state.get("market_context", {})
+    flow   = state.get("foreign_flow_analysis", {})
 
-    action = trader.get("action", "CHỜ")
+    action   = trader.get("action", "CHỜ")
     original = action
     warnings: list[str] = []
     sizing = 1.0
@@ -79,20 +88,14 @@ def check(state: dict) -> dict:
         except Exception as e:
             print(f"[risk_trade] T+2.5 check skipped: {e}")
 
-    # Rule 4: Biên độ giá — HOSE ±7%, HNX ±10%, UPCoM ±15%
+    # Rule 4: Không mua đuổi — mã đã tăng ≥ 5% trong phiên
     raw_chg = mkt.get("stock_day_change_pct", 0) or 0
-    stk_chg = abs(raw_chg)
     exch = mkt.get("exchange", "HOSE")
-    if exch == "HOSE":
-        limit = 7.0
-    elif exch == "HNX":
-        limit = 10.0
-    else:  # UPCoM
-        limit = 15.0
-    used = (stk_chg / limit) * 100
-    if used > 71.4:
-        sizing *= 0.5
-        warnings.append(f"Đã dùng {stk_chg:.1f}%/{limit}% biên — sizing ×0.5")
+    limit = {"HOSE": 7.0, "HNX": 10.0}.get(exch, 15.0)
+
+    if action == "MUA" and raw_chg >= 5.0:
+        return _override(action, "CHỜ", f"Mã đã tăng {raw_chg:.1f}% trong phiên — không mua đuổi", warnings, 0.0)
+
     if raw_chg <= -(limit * 0.72):
         warnings.append(f"Gần sàn ({raw_chg:.1f}%/{limit}%) — rủi ro nhốt sàn, mất thanh khoản")
 
@@ -100,41 +103,42 @@ def check(state: dict) -> dict:
     if action == "MUA":
         now = _now_vn()
         in_morn = time(9, 0) <= now <= time(11, 30)
-        in_aft = time(13, 0) <= now <= time(14, 25)
+        in_aft  = time(13, 0) <= now <= time(14, 25)
         if not (in_morn or in_aft):
             warnings.append(f"Ngoài giờ GD ({now.strftime('%H:%M')} VN) — signal cho phiên kế tiếp")
 
-    # Rule extra A: R:R ≥ 2
+    # Rule 6: R:R ≥ 1.5 (VN thực tế — biên ±7%, thanh khoản mỏng)
     if action == "MUA":
         rr = trader.get("rr_ratio")
-        if rr is not None and rr < 2.0:
-            return _override(action, "CHỜ", f"R:R {rr:.2f} < 2 — không đủ rủi ro/lợi", warnings, 0.0)
+        if rr is not None and rr < _MIN_RR:
+            return _override(action, "CHỜ", f"R:R {rr:.2f} < {_MIN_RR} — không đủ rủi ro/lợi", warnings, 0.0)
 
-    # Rule extra B: max_loss ≤ 2% NAV
+    # Rule 7: Max loss ≤ 2% NAV — relative, không cần NAV tuyệt đối
+    # max_loss% = position_pct × (entry - SL) / entry
     if action == "MUA":
-        ez = trader.get("entry_zone")
-        sl = trader.get("stop_loss")
+        ez      = trader.get("entry_zone")
+        sl      = trader.get("stop_loss")
         pos_pct = trader.get("position_pct", 0) or 0
         if ez and sl and pos_pct:
             entry_mid = (ez[0] + ez[1]) / 2
             if entry_mid > sl:
-                loss_pct_per_share = (entry_mid - sl) / entry_mid
-                position_vnd = _NAV_DEFAULT * (pos_pct / 100)
-                max_loss_vnd = position_vnd * loss_pct_per_share
-                max_loss_pct_nav = max_loss_vnd / _NAV_DEFAULT * 100
-                if max_loss_pct_nav > 2.0:
-                    new_pos = max(1, int(pos_pct * (2.0 / max_loss_pct_nav)))
+                loss_per_share_pct = (entry_mid - sl) / entry_mid
+                max_loss_pct       = (pos_pct / 100) * loss_per_share_pct * 100
+                if max_loss_pct > 2.0:
+                    new_pos = max(1, int(pos_pct * (2.0 / max_loss_pct)))
                     sizing *= (new_pos / pos_pct)
-                    warnings.append(f"Max loss {max_loss_pct_nav:.2f}% NAV > 2% — giảm position {pos_pct}→{new_pos}%")
+                    warnings.append(
+                        f"Max loss {max_loss_pct:.2f}% NAV > 2% — giảm position {pos_pct}→{new_pos}%"
+                    )
 
     if warnings:
         print(f"[risk_trade] warnings: {'; '.join(warnings)}")
     print(f"[risk_trade] OK — final={action}, sizing={sizing:.2f}")
 
     return {
-        "final_action": action,
+        "final_action":    action,
         "override_reason": None,
-        "warnings": warnings,
+        "warnings":        warnings,
         "sizing_modifier": sizing,
         "original_action": original,
     }

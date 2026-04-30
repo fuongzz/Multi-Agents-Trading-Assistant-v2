@@ -28,13 +28,19 @@ def build_parser() -> argparse.ArgumentParser:
         description="AI Trading Assistant — Dual Pipeline CLI",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Ví dụ:
+Ví dụ (live pipeline):
   python -m multiagents_trading_assistant.main --pipeline invest
   python -m multiagents_trading_assistant.main --pipeline trade
   python -m multiagents_trading_assistant.main --pipeline all
   python -m multiagents_trading_assistant.main --pipeline invest --symbol VCB
   python -m multiagents_trading_assistant.main --pipeline trade  --symbol HPG
   python -m multiagents_trading_assistant.main --schedule
+
+Ví dụ (backtest — không dùng LLM):
+  python -m multiagents_trading_assistant.main --backtest --symbol VCB
+  python -m multiagents_trading_assistant.main --backtest --symbol VCB --from 2024-01-01 --to 2024-12-31
+  python -m multiagents_trading_assistant.main --backtest --universe vn30 --from 2023-01-01
+  python -m multiagents_trading_assistant.main --backtest --universe liquid --setup BREAKOUT
         """,
     )
     parser.add_argument(
@@ -58,6 +64,11 @@ Ví dụ:
         action="store_true",
         help="Khởi APScheduler (invest Thứ 2 08:00, trade hàng ngày 08:30)",
     )
+
+    # ── Backtest args (lazy-loaded qua cli.py) ──
+    from multiagents_trading_assistant.backtest.cli import add_backtest_args
+    add_backtest_args(parser)
+
     return parser
 
 
@@ -76,6 +87,11 @@ def main() -> None:
 
     if args.schedule:
         start_scheduler()
+        sys.exit(0)
+
+    if getattr(args, "backtest", False):
+        from multiagents_trading_assistant.backtest.cli import run_backtest_cli
+        run_backtest_cli(args)
         sys.exit(0)
 
     if args.pipeline in ("invest", "all"):
