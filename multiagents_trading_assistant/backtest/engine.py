@@ -35,6 +35,10 @@ import numpy as np
 import pandas as pd
 
 from multiagents_trading_assistant.indicators import compute_indicators
+from multiagents_trading_assistant.agents.trade.money_flow_agent import (
+    BLACKBOX_DEFAULTS,
+    add_money_flow_features,
+)
 from multiagents_trading_assistant.screener.trade_screener import (
     detect_bb_squeeze,
     detect_breakout,
@@ -57,6 +61,12 @@ from multiagents_trading_assistant.screener.trade_screener import (
     detect_breakout_retest_entry,
 )
 from multiagents_trading_assistant.backtest.positions import Trade
+from multiagents_trading_assistant.backtest.pipeline_review import (
+    merge_stats as _merge_pipeline_review_stats,
+    new_stats as _new_pipeline_review_stats,
+    record_stats as _record_pipeline_review_stats,
+    review_entry as _review_pipeline_entry,
+)
 
 
 # Absolute backstop — ngăn zombie position (không phải exit chủ động).
@@ -91,6 +101,120 @@ def _date_str(val) -> str:
     if hasattr(val, "strftime"):
         return val.strftime("%Y-%m-%d")
     return str(val)[:10]
+
+
+def _prep_ta_money_flow_features(df: pd.DataFrame, params: Optional[dict] = None) -> pd.DataFrame:
+    """Precompute causal money-flow fields for TA entries."""
+    p = {**BLACKBOX_DEFAULTS, **(params or {})}
+    feat = add_money_flow_features(df, p)
+    vr = feat["value_ratio_20"].fillna(1.0)
+    cp = feat["close_position"].fillna(0.5)
+    ret = feat["ret_1d"].fillna(0.0)
+    ret_5d = feat["ret_5d"].fillna(0.0)
+    dist_ma20 = feat["dist_ma20"].fillna(0.0)
+    av = feat["avg_value_20"].fillna(0.0)
+    res = feat["resistance_20"]
+
+    money_in = (ret > 0) & (vr >= p["money_in_value_ratio"]) & (cp >= 0.60)
+    money_out = (ret < 0) & (vr >= p["money_in_value_ratio"]) & (cp <= p["weak_close"])
+    breakout_flow = (
+        res.notna()
+        & (res > 0)
+        & (feat["close"] > res)
+        & (vr >= p["breakout_value_ratio"])
+        & (cp >= p["strong_close"])
+        & (ret >= 0.015)
+    )
+    distribution = money_out | (
+        (vr >= p["distribution_value_ratio"]) & (cp <= 0.35) & (ret <= 0)
+    )
+    recent_distribution = (
+        distribution.shift(1)
+        .rolling(int(p["recent_distribution_window"]))
+        .sum()
+        .fillna(0)
+        > 0
+    )
+    early_money_in = (
+        money_in
+        & ~recent_distribution
+        & (ret_5d < p["early_ret_5d_max"])
+        & (dist_ma20 < p["early_dist_ma20_max"])
+    )
+    chase_money_in = money_in & (
+        (ret_5d >= p["chase_ret_5d_min"])
+        | (dist_ma20 >= p["chase_dist_ma20_min"])
+    )
+    exhaustion_inflow = money_in & (vr >= 2.5) & ((cp < 0.70) | chase_money_in)
+    base_tight = feat["range_20"].notna() & feat["range_120_q35"].notna() & (
+        feat["range_20"] < feat["range_120_q35"] * 1.15
+    )
+    volume_dry_before = (
+        feat["volume_ratio_20"].shift(1).rolling(5).mean().fillna(1.0) < 1.1
+    )
+    confirmed_breakout = breakout_flow & ~recent_distribution & (base_tight | volume_dry_before)
+    score = (
+        money_in.astype(int) * 2
+        + early_money_in.astype(int) * 1
+        + confirmed_breakout.astype(int) * 3
+        + (breakout_flow & ~confirmed_breakout).astype(int) * 1
+        - money_out.astype(int) * 2
+        - chase_money_in.astype(int) * 2
+        - exhaustion_inflow.astype(int) * 3
+        - recent_distribution.astype(int) * 2
+        - distribution.astype(int) * 4
+    ).clip(-10, 10)
+
+    regime = pd.Series("NEUTRAL", index=feat.index)
+    regime[score >= 3] = "MONEY_IN"
+    regime[early_money_in & (score >= 2)] = "EARLY_MONEY_IN"
+    regime[chase_money_in] = "CHASE_MONEY_IN"
+    regime[confirmed_breakout & (score >= 4)] = "BREAKOUT_FLOW"
+    regime[exhaustion_inflow] = "EXHAUSTION_INFLOW"
+    regime[money_out | (score <= -2)] = "MONEY_OUT"
+    regime[distribution | (score <= -4)] = "DISTRIBUTION"
+
+    feat["mf_score"] = score
+    feat["mf_regime"] = regime
+    feat["liquidity_ok"] = av >= p["min_avg_value"]
+    feat["distribution"] = distribution
+    feat["recent_distribution"] = recent_distribution
+    feat["money_in"] = money_in
+    feat["early_money_in"] = early_money_in
+    feat["chase_money_in"] = chase_money_in
+    feat["exhaustion_inflow"] = exhaustion_inflow
+    feat["breakout_flow"] = breakout_flow
+    feat["confirmed_breakout_flow"] = confirmed_breakout
+    return feat.reset_index(drop=True)
+
+
+_MF_STRICT_SETUPS = {"BREAKOUT", "MOMENTUM_SURGE", "MACD_CROSSOVER"}
+_MF_COMPRESSION_SETUPS = {"NR7", "BB_SQUEEZE", "INSIDE_BAR", "FLAG_PENNANT"}
+_MF_REVERSAL_SETUPS = {"RETEST", "SPRING", "HAMMER", "RSI_BOUNCE", "DOUBLE_BOTTOM", "BULLISH_ENGULFING", "PIN_BAR", "BREAKOUT_RETEST_ENTRY", "TREND_PULLBACK"}
+
+
+def _money_flow_entry_ok(row: pd.Series, min_score: int, setup_name: str) -> tuple[bool, list[str]]:
+    if not bool(row.get("liquidity_ok", False)):
+        return False, []
+    regime = str(row.get("mf_regime", "NEUTRAL"))
+    score = int(row.get("mf_score", 0))
+    recent_distribution = bool(row.get("recent_distribution", False))
+    if regime in {"DISTRIBUTION", "MONEY_OUT", "EXHAUSTION_INFLOW"}:
+        return False, []
+
+    if setup_name in _MF_STRICT_SETUPS:
+        if regime not in {"BREAKOUT_FLOW", "EARLY_MONEY_IN", "MONEY_IN"} or score < min_score:
+            return False, []
+    elif setup_name in _MF_COMPRESSION_SETUPS:
+        if recent_distribution or regime == "CHASE_MONEY_IN":
+            return False, []
+    elif setup_name in _MF_REVERSAL_SETUPS:
+        if recent_distribution:
+            return False, []
+    elif score < min_score and regime not in {"BREAKOUT_FLOW", "EARLY_MONEY_IN", "MONEY_IN"}:
+        return False, []
+
+    return True, [f"money_flow={regime}", f"mf_score={score}"]
 
 
 def _compute_initial_sl(entry: float, ind: dict) -> float:
@@ -207,6 +331,11 @@ def run_symbol(
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
     setups: Optional[list[str]] = None,
+    use_money_flow: bool = True,
+    money_flow_min_score: int = 3,
+    money_flow_params: Optional[dict] = None,
+    pipeline_review: bool = False,
+    pipeline_review_stats: Optional[dict] = None,
 ) -> list[Trade]:
     """Walk-forward backtest cho một mã cổ phiếu.
 
@@ -232,6 +361,7 @@ def run_symbol(
         return []
 
     df = df.sort_values("date").reset_index(drop=True)
+    mf_feat = _prep_ta_money_flow_features(df, money_flow_params) if use_money_flow else None
 
     strategies = [
         (name, fn) for name, fn in _STRATEGIES
@@ -310,15 +440,23 @@ def run_symbol(
         ind    = compute_indicators(window)
         if not ind:
             continue
+        mf_row = mf_feat.iloc[i] if mf_feat is not None else None
 
         for setup_name, detect_fn in strategies:
             passed, reasons = detect_fn(window, ind)
             if not passed:
                 continue
+            if mf_row is not None:
+                mf_ok, mf_reasons = _money_flow_entry_ok(mf_row, money_flow_min_score, setup_name)
+                if not mf_ok:
+                    continue
+                reasons = [*reasons, *mf_reasons]
 
             next_bar    = df.iloc[i + 1]
             entry_price = float(next_bar["open"])
             entry_date  = _date_str(next_bar["date"])
+            if to_ts and pd.Timestamp(entry_date) > to_ts:
+                continue
 
             if pd.isna(entry_price) or entry_price <= 0:
                 continue
@@ -331,6 +469,20 @@ def run_symbol(
 
             # initial_target = tham chiếu R:R — không dùng làm hard exit
             initial_target = round(entry_price + rr_ratio * (entry_price - sl), 0)
+
+            if pipeline_review:
+                review = _review_pipeline_entry(
+                    setup_name=setup_name,
+                    ind=ind,
+                    mf_row=mf_row,
+                    entry_price=entry_price,
+                    stop_loss=sl,
+                    rr_ratio=rr_ratio,
+                )
+                _record_pipeline_review_stats(pipeline_review_stats, review)
+                if not review.approved:
+                    continue
+                reasons = [*reasons, *review.reasons]
 
             open_pos = Trade(
                 symbol=symbol,
@@ -349,6 +501,13 @@ def run_symbol(
             peak_close = entry_price
             break
 
+    # Force-close lệnh còn mở cuối kỳ tại giá close bar cuối
+    if open_pos is not None:
+        last = df.iloc[-1]
+        bars_held = len(df) - 1 - entry_bar_idx
+        open_pos.close(_date_str(last["date"]), float(last["close"]), "END_OF_DATA", bars_held)
+        trades.append(open_pos)
+
     return trades
 
 
@@ -361,6 +520,11 @@ def run_universe(
     to_date: Optional[str] = None,
     setups: Optional[list[str]] = None,
     max_workers: int = 8,
+    use_money_flow: bool = True,
+    money_flow_min_score: int = 3,
+    money_flow_params: Optional[dict] = None,
+    pipeline_review: bool = False,
+    pipeline_review_stats: Optional[dict] = None,
 ) -> dict[str, list[Trade]]:
     """Walk-forward backtest cho nhiều mã, chạy song song.
 
@@ -369,21 +533,31 @@ def run_universe(
     """
     results: dict[str, list[Trade]] = {}
 
-    def _run_one(sym: str, df: pd.DataFrame) -> tuple[str, list[Trade]]:
+    def _run_one(sym: str, df: pd.DataFrame) -> tuple[str, list[Trade], dict]:
+        local_stats = _new_pipeline_review_stats() if pipeline_review else {}
         try:
-            t = run_symbol(sym, df, lookback, max_hold, rr_ratio, from_date, to_date, setups)
-            return sym, t
+            t = run_symbol(
+                sym, df, lookback, max_hold, rr_ratio, from_date, to_date, setups,
+                use_money_flow=use_money_flow,
+                money_flow_min_score=money_flow_min_score,
+                money_flow_params=money_flow_params,
+                pipeline_review=pipeline_review,
+                pipeline_review_stats=local_stats,
+            )
+            return sym, t, local_stats
         except Exception as e:
             print(f"[backtest] {sym} lỗi: {e}")
-            return sym, []
+            return sym, [], local_stats
 
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         futures = {ex.submit(_run_one, sym, df): sym for sym, df in ohlcv_map.items()}
         done = 0
         for future in as_completed(futures):
             done += 1
-            sym, sym_trades = future.result()
+            sym, sym_trades, local_stats = future.result()
             results[sym] = sym_trades
+            if pipeline_review_stats is not None:
+                _merge_pipeline_review_stats(pipeline_review_stats, local_stats)
             if done % 10 == 0:
                 total = sum(len(t) for t in results.values())
                 print(f"[backtest] {done}/{len(ohlcv_map)} mã xong — {total} trades")

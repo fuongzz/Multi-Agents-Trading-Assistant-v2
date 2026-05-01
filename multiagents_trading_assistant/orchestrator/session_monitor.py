@@ -6,9 +6,11 @@ Hai nhóm kiểm tra độc lập chạy mỗi chu kỳ:
     - SL_HIT + t3_available  → close_position() + Discord "⚡ THOÁT NGAY"
     - SL_HIT + T+0/T+1/T+2  → Discord "🔴 BỊ KẸP" mỗi 5 phút đến khi thoát được
     - TP_HIT + t3_available  → close_position() + Discord "💰 CHỐT LỜI"
-    - TP_HIT + T+0/T+1/T+2  → Discord "⚠️ GẦN TP - kẹp T+3" (nhắc nhở)
+    - TP_HIT + T+0/T+1  → Discord "⚠️ GẦN TP - kẹp T+2.5" (nhắc nhở)
 
 [B] Re-analysis tín hiệu MUA hôm nay (decisions table)
+    - Chạy cho cả recommendation chưa confirmed và vị thế đã confirmed
+    - Nếu chưa có DB position: đây là pre-trade signal monitor, không phải exit monitor
     - Confluence giảm >= 3 điểm  → "Signal yếu đi"
     - Setup quality TOT -> YEU    → "Setup đảo chiều"
     - Giá sắp chạm SL (còn 2%)   → "Sắp chạm SL" (warning, chưa hit)
@@ -26,6 +28,10 @@ import requests
 
 from multiagents_trading_assistant import database as db
 from multiagents_trading_assistant import fetcher
+from multiagents_trading_assistant.services.portfolio_service import (
+    compute_profit_trailing_sl,
+    review_target_decision,
+)
 
 _VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 
@@ -87,12 +93,12 @@ def _check_open_positions(date: str, time_str: str) -> None:
         quantity = pos.get("quantity", 0)
         strategy = pos.get("strategy", "")
 
-        # Tính T+3 availability
+        # Tính T+2.5 availability: hàng về chiều T+2 (days_held >= 2)
         entry_date_str = pos.get("entry_date", "")
         try:
             entry_date = datetime.strptime(entry_date_str, "%Y-%m-%d").date()
             days_held = (datetime.now(tz=_VN_TZ).date() - entry_date).days
-            t3_available = days_held >= 3
+            t3_available = days_held >= 2
         except (ValueError, TypeError):
             days_held = 0
             t3_available = False
@@ -141,9 +147,22 @@ def _check_open_positions(date: str, time_str: str) -> None:
 
         # ── Đạt initial target → nâng SL, tiếp tục giữ ──
         if tp and current >= tp:
-            # Tính SL mới đề xuất: entry + (current - entry) × 0.5 (khoá ≥50% lãi)
-            suggested_sl = round(entry_price + (current - entry_price) * 0.5, 0)
             old_sl = sl or 0.0
+            suggested_sl = compute_profit_trailing_sl(
+                entry_price=entry_price,
+                current_price=current,
+                old_sl=old_sl,
+                initial_target=tp,
+                peak_price=max(pos.get("peak_price") or current, current),
+            ) or old_sl
+            target_review = review_target_decision({
+                **pos,
+                "current_price": current,
+                "sl": old_sl,
+                "suggested_trailing_sl": suggested_sl,
+                "t3_available": t3_available,
+                "tp": tp,
+            })
 
             if suggested_sl > old_sl:
                 try:
@@ -158,6 +177,7 @@ def _check_open_positions(date: str, time_str: str) -> None:
                 suggested_sl=suggested_sl, initial_target=tp,
                 pnl_pct=pnl_pct, days_held=days_held,
                 time_str=time_str, t3_available=t3_available,
+                target_review=target_review,
             )
 
 
@@ -193,10 +213,7 @@ def _check_signal(
     technical_agent,
 ) -> None:
     symbol = decision["symbol"]
-
-    # Bỏ qua nếu vị thế đã bị đóng bởi [A]
-    if not db.has_position(symbol):
-        return
+    has_confirmed_position = db.has_position(symbol)
 
     full = decision.get("full_output") or {}
     if isinstance(full, str):
@@ -212,7 +229,7 @@ def _check_signal(
     trader = full.get("trader_decision", {})
     entry_zone = trader.get("entry_zone")
     sl = trader.get("stop_loss")
-    tp = trader.get("take_profit")
+    tp = trader.get("initial_target") or trader.get("take_profit")
     rr = trader.get("rr_ratio", "?")
 
     current_price = live_prices.get(symbol)
@@ -277,6 +294,7 @@ def _check_signal(
             alert=alert, symbol=symbol, time_str=time_str,
             entry_zone=entry_zone, sl=sl, tp=tp, rr=rr,
             new_conf=new_conf, new_qual=new_qual,
+            has_confirmed_position=has_confirmed_position,
         )
 
 
@@ -310,7 +328,7 @@ def _send_hard_exit_alert(
         {"name": "SL",         "value": f"{sl:,.0f}" if sl else "N/A",           "inline": True},
         {"name": "TP",         "value": f"{tp:,.0f}" if tp else "N/A",           "inline": True},
         {"name": "Giữ",        "value": f"{days_held} ngày",                     "inline": True},
-        {"name": "T+3",        "value": "✅ Có thể bán",                         "inline": True},
+        {"name": "T+2.5",      "value": "✅ Có thể bán",                         "inline": True},
     ]
     _post_embed(webhook, title, desc, color, fields, footer="AI Trading Assistant — Real-time Risk")
 
@@ -320,10 +338,10 @@ def _send_trapped_alert(
     entry_price: float, sl, tp,
     pnl_pct: float, days_held: int, time_str: str,
 ) -> None:
-    """Alert kẹp T+0/T+1/T+2 — SL đã bị hit nhưng chưa bán được."""
+    """Alert kẹp T+0/T+1 — SL đã bị hit nhưng chưa bán được (hàng chưa về T+2.5)."""
     webhook = _get_webhook()
 
-    days_to_free = 3 - days_held
+    days_to_free = 2 - days_held
     pnl_sign = "+" if pnl_pct >= 0 else ""
 
     # Ước tính lỗ thêm nếu giá tiếp tục giảm (worst case -7%)
@@ -339,7 +357,7 @@ def _send_trapped_alert(
         {"name": "Kẹp còn",        "value": f"~{days_to_free} ngày nữa",             "inline": True},
         {"name": "Worst case -7%", "value": f"{worst_case_price:,.0f} ({worst_pnl_pct:.1f}%)", "inline": True},
         {"name": "TP",             "value": f"{tp:,.0f}" if tp else "N/A",           "inline": True},
-        {"name": "Khuyến nghị",    "value": "Theo dõi chặt, đặt lệnh bán ngay khi T+3 đến hạn", "inline": False},
+        {"name": "Khuyến nghị",    "value": "Theo dõi chặt, đặt lệnh bán ngay khi T+2.5 đến hạn (chiều T+2)", "inline": False},
     ]
     _post_embed(
         webhook,
@@ -356,11 +374,26 @@ def _send_profit_trail_alert(
     entry_price: float, old_sl: float, suggested_sl: float,
     initial_target: float, pnl_pct: float,
     days_held: int, time_str: str, t3_available: bool,
+    target_review: dict | None = None,
 ) -> None:
-    """Alert khi giá đạt initial_target — nâng SL để khoá lãi, tiếp tục giữ."""
+    """Alert khi giá đạt initial_target — review chốt lãi hay tiếp tục giữ."""
     webhook = _get_webhook()
     pnl_sign = "+" if pnl_pct >= 0 else ""
-    t3_str = "✅ Có thể bán nếu muốn" if t3_available else f"⏳ Kẹp T+{days_held}"
+    t3_str = "✅ Có thể bán nếu muốn" if t3_available else f"⏳ Kẹp T+{days_held} (chưa qua T+2.5)"
+    target_review = target_review or {}
+    recommendation = target_review.get("recommendation", "HOLD_RAISE_SL")
+    action_text = target_review.get("action_text", "Tiếp tục giữ và quản trị bằng trailing SL.")
+    reason = target_review.get("reason", "")
+    title_map = {
+        "HOLD_RAISE_SL": f"📈 ĐẠT TARGET — {symbol} — GIỮ & NÂNG SL",
+        "TAKE_PARTIAL": f"🟡 ĐẠT TARGET — {symbol} — CÂN NHẮC CHỐT 1 PHẦN",
+        "TAKE_PROFIT": f"🟠 ĐẠT TARGET — {symbol} — CÂN NHẮC CHỐT LỜI",
+    }
+    color_map = {
+        "HOLD_RAISE_SL": 0x00CC66,
+        "TAKE_PARTIAL": 0xF1C40F,
+        "TAKE_PROFIT": 0xFF8C00,
+    }
 
     fields = [
         {"name": "Thời gian",       "value": time_str,                                  "inline": True},
@@ -370,22 +403,25 @@ def _send_profit_trail_alert(
         {"name": "SL mới (đề xuất)","value": f"{suggested_sl:,.0f}",                   "inline": True},
         {"name": "Target ban đầu",  "value": f"{initial_target:,.0f}",                 "inline": True},
         {"name": "Giữ",             "value": f"{days_held} ngày",                       "inline": True},
-        {"name": "T+3",             "value": t3_str,                                    "inline": True},
-        {"name": "Hành động",       "value": "SL đã được nâng tự động. Tiếp tục giữ — thoát khi price action đảo chiều.", "inline": False},
+        {"name": "T+2.5",           "value": t3_str,                                    "inline": True},
+        {"name": "Khuyến nghị",     "value": action_text,                               "inline": False},
     ]
+    if reason:
+        fields.append({"name": "Reasoning", "value": reason, "inline": False})
     _post_embed(
         webhook,
-        title=f"📈 ĐẠT TARGET — {symbol} — NÂNG SL",
-        desc=f"Giá chạm target ban đầu. **Không chốt** — để lệnh chạy, SL đã được nâng để khoá lãi.",
-        color=0x00CC66,
+        title=title_map.get(recommendation, f"📈 ĐẠT TARGET — {symbol}"),
+        desc="Giá chạm target ban đầu. Hệ thống đã review nên chốt hay tiếp tục giữ.",
+        color=color_map.get(recommendation, 0x00CC66),
         fields=fields,
-        footer="AI Trading Assistant — Trailing Exit",
+        footer="AI Trading Assistant — Target Review",
     )
 
 
 def _send_reanalysis_alert(
     alert: dict, symbol: str, time_str: str,
     entry_zone, sl, tp, rr, new_conf, new_qual,
+    has_confirmed_position: bool = False,
 ) -> None:
     webhook = _get_webhook()
     ez_str = (
@@ -395,6 +431,11 @@ def _send_reanalysis_alert(
     fields = [
         {"name": "Thời gian",  "value": time_str,                            "inline": True},
         {"name": "Conf mới",   "value": f"{new_conf}/10 ({new_qual})",        "inline": True},
+        {
+            "name": "Trạng thái",
+            "value": "Đã có vị thế" if has_confirmed_position else "Signal chưa khớp",
+            "inline": True,
+        },
         {"name": "Entry zone", "value": ez_str,                              "inline": True},
         {"name": "SL",         "value": f"{sl:,.0f}" if sl else "N/A",       "inline": True},
         {"name": "TP",         "value": f"{tp:,.0f}" if tp else "N/A",       "inline": True},

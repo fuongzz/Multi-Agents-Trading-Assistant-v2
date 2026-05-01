@@ -102,7 +102,10 @@ class DNSERestClient:
     ) -> tuple[int, str]:
         """GET /instruments — danh sách chứng khoán."""
         path = "/instruments"
-        query: dict = {"limit": limit, "offset": offset}
+        # DNSE uses 1-based `page`; keep the public `offset` argument so callers
+        # can continue paging with offset += limit.
+        page = offset // limit + 1
+        query: dict = {"limit": limit, "page": page}
         if market_id:
             query["marketId"] = market_id
         if security_group_id:

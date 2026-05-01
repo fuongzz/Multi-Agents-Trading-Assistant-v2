@@ -101,10 +101,14 @@ def _run_trade_pipeline_inner(
         candidates_sym = [(symbol, "UNKNOWN", {"_portfolio_checked": False})]
     else:
         _market_ctx, candidates = trade_screener()
-        candidates_sym = [
-            (c.symbol, c.setup_type, asdict(c.market_context))
-            for c in candidates
-        ]
+        candidates_sym = []
+        for c in candidates:
+            ctx = asdict(c.market_context)
+            ctx["stock_current_price"] = c.indicators.get("current_price")
+            ctx["stock_day_change_pct"] = c.indicators.get("stock_day_change_pct", 0.0)
+            ctx["screener_money_flow"] = c.indicators.get("money_flow_analysis", {})
+            ctx["avg_vol_20d"] = c.indicators.get("volume_ma20")
+            candidates_sym.append((c.symbol, c.setup_type, ctx))
 
     results = []
     for i, (sym, setup, mkt_ctx) in enumerate(candidates_sym):

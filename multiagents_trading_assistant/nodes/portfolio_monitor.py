@@ -61,6 +61,7 @@ def run_portfolio_monitor(state: dict) -> dict:
             pos["peak_price"] = current  # cập nhật local để check_exit_signals dùng
 
     enriched = get_enriched_positions(live_prices)
+    _raise_trailing_stops(enriched)
     exit_signals = check_exit_signals(enriched)
 
     # Xử lý tín hiệu thoát
@@ -111,6 +112,25 @@ def _send_exit_alert(signal: dict) -> None:
         send_exit_alert(signal)
     except Exception as e:
         print(f"[portfolio_monitor] send_exit_alert lỗi: {e}")
+
+
+def _raise_trailing_stops(positions: list[dict]) -> None:
+    """Raise SL for winners; reaching target is not an exit trigger."""
+    for pos in positions:
+        sym = pos.get("symbol")
+        new_sl = pos.get("suggested_trailing_sl")
+        old_sl = pos.get("sl") or 0
+        if not sym or not new_sl or new_sl <= old_sl:
+            continue
+        try:
+            db.update_position_sl(sym, new_sl)
+            pos["sl"] = new_sl
+            reached = "target reached" if pos.get("target_reached") else "profit trail"
+            review = pos.get("target_review") or {}
+            rec = review.get("recommendation", "HOLD_RAISE_SL")
+            print(f"[portfolio_monitor] {sym} {reached}: nang SL {old_sl:,.0f}->{new_sl:,.0f} | {rec}")
+        except Exception as e:
+            print(f"[portfolio_monitor] Loi nang SL {sym}: {e}")
 
 
 def _send_portfolio_summary(positions: list[dict], stats: dict, date: str) -> None:

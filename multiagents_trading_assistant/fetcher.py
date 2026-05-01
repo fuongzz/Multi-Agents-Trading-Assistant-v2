@@ -41,14 +41,37 @@ if not hasattr(pd.DataFrame, "applymap"):
     pd.DataFrame.applymap = pd.DataFrame.map
 
 # ── vnstock imports ──
-from vnstock.explorer.vci import Quote as _VCIQuote
-from vnstock import Quote as _KBSQuote, Vnstock, Trading as _Trading
 
 # ── yfinance (global macro) ──
 import yfinance as yf
 
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent / ".env")
+except Exception:
+    pass
+
 # ── DNSE LightSpeed API ──
 from multiagents_trading_assistant.services.dnse_client import _get_dnse_client
+
+
+def _get_vci_quote_class():
+    from vnstock.explorer.vci import Quote
+
+    return Quote
+
+
+def _get_kbs_quote_class():
+    from vnstock import Quote
+
+    return Quote
+
+
+def _get_trading_class():
+    from vnstock import Trading
+
+    return Trading
 
 
 # ──────────────────────────────────────────────
@@ -231,7 +254,7 @@ def _fetch_single(symbol: str, n_days: int) -> pd.DataFrame:
     # ── VCI fallback ──
     try:
         _throttle()
-        df = _VCIQuote(symbol).history(start=start, end=end, interval="1D")
+        df = _get_vci_quote_class()(symbol).history(start=start, end=end, interval="1D")
         if df is not None and not df.empty:
             df = _normalize_df(df, n_days)
             print(f"[fetcher] VCI ✓ {symbol}: {len(df)} nến")
@@ -242,7 +265,7 @@ def _fetch_single(symbol: str, n_days: int) -> pd.DataFrame:
     # ── KBS fallback ──
     try:
         _throttle()
-        df = _KBSQuote(symbol=symbol, source="KBS").history(
+        df = _get_kbs_quote_class()(symbol=symbol, source="KBS").history(
             start=start, end=end, interval="1D"
         )
         if df is not None and not df.empty:
@@ -360,7 +383,7 @@ def get_vnindex(n_days: int = 200) -> pd.DataFrame:
     if df.empty:
         try:
             _throttle()
-            raw = _VCIQuote("VNINDEX").history(start=start, end=end, interval="1D")
+            raw = _get_vci_quote_class()("VNINDEX").history(start=start, end=end, interval="1D")
             if raw is not None and not raw.empty:
                 df = _normalize_df(raw, n_days)
                 print(f"[fetcher] VCI ✓ VNINDEX: {len(df)} nến")
@@ -437,6 +460,46 @@ def get_all_symbols() -> list[str]:
         Danh sách mã cổ phiếu HOSE (thường ~400 mã).
     """
     key    = f"all_symbols_{_TODAY}"
+    # DNSE instruments primary. `vnstock Listing` remains a fallback below.
+    # Keep this block before cache loading during the migration so a stale
+    # vnstock-sourced all_symbols cache does not hide DNSE diagnostics.
+    try:
+        client = _get_dnse_client()
+        if client is not None:
+            dnse_symbols: list[str] = []
+            offset = 0
+            limit = 200
+            while True:
+                status, body = client.get_instruments(
+                    market_id="STO",
+                    limit=limit,
+                    offset=offset,
+                )
+                if status != 200 or not body:
+                    break
+                data = json.loads(body)
+                items = data.get("data", []) if isinstance(data, dict) else data
+                if not items:
+                    break
+                for item in items:
+                    sym = item.get("symbol")
+                    if sym and len(sym) == 3 and sym.isalpha():
+                        dnse_symbols.append(str(sym).upper())
+                total = data.get("total", 0) if isinstance(data, dict) else 0
+                offset += limit
+                if offset >= (total or offset + 1):
+                    break
+            dnse_symbols = sorted(set(dnse_symbols))
+            if len(dnse_symbols) >= 100:
+                print(f"[fetcher] DNSE instruments primary: {len(dnse_symbols)} ma HOSE")
+                _save_cache(key, [{"symbol": s, "source": "DNSE"} for s in dnse_symbols])
+                return dnse_symbols
+            print(f"[fetcher] DNSE instruments incomplete: {len(dnse_symbols)} ma")
+        else:
+            print("[fetcher] DNSE instruments skipped: missing credentials")
+    except Exception as e:
+        print(f"[fetcher] DNSE instruments failed: {e} - trying cache/vnstock Listing...")
+
     cached = _load_cache(key)
     if cached is not None:
         symbols = [r["symbol"] for r in cached if r.get("symbol")]
@@ -571,7 +634,7 @@ def get_price_board(symbols: list[str]) -> pd.DataFrame:
 
     try:
         _throttle()
-        raw = _Trading(source="VCI").price_board(symbols_list=symbols)
+        raw = _get_trading_class()(source="VCI").price_board(symbols_list=symbols)
         raw.columns = ["_".join(str(c) for c in col).strip("_") for col in raw.columns]
 
         df = pd.DataFrame()
@@ -650,7 +713,7 @@ def get_live_price(symbols: list[str]) -> dict[str, float]:
     if missing:
         try:
             _throttle()
-            raw = _Trading(source="VCI").price_board(symbols_list=missing)
+            raw = _get_trading_class()(source="VCI").price_board(symbols_list=missing)
             raw.columns = ["_".join(str(c) for c in col).strip("_") for col in raw.columns]
             for _, row in raw.iterrows():
                 sym   = row.get("listing_symbol")
@@ -996,5 +1059,3 @@ def get_vn_macro() -> dict:
         print(f"[fetcher] vn_macro ✗: {e}")
 
     return result
-
-

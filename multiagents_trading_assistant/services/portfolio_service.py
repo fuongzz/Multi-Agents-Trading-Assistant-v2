@@ -51,6 +51,111 @@ def _get_momentum_drawdown_pct() -> float:
     return 3.0
 
 
+def compute_profit_trailing_sl(
+    *,
+    entry_price: float,
+    current_price: float,
+    old_sl: float | None,
+    initial_target: float | None = None,
+    peak_price: float | None = None,
+) -> float | None:
+    """Return a higher SL for winners; initial_target is not a hard TP."""
+    if entry_price <= 0 or current_price <= entry_price:
+        return None
+
+    reference_price = max(current_price, peak_price or current_price)
+    gain_pct = (reference_price - entry_price) / entry_price * 100
+    target_hit = bool(initial_target and reference_price >= initial_target)
+    if gain_pct < 5.0 and not target_hit:
+        return None
+
+    # Wider leash as profit grows: protect gains without capping upside.
+    if gain_pct >= 20.0:
+        lock_ratio = 0.55
+    elif gain_pct >= 10.0:
+        lock_ratio = 0.60
+    else:
+        lock_ratio = 0.50
+
+    suggested = round(entry_price + (reference_price - entry_price) * lock_ratio, 0)
+    old = old_sl or 0.0
+    if suggested <= old:
+        return None
+    return suggested
+
+
+def review_target_decision(position: dict) -> dict:
+    """Reason about what to do when price reaches the reference target."""
+    entry = float(position.get("entry_price") or 0)
+    current = float(position.get("current_price") or 0)
+    target = position.get("tp")
+    peak = float(position.get("peak_price") or current or 0)
+    old_sl = position.get("sl")
+    new_sl = position.get("suggested_trailing_sl")
+    t3_ok = bool(position.get("t3_available", False))
+
+    if not target or entry <= 0 or current < target:
+        return {
+            "recommendation": "NO_TARGET_REVIEW",
+            "reason": "Chưa chạm target tham chiếu.",
+            "should_alert": False,
+        }
+
+    pnl_pct = (current - entry) / entry * 100
+    target_extension_pct = (current - target) / target * 100 if target else 0.0
+    drawdown_pct = (peak - current) / peak * 100 if peak > 0 else 0.0
+    protected_pct = None
+    if new_sl and new_sl > entry:
+        protected_pct = (new_sl - entry) / entry * 100
+    elif old_sl and old_sl > entry:
+        protected_pct = (old_sl - entry) / entry * 100
+
+    reasons: list[str] = []
+    if not t3_ok:
+        reasons.append("Chưa qua T+3 nên không thể chủ động bán.")
+        recommendation = "HOLD_RAISE_SL"
+    elif drawdown_pct >= 4.0:
+        reasons.append(f"Giá đã hụt {drawdown_pct:.1f}% từ đỉnh sau khi đạt target.")
+        recommendation = "TAKE_PROFIT"
+    elif drawdown_pct >= 2.5:
+        reasons.append(f"Giá đang trả lại lợi nhuận {drawdown_pct:.1f}% từ đỉnh.")
+        recommendation = "TAKE_PARTIAL"
+    elif pnl_pct >= 15.0 and target_extension_pct < 1.0:
+        reasons.append(f"Lợi nhuận {pnl_pct:.1f}% nhưng giá chưa vượt target rõ.")
+        recommendation = "TAKE_PARTIAL"
+    elif protected_pct is not None and protected_pct >= pnl_pct * 0.45:
+        reasons.append(f"SL mới khóa khoảng {protected_pct:.1f}% lợi nhuận.")
+        recommendation = "HOLD_RAISE_SL"
+    elif new_sl:
+        reasons.append("Có thể nâng SL để khóa lãi và tiếp tục cho lệnh chạy.")
+        recommendation = "HOLD_RAISE_SL"
+    else:
+        reasons.append("Đạt target nhưng chưa nâng được SL bảo vệ lợi nhuận.")
+        recommendation = "TAKE_PARTIAL"
+
+    if target_extension_pct >= 2.0 and drawdown_pct < 2.0:
+        reasons.append(f"Giá vượt target {target_extension_pct:.1f}% và chưa bị xả mạnh.")
+        if recommendation == "TAKE_PARTIAL":
+            recommendation = "HOLD_RAISE_SL"
+
+    action_text = {
+        "HOLD_RAISE_SL": "Tiếp tục nắm giữ, nâng SL để khóa lãi.",
+        "TAKE_PARTIAL": "Cân nhắc chốt 1 phần, phần còn lại giữ theo trailing SL.",
+        "TAKE_PROFIT": "Cân nhắc chốt lời chủ động vì giá đang suy yếu sau target.",
+    }.get(recommendation, "Theo dõi thêm.")
+
+    return {
+        "recommendation": recommendation,
+        "action_text": action_text,
+        "reason": " ".join(reasons),
+        "pnl_pct": round(pnl_pct, 2),
+        "target_extension_pct": round(target_extension_pct, 2),
+        "drawdown_from_peak_pct": round(drawdown_pct, 2),
+        "protected_profit_pct": round(protected_pct, 2) if protected_pct is not None else None,
+        "should_alert": True,
+    }
+
+
 def compute_nav_pct_actual(position: dict, total_nav: float) -> float:
     """Tính % NAV thực tế = (entry_price * quantity) / total_nav * 100."""
     if total_nav <= 0:
@@ -90,6 +195,15 @@ def get_enriched_positions(live_prices: dict[str, float]) -> list[dict]:
         quantity = pos.get("quantity", 0)
         sl = pos.get("sl")
         tp = pos.get("tp")
+        peak = pos.get("peak_price") or current_price
+        target_reached = bool(tp and current_price >= tp)
+        suggested_trailing_sl = compute_profit_trailing_sl(
+            entry_price=entry_price,
+            current_price=current_price,
+            old_sl=sl,
+            initial_target=tp,
+            peak_price=peak,
+        )
 
         # P&L
         unrealized_pnl_vnd = (current_price - entry_price) * quantity
@@ -108,17 +222,17 @@ def get_enriched_positions(live_prices: dict[str, float]) -> list[dict]:
             if tp and current_price > 0 else None
         )
 
-        # T+2.5: cần entry_date + 3 ngày lịch để có thể bán
+        # T+2.5: hàng về chiều T+2 (2 ngày lịch sau ngày mua)
         entry_date_str = pos.get("entry_date", "")
         try:
             entry_date = datetime.strptime(entry_date_str, "%Y-%m-%d").date()
             days_held = (today - entry_date).days
-            t3_available = days_held >= 3
+            t3_available = days_held >= 2
         except (ValueError, TypeError):
             days_held = 0
             t3_available = False
 
-        enriched.append({
+        enriched_pos = {
             **pos,
             "current_price": current_price,
             "unrealized_pnl_vnd": round(unrealized_pnl_vnd),
@@ -126,9 +240,13 @@ def get_enriched_positions(live_prices: dict[str, float]) -> list[dict]:
             "nav_pct_actual": compute_nav_pct_actual(pos, total_nav),
             "distance_to_sl_pct": distance_to_sl_pct,
             "distance_to_tp_pct": distance_to_tp_pct,
+            "target_reached": target_reached,
+            "suggested_trailing_sl": suggested_trailing_sl,
             "days_held": days_held,
             "t3_available": t3_available,
-        })
+        }
+        enriched_pos["target_review"] = review_target_decision(enriched_pos)
+        enriched.append(enriched_pos)
 
     return enriched
 
@@ -143,9 +261,8 @@ def check_exit_signals(enriched_positions: list[dict]) -> list[dict]:
 
     Điều kiện:
       - SL_HIT       : current_price <= sl
-      - TP_HIT       : current_price >= tp
       - MOMENTUM_LOSS: current đã giảm >= momentum_drawdown_pct% từ peak
-                       VÀ t3_available=True (không thoát T+0/T+1/T+2)
+                       VÀ t3_available=True (không thoát T+0/T+1, chờ T+2.5)
 
     Returns:
         list[dict] — mỗi dict là vị thế + exit_type
@@ -157,7 +274,6 @@ def check_exit_signals(enriched_positions: list[dict]) -> list[dict]:
         symbol = pos["symbol"]
         current = pos["current_price"]
         sl = pos.get("sl")
-        tp = pos.get("tp")
         peak = pos.get("peak_price") or current
         t3_ok = pos.get("t3_available", False)
 
@@ -165,8 +281,6 @@ def check_exit_signals(enriched_positions: list[dict]) -> list[dict]:
 
         if sl and current <= sl:
             exit_type = "SL_HIT"
-        elif tp and current >= tp:
-            exit_type = "TP_HIT"
         elif t3_ok and peak > 0:
             drawdown_pct = (peak - current) / peak * 100
             if drawdown_pct >= momentum_threshold:

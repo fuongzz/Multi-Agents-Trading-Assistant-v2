@@ -126,13 +126,13 @@ def _trade_embed(state: dict) -> dict:
     if action == "MUA" and trader.get("entry_zone"):
         ez  = trader["entry_zone"]
         sl  = trader.get("stop_loss")
-        tp  = trader.get("take_profit")
+        target = trader.get("initial_target") or trader.get("take_profit")
         rr  = trader.get("rr_ratio", "?")
         pos = int((trader.get("position_pct", 0) or 0) * risk.get("sizing_modifier", 1.0))
         fields += [
             {"name": "Entry",   "value": f"{ez[0]:,.0f} – {ez[1]:,.0f}", "inline": True},
             {"name": "SL",      "value": f"{sl:,.0f}" if sl else "N/A",   "inline": True},
-            {"name": "TP",      "value": f"{tp:,.0f}" if tp else "N/A",   "inline": True},
+            {"name": "Target",  "value": f"{target:,.0f}" if target else "N/A", "inline": True},
             {"name": "R:R",     "value": str(rr),  "inline": True},
             {"name": "Size",    "value": f"{pos}% NAV", "inline": True},
         ]
@@ -343,15 +343,23 @@ def send_portfolio_summary(positions: list[dict], stats: dict, date: str) -> Non
         pnl = pos.get("unrealized_pnl_pct", 0)
         sl_dist = pos.get("distance_to_sl_pct")
         tp_dist = pos.get("distance_to_tp_pct")
+        target_review = pos.get("target_review") or {}
 
         pnl_str = f"{'+' if pnl >= 0 else ''}{pnl:.1f}%"
         sl_str = f"SL -{abs(sl_dist):.1f}%" if sl_dist is not None else ""
-        tp_str = f"TP +{tp_dist:.1f}%" if tp_dist is not None else ""
+        if tp_dist is None:
+            tp_str = ""
+        elif tp_dist >= 0:
+            tp_str = f"Target +{tp_dist:.1f}%"
+        else:
+            tp_str = f"Vượt target {abs(tp_dist):.1f}%"
         detail = f"{entry:,.0f}→{current:,.0f} | P&L {pnl_str}"
         if sl_str:
             detail += f" | {sl_str}"
         if tp_str:
             detail += f" | {tp_str}"
+        if target_review.get("should_alert"):
+            detail += f" | Target: {target_review.get('recommendation')}"
 
         fields.append({"name": sym, "value": detail, "inline": False})
 

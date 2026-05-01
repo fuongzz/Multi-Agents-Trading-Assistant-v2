@@ -153,7 +153,7 @@ class L1Memory:
     def get_win_rate(self, symbol: str = None, days: int = 30) -> dict:
         """
         Tính win rate từ decisions có outcome.
-        Đơn giản: MUA → giá tăng T+3 = win.
+        Đơn giản: MUA → giá tăng sau T+2.5 = win.
         """
         decisions = db.get_decisions(symbol=symbol, limit=200)
         cutoff    = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
@@ -490,9 +490,9 @@ if __name__ == "__main__":
     for p in positions[:3]:
         print(f"  - {p.get('symbol')}: {p.get('entry_price')}")
 
-    print("\n=== L1 T+3 check ===")
-    print(f"VNM T+3 blocked: {mem.is_t3_blocked('VNM')}")
-    print(f"HPG T+3 blocked: {mem.is_t3_blocked('HPG')}")
+    print("\n=== L1 T+2.5 check ===")
+    print(f"VNM T+2.5 blocked: {mem.is_t3_blocked('VNM')}")
+    print(f"HPG T+2.5 blocked: {mem.is_t3_blocked('HPG')}")
 
     print(f"\n=== L2 ChromaDB ===")
     print(f"Available: {mem.l2.available}")

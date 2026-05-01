@@ -182,6 +182,7 @@ def save_trade_decision(state: dict) -> None:
     risk   = state.get("risk_output", {})
     tech   = state.get("technical_analysis", {})
     synth  = state.get("synthesis", {})
+    initial_target = trader.get("initial_target") or trader.get("take_profit")
 
     entry_mid = None
     ez = trader.get("entry_zone")
@@ -200,7 +201,7 @@ def save_trade_decision(state: dict) -> None:
             confidence      = trader.get("confidence"),
             entry           = entry_mid,
             sl              = trader.get("stop_loss"),
-            tp              = trader.get("take_profit"),
+            tp              = initial_target,
             nav_pct         = trader.get("position_pct"),
             override_reason = risk.get("override_reason"),
             full_output     = {

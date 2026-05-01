@@ -27,6 +27,10 @@ from multiagents_trading_assistant.services.data_service import (
     get_liquid_symbols,
 )
 from multiagents_trading_assistant.indicators import compute_indicators
+from multiagents_trading_assistant.agents.trade.money_flow_agent import (
+    add_money_flow_features,
+    classify_money_flow,
+)
 
 
 # ──────────────────────────────────────────────
@@ -1080,7 +1084,12 @@ _STRATEGY_BASE_SCORE = {
 }
 
 
-def compute_priority_score(setup_type: str, ind: dict, ref_trend: str = "UPTREND") -> float:
+def compute_priority_score(
+    setup_type: str,
+    ind: dict,
+    ref_trend: str = "UPTREND",
+    money_flow: dict | None = None,
+) -> float:
     score = _STRATEGY_BASE_SCORE.get(setup_type, 50)
 
     # Điều chỉnh base score theo thị trường thực (reference_trend)
@@ -1113,7 +1122,49 @@ def compute_priority_score(setup_type: str, ind: dict, ref_trend: str = "UPTREND
     rsi = ind.get("rsi")
     if rsi and rsi > 70:
         score -= 5
+    if money_flow:
+        mf_regime = money_flow.get("regime")
+        mf_score = float(money_flow.get("score") or 0)
+        if mf_regime == "BREAKOUT_FLOW":
+            score += 10
+        elif mf_regime == "EARLY_MONEY_IN":
+            score += 8
+        elif mf_regime == "MONEY_IN":
+            score += 6
+        elif mf_regime == "ACCUMULATION":
+            score += 3
+        elif mf_regime == "CHASE_MONEY_IN":
+            score -= 8
+        elif mf_regime == "EXHAUSTION_INFLOW":
+            score -= 12
+        elif mf_regime == "MONEY_OUT":
+            score -= 8
+        elif mf_regime == "DISTRIBUTION":
+            score -= 20
+        score += max(-6, min(8, mf_score))
     return min(round(score, 1), 100.0)
+
+
+def _build_screener_money_flow(
+    symbol: str,
+    df: pd.DataFrame,
+    market_ctx: MarketContext,
+) -> dict:
+    """Classify latest bar for screener ranking without extra API calls."""
+    ctx = {
+        "symbol": symbol,
+        "market_context": {
+            "trend": market_ctx.reference_trend,
+            "vni_change_pct": market_ctx.vni_change_pct,
+            "current_price": market_ctx.current_price,
+        },
+        "sector_context": {
+            "relative_strength_20d": 0.0,
+            "is_outperforming": False,
+        },
+    }
+    feat = add_money_flow_features(df)
+    return classify_money_flow(feat, ctx)
 
 
 # ──────────────────────────────────────────────
@@ -1169,6 +1220,19 @@ def run_screener(
         ind = compute_indicators(df)
         if not ind:
             continue
+        try:
+            money_flow = _build_screener_money_flow(symbol, df, market_ctx)
+        except Exception as e:
+            print(f"[trade_screener] money_flow {symbol} lỗi: {e}")
+            money_flow = {}
+        if money_flow.get("regime") in {"DISTRIBUTION", "EXHAUSTION_INFLOW"}:
+            skipped += 1
+            continue
+        ind["money_flow_analysis"] = money_flow
+        if len(df) >= 2:
+            prev_close = float(df["close"].iloc[-2])
+            cur_close = float(df["close"].iloc[-1])
+            ind["stock_day_change_pct"] = round((cur_close - prev_close) / prev_close * 100, 2) if prev_close else 0.0
 
         detected: list[tuple[str, list[str]]] = []
         strategies = [
@@ -1211,7 +1275,10 @@ def run_screener(
                 detected.append((name, reasons))
 
         for setup_type, reasons in detected:
-            score = compute_priority_score(setup_type, ind, ref_trend)
+            score = compute_priority_score(setup_type, ind, ref_trend, money_flow)
+            mf_regime = money_flow.get("regime")
+            if mf_regime in ("BREAKOUT_FLOW", "EARLY_MONEY_IN", "MONEY_IN", "ACCUMULATION"):
+                reasons = [*reasons, f"Money flow: {mf_regime} score={money_flow.get('score')}"]
             candidates.append(TradeCandidate(
                 symbol         = symbol,
                 setup_type     = setup_type,

@@ -1,11 +1,11 @@
-"""trader_trade.py — Quyết định MUA/BÁN/CHỜ cho Trade pipeline (ngắn hạn).
+"""trader_trade.py — Quyết định theo state: entry mới hoặc quản trị vị thế.
 
 Model: Sonnet (run_agent). Port từ _legacy/trader/trader_agent.py.
 
 Bắt buộc output:
   entry_zone: [low, high]   — vùng entry (không phải single price)
   stop_loss:  float          — SL kỹ thuật
-  take_profit: float         — TP, R:R ≥ 2
+  initial_target: float      — target tham chiếu, R:R ≥ 1.5
   holding_horizon: "1-4 tuần"
   position_pct: 2-5% NAV
 
@@ -17,8 +17,15 @@ import importlib.metadata  # noqa: F401
 from multiagents_trading_assistant.services.llm_service import run_agent
 
 
+_FLAT_ACTIONS = {"MUA", "CHỜ", "TRÁNH"}
+_POSITION_ACTIONS = {"GIỮ", "GIA_TĂNG", "GIẢM", "BÁN"}
+_ALL_ACTIONS = _FLAT_ACTIONS | _POSITION_ACTIONS
+
+
 _SYSTEM_PROMPT = """Bạn là Trader đầu cơ thị trường VN theo triết lý price-action.
-Nhiệm vụ: dựa trên technical + flow + sentiment + synthesis, ra quyết định MUA/CHỜ/TRÁNH với entry_zone và SL kỹ thuật.
+Nhiệm vụ: dựa trên technical + flow + sentiment + synthesis, ra quyết định theo state:
+- Nếu CHƯA có vị thế: chỉ xét MUA/CHỜ/TRÁNH với entry_zone và SL kỹ thuật.
+- Nếu ĐANG có vị thế: quản trị vị thế bằng GIỮ/GIA_TĂNG/GIẢM/BÁN, không phát MUA mới.
 
 === Triết lý giữ lệnh (QUAN TRỌNG) ===
 - KHÔNG exit theo thời gian (không có "5 phiên" hay "1 tuần").
@@ -31,8 +38,22 @@ Nhiệm vụ: dựa trên technical + flow + sentiment + synthesis, ra quyết �
 - initial_target chỉ là mục tiêu tham chiếu — KHÔNG đặt lệnh bán tự động tại đó.
   Khi giá đạt initial_target, nâng SL lên để khoá lợi nhuận, tiếp tục giữ.
 
+=== State machine bắt buộc ===
+1. CHƯA CÓ VỊ THẾ:
+   - Được dùng: "MUA" | "CHỜ" | "TRÁNH".
+   - "MUA" chỉ hợp lệ khi giá hiện tại đang trong/vừa sát entry_zone và đủ SL/R:R.
+   - Nếu setup cần chờ giá về vùng entry hoặc chờ breakout xác nhận, dùng "CHỜ" nhưng vẫn mô tả điều kiện entry trong trader_note.
+2. ĐANG CÓ VỊ THẾ:
+   - KHÔNG dùng "MUA". Tín hiệu mới chỉ là tín hiệu quản trị vị thế.
+   - Được dùng: "GIỮ" | "GIA_TĂNG" | "GIẢM" | "BÁN".
+   - "GIỮ": thesis còn đúng, chưa có lý do thoát; có thể đề xuất nâng SL.
+   - "GIA_TĂNG": chỉ khi vị thế hiện tại đang lãi, cấu trúc HH/HL còn nguyên, SL hiện tại đã gần hòa vốn hoặc khóa lãi, và tổng rủi ro sau tăng vị thế vẫn hợp lý.
+   - "GIẢM": khi đạt target nhưng momentum yếu, phân phối nhẹ, hoặc cần giảm risk.
+   - "BÁN": khi SL/reversal/distribution rõ hoặc thesis gãy.
+   - Với "GIỮ"/"GIẢM"/"BÁN", entry_zone và position_pct cho lệnh mới phải là null/0, trừ "GIA_TĂNG" có add-on zone riêng.
+
 === Quy tắc bắt buộc ===
-1. action chỉ nhận: "MUA" | "CHỜ" | "TRÁNH"
+1. action chỉ nhận: "MUA" | "CHỜ" | "TRÁNH" | "GIỮ" | "GIA_TĂNG" | "GIẢM" | "BÁN"
 2. entry_zone: [low, high] — vùng giá entry hợp lệ (không single price)
 3. stop_loss ≤ 5% dưới low của entry_zone — đặt dưới swing low kỹ thuật gần nhất
 4. initial_target: tham chiếu R:R ≥ 1.5 — dùng để tính trail_sl_guide, KHÔNG phải hard TP
@@ -50,7 +71,8 @@ Nhiệm vụ: dựa trên technical + flow + sentiment + synthesis, ra quyết �
 
 === Output schema (JSON hợp lệ DUY NHẤT) ===
 {
-  "action": "MUA" | "CHỜ" | "TRÁNH",
+  "action": "MUA" | "CHỜ" | "TRÁNH" | "GIỮ" | "GIA_TĂNG" | "GIẢM" | "BÁN",
+  "position_state": "NO_POSITION" | "OPEN_POSITION",
   "entry_zone": [<float>, <float>] | null,
   "stop_loss": <float|null>,
   "initial_target": <float|null>,
@@ -62,6 +84,7 @@ Nhiệm vụ: dựa trên technical + flow + sentiment + synthesis, ra quyết �
     "at_20pct_gain": <float|null>
   },
   "reversal_watchlist": [<str> — dấu hiệu cần theo dõi để thoát],
+  "management_plan": <str|null — kế hoạch quản trị nếu đang có vị thế>,
   "confidence": "THẤP" | "TRUNG_BÌNH" | "CAO",
   "primary_reason": <str — 1-2 câu tiếng Việt>,
   "risks": [<str>, ...],
@@ -102,7 +125,9 @@ def _build_prompt(state: dict) -> str:
     macro = state.get("macro_context", {})
     mkt = state.get("market_context", {})
 
-    current_price = mkt.get("current_price")
+    # market_context.current_price is the market index level from the screener.
+    # For symbol-level entry/SL guidance, use the stock price from technical_analysis.
+    current_price = tech.get("current_price") or mkt.get("stock_current_price") or mkt.get("current_price")
     supports = tech.get("support_levels", [])
     resistances = tech.get("resistance_levels", [])
     nearest_res = resistances[0] if resistances else None
@@ -272,7 +297,8 @@ def _build_prompt(state: dict) -> str:
         "  Ví dụ: 'Nến đỏ đóng dưới MA20 lần thứ 2', 'Double top tại kháng cự X', 'RSI phân kỳ giảm'",
         "",
         f"Lưu ý: biên độ {({'HOSE': '±7%', 'HNX': '±10%'}.get(mkt.get('exchange', 'HOSE'), '±15%'))} và T+2.5.",
-        "Trả JSON theo schema. Nếu không đủ điều kiện → CHỜ với entry_zone/stop_loss/initial_target=null.",
+        "Trả JSON theo schema. Nếu không đủ điều kiện và chưa có vị thế → CHỜ với entry_zone/stop_loss/initial_target=null.",
+        "Nếu đang có vị thế, tuyệt đối không trả MUA; dùng GIỮ/GIA_TĂNG/GIẢM/BÁN theo state machine.",
     ]
     return "\n".join(lines)
 
@@ -298,6 +324,10 @@ def _format_memory_section(ctx: dict) -> list[str]:
             f"⚠ Đang giữ vị thế: entry {pos.get('entry_price', '?')} "
             f"(từ {pos.get('entry_date', '?')}), SL {pos.get('sl', '?')}, "
             f"TP {pos.get('tp', '?')}, {pos.get('nav_pct', '?')}% NAV"
+        )
+        lines.append(
+            "STATE=OPEN_POSITION: không phát MUA mới. Hãy đánh giá GIỮ/GIA_TĂNG/GIẢM/BÁN "
+            "dựa trên vị thế hiện tại, SL, target, trend và tín hiệu phân phối."
         )
     elif internal.get("t3_blocked"):
         lines.append("⚠ T+2.5: Đã mua trong 2 ngày qua — chưa qua T+2.5, không MUA thêm.")
@@ -361,16 +391,42 @@ def _format_memory_section(ctx: dict) -> list[str]:
 
 def _validate(result: dict, state: dict) -> dict:
     action = str(result.get("action", "CHỜ")).upper().strip()
-    if action not in ("MUA", "CHỜ", "TRÁNH"):
+    if action not in _ALL_ACTIONS:
         action = "CHỜ"
     result["action"] = action
+
+    internal = (state.get("memory_context") or {}).get("internal", {})
+    has_position = bool(internal.get("has_position"))
+    result["position_state"] = "OPEN_POSITION" if has_position else "NO_POSITION"
+
+    if has_position and action == "MUA":
+        result.update({
+            "action": "GIỮ",
+            "entry_zone": None,
+            "rr_ratio": None,
+            "position_pct": 0,
+            "primary_reason": "Đang có vị thế nên không phát MUA mới; chuyển sang quản trị vị thế.",
+        })
+        action = "GIỮ"
+
+    if not has_position and action in _POSITION_ACTIONS:
+        result.update({
+            "action": "CHỜ",
+            "entry_zone": None,
+            "stop_loss": None,
+            "initial_target": None,
+            "rr_ratio": None,
+            "position_pct": 0,
+            "primary_reason": f"Chưa có vị thế nên action {action} không hợp lệ; chuyển về CHỜ.",
+        })
+        action = "CHỜ"
 
     confidence = result.get("confidence", "THẤP")
     max_pos = {"THẤP": 2, "TRUNG_BÌNH": 3, "CAO": 5}.get(confidence, 2)
     result["position_pct"] = min(int(result.get("position_pct") or 0), max_pos)
 
     # Tính rr_ratio từ initial_target (không phải hard TP)
-    if action == "MUA" and result.get("entry_zone") and result.get("stop_loss") and result.get("initial_target"):
+    if action in ("MUA", "GIA_TĂNG") and result.get("entry_zone") and result.get("stop_loss") and result.get("initial_target"):
         ez = result["entry_zone"]
         entry_mid = (ez[0] + ez[1]) / 2
         sl  = result["stop_loss"]
@@ -385,22 +441,25 @@ def _validate(result: dict, state: dict) -> dict:
             nearest_res = resistances[0]
             room_pct = (nearest_res - ez[1]) / ez[1] * 100
             if room_pct < 3:
-                print(f"[trader_trade] ⚠ entry_high quá gần R ({room_pct:.1f}%) → CHỜ")
+                next_action = "GIỮ" if has_position else "CHỜ"
+                print(f"[trader_trade] ⚠ entry_high quá gần R ({room_pct:.1f}%) → {next_action}")
                 result.update({
-                    "action": "CHỜ", "entry_zone": None, "stop_loss": None,
+                    "action": next_action, "entry_zone": None, "stop_loss": None,
                     "initial_target": None, "rr_ratio": None, "position_pct": 0,
                     "primary_reason": f"Entry quá gần R ({room_pct:.1f}%) — chờ pullback.",
                 })
 
-    if result.get("action") == "CHỜ":
+    if result.get("action") in ("CHỜ", "TRÁNH", "GIỮ", "GIẢM", "BÁN"):
         result.setdefault("entry_zone", None)
-        result.setdefault("stop_loss", None)
-        result.setdefault("initial_target", None)
+        if result.get("action") in ("CHỜ", "TRÁNH"):
+            result.setdefault("stop_loss", None)
+            result.setdefault("initial_target", None)
         result.setdefault("rr_ratio", None)
         result["position_pct"] = 0
 
     result.setdefault("trail_sl_guide", {})
     result.setdefault("reversal_watchlist", [])
+    result.setdefault("management_plan", None)
     result.setdefault("risks", [])
     result.setdefault("trader_note", "")
     return result
@@ -408,9 +467,10 @@ def _validate(result: dict, state: dict) -> dict:
 
 def _fallback(err: str) -> dict:
     return {
-        "action": "CHỜ", "entry_zone": None, "stop_loss": None, "initial_target": None,
+        "action": "CHỜ", "position_state": "NO_POSITION",
+        "entry_zone": None, "stop_loss": None, "initial_target": None,
         "rr_ratio": None, "position_pct": 0,
-        "trail_sl_guide": {}, "reversal_watchlist": [],
+        "trail_sl_guide": {}, "reversal_watchlist": [], "management_plan": None,
         "confidence": "THẤP", "primary_reason": f"LLM lỗi — CHỜ. {err}".strip(),
         "risks": ["trader_trade fail"], "trader_note": "Fallback.",
     }

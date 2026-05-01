@@ -4,7 +4,7 @@ database.py — SQLite interface cho AI Trading Assistant.
 7 bảng chính:
   - positions          : vị thế đang giữ
   - decisions          : lịch sử AI ra quyết định
-  - trades             : lịch sử MUA/BÁN thực tế (dùng cho T+3 check)
+  - trades             : lịch sử MUA/BÁN thực tế (dùng cho T+2.5 check)
   - news_history       : lịch sử tin tức + sentiment
   - news_outcomes      : kết quả giá sau T+1/3/5/20 của mỗi tin
   - source_credibility : thống kê độ tin cậy theo nguồn báo
@@ -69,7 +69,7 @@ def init_db() -> None:
                 created_at      TEXT DEFAULT (datetime('now','localtime'))
             );
 
-            -- Lịch sử MUA/BÁN thực tế (dùng cho T+3 check)
+            -- Lịch sử MUA/BÁN thực tế (dùng cho T+2.5 check)
             CREATE TABLE IF NOT EXISTS trades (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 symbol      TEXT    NOT NULL,
@@ -333,7 +333,7 @@ def set_portfolio_config(key: str, value: str) -> None:
 
 
 # ──────────────────────────────────────────────
-# TRADES — lịch sử giao dịch (T+3)
+# TRADES — lịch sử giao dịch (T+2.5)
 # ──────────────────────────────────────────────
 
 def record_trade(
@@ -356,9 +356,9 @@ def record_trade(
 def get_buys_last_n_days(symbol: str, n: int = 3) -> list[dict]:
     """
     Lấy danh sách lệnh MUA của 1 mã trong n ngày gần nhất.
-    Risk Manager dùng để kiểm tra T+3: nếu có → không mua lại.
+    Risk Manager dùng để kiểm tra T+2.5: nếu có → không mua lại.
 
-    Ví dụ: mua VNM ngày T, thì T+1, T+2, T+3 đều không mua thêm.
+    Ví dụ: mua VNM ngày T, thì T+1, T+2 đều không mua thêm (hàng về chiều T+2).
     """
     cutoff = (datetime.now() - timedelta(days=n)).strftime("%Y-%m-%d")
     with get_connection() as conn:
