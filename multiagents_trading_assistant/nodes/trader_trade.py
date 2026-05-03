@@ -371,7 +371,8 @@ def _format_memory_section(ctx: dict) -> list[str]:
     # ── External: Vietstock Knowledge Base ──
     fund_summary = external.get("fundamental_summary", "")
     hist_stats   = external.get("historical_stats", "")
-    if fund_summary or hist_stats:
+    news_summary = external.get("news_summary", "")
+    if fund_summary or hist_stats or news_summary:
         lines.append("")
         lines.append("=== Kiến thức bổ trợ (Vietstock) ===")
         lines.append(
@@ -384,6 +385,8 @@ def _format_memory_section(ctx: dict) -> list[str]:
             lines.append(f"[Sức khỏe tài chính]: {fund_summary}")
         if hist_stats:
             lines.append(f"[Chu kỳ / Thống kê]: {hist_stats}")
+        if news_summary:
+            lines.append(f"[Tin tức gần đây]: {news_summary}")
 
     lines.append("")
     return lines

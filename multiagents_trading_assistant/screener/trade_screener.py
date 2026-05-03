@@ -26,11 +26,12 @@ from multiagents_trading_assistant.services.data_service import (
     get_vn30_symbols,
     get_liquid_symbols,
 )
-from multiagents_trading_assistant.indicators import compute_indicators
+from multiagents_trading_assistant.indicators import compute_indicators, get_ichimoku_config
 from multiagents_trading_assistant.agents.trade.money_flow_agent import (
     add_money_flow_features,
     classify_money_flow,
 )
+from multiagents_trading_assistant.setup_scoring import score_setup
 
 
 # ──────────────────────────────────────────────
@@ -1027,6 +1028,206 @@ def detect_breakout_retest_entry(df: pd.DataFrame, ind: dict) -> tuple[bool, lis
     return passed, reasons if passed else []
 
 
+def detect_kumo_breakout(df: pd.DataFrame, ind: dict) -> tuple[bool, list[str]]:
+    """Close breaks above the current Kumo with strong volume confirmation."""
+    reasons: list[str] = []
+    if df.empty or len(df) < 80:
+        return False, []
+
+    close = df["close"]
+    volume = df["volume"]
+    cur = float(close.iloc[-1])
+    prev = float(close.iloc[-2])
+    cloud_top = ind.get("ichimoku_cloud_top")
+    cloud_bottom = ind.get("ichimoku_cloud_bottom")
+    if cloud_top is None or cloud_bottom is None:
+        return False, []
+
+    v_now = float(volume.iloc[-1])
+    v_ma20 = float(volume.rolling(20).mean().iloc[-1])
+    cloud_thickness = (cloud_top - cloud_bottom) / cur * 100 if cur > 0 else 0.0
+
+    breakout = cur > cloud_top and prev <= cloud_top
+    vol_ok = v_ma20 > 0 and v_now >= v_ma20 * 1.5
+    cloud_ok = cloud_thickness >= 0.8
+    confirms, confirm_reasons = _ichimoku_confirmations(ind, v_now, v_ma20, min_volume_ratio=1.2)
+
+    if breakout:
+        reasons.append(f"Close {cur:.0f} breakout Kumo top {cloud_top:.0f}")
+    if vol_ok:
+        reasons.append(f"Volume {v_now / v_ma20:.1f}x MA20")
+    if cloud_ok:
+        reasons.append(f"Kumo thickness {cloud_thickness:.1f}%")
+    reasons.extend(confirm_reasons)
+
+    passed = breakout and vol_ok and cloud_ok and confirms >= 2
+    return passed, reasons if passed else []
+
+
+def detect_tk_cross(df: pd.DataFrame, ind: dict) -> tuple[bool, list[str]]:
+    """Tenkan crosses above Kijun while price is above Kumo."""
+    reasons: list[str] = []
+    if df.empty or len(df) < 80:
+        return False, []
+
+    ichi = _ichimoku_series(df)
+    tenkan = ichi["tenkan"].dropna()
+    kijun = ichi["kijun"].dropna()
+    if len(tenkan) < 2 or len(kijun) < 2:
+        return False, []
+
+    cur_close = float(df["close"].iloc[-1])
+    cloud_top = ind.get("ichimoku_cloud_top")
+    if cloud_top is None:
+        return False, []
+
+    crossed = tenkan.iloc[-2] <= kijun.iloc[-2] and tenkan.iloc[-1] > kijun.iloc[-1]
+    above_kumo = cur_close > cloud_top
+    kijun_slope_ok = (ind.get("ichimoku_kijun_slope") or 0) >= 0
+    confirms, confirm_reasons = _ichimoku_confirmations(
+        ind,
+        float(df["volume"].iloc[-1]),
+        float(df["volume"].rolling(20).mean().iloc[-1]),
+        min_volume_ratio=1.2,
+    )
+
+    if crossed:
+        reasons.append(f"Tenkan {tenkan.iloc[-1]:.0f} cross up Kijun {kijun.iloc[-1]:.0f}")
+    if above_kumo:
+        reasons.append(f"Close above Kumo top {cloud_top:.0f}")
+    if kijun_slope_ok:
+        reasons.append("Kijun slope non-negative")
+    reasons.extend(confirm_reasons)
+
+    passed = crossed and above_kumo and kijun_slope_ok and confirms >= 2
+    return passed, reasons if passed else []
+
+
+def detect_kijun_bounce(df: pd.DataFrame, ind: dict) -> tuple[bool, list[str]]:
+    """Uptrend retest of Kijun with dry volume and bullish reversal candle."""
+    reasons: list[str] = []
+    if df.empty or len(df) < 80:
+        return False, []
+
+    kijun = ind.get("ichimoku_kijun")
+    cloud_top = ind.get("ichimoku_cloud_top")
+    if kijun is None or cloud_top is None:
+        return False, []
+
+    cur_open = float(df["open"].iloc[-1])
+    cur_high = float(df["high"].iloc[-1])
+    cur_low = float(df["low"].iloc[-1])
+    cur_close = float(df["close"].iloc[-1])
+    prev_close = float(df["close"].iloc[-2])
+    volume = df["volume"]
+    v_now = float(volume.iloc[-1])
+    v_ma20 = float(volume.rolling(20).mean().iloc[-1])
+
+    uptrend = ind.get("ichimoku_regime") == "BULLISH" and cur_close > cloud_top
+    retest = cur_low <= kijun * 1.01 and cur_close > kijun
+    dry_volume = v_ma20 > 0 and v_now <= v_ma20 * 1.0
+    bullish_reversal = cur_close > cur_open and cur_close > prev_close and cur_close >= (cur_low + (cur_high - cur_low) * 0.55)
+    confirms, confirm_reasons = _ichimoku_confirmations(ind, v_now, v_ma20, min_volume_ratio=0.7)
+
+    if uptrend:
+        reasons.append("Ichimoku bullish regime")
+    if retest:
+        reasons.append(f"Retest Kijun {kijun:.0f} and close back above")
+    if dry_volume:
+        reasons.append(f"Pullback volume dry {v_now / v_ma20:.2f}x MA20")
+    if bullish_reversal:
+        reasons.append("Bullish reversal candle at Kijun")
+    reasons.extend(confirm_reasons)
+
+    passed = uptrend and retest and dry_volume and bullish_reversal and confirms >= 2
+    return passed, reasons if passed else []
+
+
+def detect_kumo_twist_entry(df: pd.DataFrame, ind: dict) -> tuple[bool, list[str]]:
+    """Future cloud turns bullish with a price trigger above Kijun/Tenkan."""
+    reasons: list[str] = []
+    if df.empty or len(df) < 80:
+        return False, []
+
+    ichi = _ichimoku_series(df)
+    future_a = ichi["senkou_a_raw"].dropna()
+    future_b = ichi["senkou_b_raw"].dropna()
+    if len(future_a) < 2 or len(future_b) < 2:
+        return False, []
+
+    cur_close = float(df["close"].iloc[-1])
+    tenkan = ind.get("ichimoku_tenkan")
+    kijun = ind.get("ichimoku_kijun")
+    cloud_top = ind.get("ichimoku_cloud_top")
+    if tenkan is None or kijun is None or cloud_top is None:
+        return False, []
+
+    bullish_twist = future_a.iloc[-2] <= future_b.iloc[-2] and future_a.iloc[-1] > future_b.iloc[-1]
+    price_trigger = cur_close > max(tenkan, kijun)
+    not_bearish_zone = cur_close >= cloud_top or ind.get("ichimoku_regime") == "BULLISH"
+    confirms, confirm_reasons = _ichimoku_confirmations(
+        ind,
+        float(df["volume"].iloc[-1]),
+        float(df["volume"].rolling(20).mean().iloc[-1]),
+        min_volume_ratio=1.0,
+    )
+
+    if bullish_twist:
+        reasons.append("Future Kumo bullish twist")
+    if price_trigger:
+        reasons.append(f"Close reclaimed Tenkan/Kijun ({tenkan:.0f}/{kijun:.0f})")
+    if not_bearish_zone:
+        reasons.append("Price not below current Kumo")
+    reasons.extend(confirm_reasons)
+
+    passed = bullish_twist and price_trigger and not_bearish_zone and confirms >= 2
+    return passed, reasons if passed else []
+
+
+def _ichimoku_series(
+    df: pd.DataFrame,
+    tenkan_period: int | None = None,
+    kijun_period: int | None = None,
+    senkou_b_period: int | None = None,
+) -> dict[str, pd.Series]:
+    if None in {tenkan_period, kijun_period, senkou_b_period}:
+        tenkan_period, kijun_period, senkou_b_period, _, _ = get_ichimoku_config()
+    high = df["high"]
+    low = df["low"]
+    tenkan = (high.rolling(tenkan_period).max() + low.rolling(tenkan_period).min()) / 2
+    kijun = (high.rolling(kijun_period).max() + low.rolling(kijun_period).min()) / 2
+    senkou_a_raw = (tenkan + kijun) / 2
+    senkou_b_raw = (high.rolling(senkou_b_period).max() + low.rolling(senkou_b_period).min()) / 2
+    return {
+        "tenkan": tenkan,
+        "kijun": kijun,
+        "senkou_a_raw": senkou_a_raw,
+        "senkou_b_raw": senkou_b_raw,
+    }
+
+
+def _ichimoku_confirmations(
+    ind: dict,
+    volume_now: float,
+    volume_ma20: float,
+    *,
+    min_volume_ratio: float,
+) -> tuple[int, list[str]]:
+    confirmations = 0
+    reasons: list[str] = []
+
+    if ind.get("ichimoku_chikou_confirm"):
+        confirmations += 1
+        reasons.append("Chikou confirms momentum")
+    if ind.get("ichimoku_future_cloud_green"):
+        confirmations += 1
+        reasons.append("Future cloud green")
+    if volume_ma20 > 0 and volume_now >= volume_ma20 * min_volume_ratio:
+        confirmations += 1
+        reasons.append(f"Volume confirm {volume_now / volume_ma20:.1f}x MA20")
+    return confirmations, reasons
+
+
 def detect_nr7(df: pd.DataFrame, ind: dict) -> tuple[bool, list[str]]:
     """NR7: range hôm nay nhỏ nhất trong 7 phiên — volatility compression, SL hẹp."""
     reasons: list[str] = []
@@ -1081,7 +1282,34 @@ _STRATEGY_BASE_SCORE = {
     "BREAKOUT_RETEST_ENTRY":  75,   # safer breakout play — chờ xác nhận
     "BULLISH_ENGULFING":      74,   # đảo chiều mạnh một nến
     "PIN_BAR":                71,   # pin bar tại key level
+    # Ichimoku setups
+    "KUMO_BREAKOUT":          82,
+    "TK_CROSS":               76,
+    "KIJUN_BOUNCE":           78,
+    "KUMO_TWIST_ENTRY":       72,
 }
+
+SETUP_REGIME_REQUIREMENT = {
+    "BREAKOUT": ["UPTREND"],
+    "INSIDE_BAR": ["UPTREND"],
+    "MOMENTUM_SURGE": ["UPTREND"],
+    "FLAG_PENNANT": ["UPTREND"],
+    "GOLDEN_CROSS": ["UPTREND", "SIDEWAY"],
+    "DOUBLE_BOTTOM": ["SIDEWAY", "DOWNTREND"],
+    "RSI_BOUNCE": ["SIDEWAY", "DOWNTREND"],
+    "BB_SQUEEZE": ["SIDEWAY"],
+    "NR7": ["UPTREND", "SIDEWAY"],
+    "BULLISH_ENGULFING": ["UPTREND", "SIDEWAY", "DOWNTREND"],
+    "KUMO_BREAKOUT": ["UPTREND"],
+    "TK_CROSS": ["UPTREND"],
+    "KIJUN_BOUNCE": ["UPTREND"],
+    "KUMO_TWIST_ENTRY": ["UPTREND", "SIDEWAY"],
+}
+
+
+def _is_setup_allowed_in_regime(setup_type: str, ref_trend: str) -> bool:
+    allowed = SETUP_REGIME_REQUIREMENT.get(setup_type)
+    return allowed is None or ref_trend in allowed
 
 
 def compute_priority_score(
@@ -1090,7 +1318,13 @@ def compute_priority_score(
     ref_trend: str = "UPTREND",
     money_flow: dict | None = None,
 ) -> float:
-    score = _STRATEGY_BASE_SCORE.get(setup_type, 50)
+    normalized = score_setup(
+        setup_type,
+        ind,
+        money_flow=money_flow or {},
+        reference_trend=ref_trend,
+    )
+    score = 0.70 * float(normalized.get("score") or 0.0) + 0.30 * _STRATEGY_BASE_SCORE.get(setup_type, 50)
 
     # Điều chỉnh base score theo thị trường thực (reference_trend)
     # UPTREND: momentum setups được ưu tiên, RSI_BOUNCE giảm (nhiều false signal)
@@ -1098,6 +1332,8 @@ def compute_priority_score(
     if ref_trend == "UPTREND":
         if setup_type in ("BREAKOUT", "FLAG_PENNANT", "MOMENTUM_SURGE"):
             score += 5
+        elif setup_type in ("KUMO_BREAKOUT", "TK_CROSS", "KIJUN_BOUNCE"):
+            score += 6
         elif setup_type in ("TREND_PULLBACK", "BREAKOUT_RETEST_ENTRY"):
             score += 5   # PA setups phát huy tốt nhất trong uptrend rõ ràng
         elif setup_type in ("RSI_BOUNCE", "HAMMER"):
@@ -1109,6 +1345,8 @@ def compute_priority_score(
             score += 5   # range-bound & compression setups hiệu quả hơn
         elif setup_type in ("DOUBLE_BOTTOM", "HAMMER", "BULLISH_ENGULFING", "PIN_BAR"):
             score += 3   # reversal signals tốt hơn tại vùng sideway support
+        elif setup_type == "KUMO_TWIST_ENTRY":
+            score += 2
 
     confluence = ind.get("confluence_score", 0)
     if confluence >= 6:
@@ -1256,6 +1494,11 @@ def run_screener(
             ("BREAKOUT_RETEST_ENTRY",  detect_breakout_retest_entry),
             ("BULLISH_ENGULFING",      detect_bullish_engulfing),
             ("PIN_BAR",                detect_pin_bar),
+            # ── Ichimoku ──
+            ("KUMO_BREAKOUT",          detect_kumo_breakout),
+            ("TK_CROSS",               detect_tk_cross),
+            ("KIJUN_BOUNCE",           detect_kijun_bounce),
+            ("KUMO_TWIST_ENTRY",       detect_kumo_twist_entry),
         ]
 
         # DOWNTREND thực: chỉ giữ reversal setups (bắt đáy ngược chiều)
@@ -1270,6 +1513,9 @@ def run_screener(
             ]
 
         for name, fn in strategies:
+            if not _is_setup_allowed_in_regime(name, ref_trend):
+                skipped += 1
+                continue
             passed, reasons = fn(df, ind)
             if passed:
                 detected.append((name, reasons))

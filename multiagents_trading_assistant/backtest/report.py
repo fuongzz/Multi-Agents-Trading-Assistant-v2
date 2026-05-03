@@ -50,7 +50,8 @@ def print_report(
     print(f"    Avg loss        : {m['avg_loss_pct']:+.2f}%  (ký hiệu âm)")
     print(f"    Profit factor   : {pf_str}")
     print(f"    Best / Worst    : {m['best_trade_pct']:+.2f}% / {m['worst_trade_pct']:+.2f}%")
-    print(f"    Total return    : {m['total_return_pct']:+.2f}%  (geo, pos=3% NAV)")
+    avg_pos = m.get("avg_position_pct", 3.0)
+    print(f"    Total return    : {m['total_return_pct']:+.2f}%  (geo, pos=dynamic avg {avg_pos:.1f}% NAV)")
     print(f"    Max consec loss : {m['max_consec_losses']}")
     print(f"    Avg hold        : {m['avg_hold_bars']:.1f} bars")
     print(f"    SL / TSL / TP / TIMEOUT: {m['sl_count']} / {m.get('tsl_count', 0)} / {m['tp_count']} / {m['timeout_count']}")
@@ -128,7 +129,7 @@ def save_report(
         "symbol", "setup_type", "signal_date", "entry_date",
         "entry_price", "stop_loss", "take_profit",
         "exit_date", "exit_price", "exit_reason",
-        "pnl_pct", "holding_bars", "reasons",
+        "pnl_pct", "holding_bars", "confluence_score", "reasons",
     ]
 
     with filepath.open("w", newline="", encoding="utf-8") as f:

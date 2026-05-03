@@ -89,6 +89,7 @@ Trả JSON theo schema."""
 
     try:
         result = run_agent_lite(prompt=prompt, system=_SYSTEM_PROMPT)
+        _attach_indicator_snapshot(result, ind)
         print(f"[technical_agent] {symbol} — conf={result.get('confluence_score')}, q={result.get('setup_quality')}")
         return result
     except Exception as e:
@@ -132,4 +133,51 @@ def _fallback_result(ind: dict) -> dict:
         "confluence_score": score,
         "setup_quality": quality,
         "technical_summary": f"MA trend {ind.get('ma_trend')}, RSI {rsi_val:.1f}" if rsi_val is not None else "Fallback indicators.",
+        "indicator_snapshot": _indicator_snapshot(ind),
     }
+
+
+def _attach_indicator_snapshot(result: dict, ind: dict) -> None:
+    """Keep deterministic raw indicators for normalized setup scoring."""
+    result["indicator_snapshot"] = _indicator_snapshot(ind)
+
+
+def _indicator_snapshot(ind: dict) -> dict:
+    keys = (
+        "current_price",
+        "ma20",
+        "ma60",
+        "ma200",
+        "rsi",
+        "macd",
+        "macd_signal",
+        "macd_hist",
+        "macd_signal_label",
+        "bb_upper",
+        "bb_mid",
+        "bb_lower",
+        "atr",
+        "volume_current",
+        "volume_ma20",
+        "volume_surge",
+        "support_levels",
+        "resistance_levels",
+        "ma_trend",
+        "ma_phase",
+        "rsi_signal",
+        "bollinger_position",
+        "confluence_score",
+        "ichimoku_tenkan",
+        "ichimoku_kijun",
+        "ichimoku_senkou_a",
+        "ichimoku_senkou_b",
+        "ichimoku_cloud_top",
+        "ichimoku_cloud_bottom",
+        "ichimoku_future_senkou_a",
+        "ichimoku_future_senkou_b",
+        "ichimoku_future_cloud_green",
+        "ichimoku_chikou_confirm",
+        "ichimoku_regime",
+        "ichimoku_kijun_slope",
+    )
+    return {key: ind.get(key) for key in keys}

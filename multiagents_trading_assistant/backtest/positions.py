@@ -15,7 +15,8 @@ class Trade:
     entry_price: float
     stop_loss: float        # SL ban đầu (bất biến, dùng để tính R:R)
     take_profit: float
-    entry_atr: float = 0.0  # ATR tại thời điểm vào lệnh — dùng cho trailing SL
+    entry_atr: float = 0.0        # ATR tại thời điểm vào lệnh — dùng cho trailing SL
+    confluence_score: float = 0.0 # 0 = không có review (dùng default sizing), >0 = pipeline_review score
     exit_date: Optional[str] = None
     exit_price: Optional[float] = None
     exit_reason: Optional[str] = None

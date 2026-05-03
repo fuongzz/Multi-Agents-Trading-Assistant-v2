@@ -109,28 +109,83 @@ class KnowledgeBase:
     # Search API
     # ──────────────────────────────────────────────
 
-    def search_reports(self, symbol: str, query: str, n: int = 3) -> list[str]:
+    def search_reports(
+        self,
+        symbol: str,
+        query: str,
+        n: int = 3,
+        as_of_date: str | None = None,
+        backtest_mode: bool = False,
+    ) -> list[str]:
         """Tìm BCTC/nghị quyết liên quan đến symbol.
 
         Filter theo symbol trước (hard-filter) để tránh lôi báo cáo của mã khác.
-        Trả về list text đã clean, empty list nếu chưa có data.
+
+        Args:
+            as_of_date:    Nếu set cùng backtest_mode=True, chỉ trả về báo cáo có
+                           published_at <= as_of_date. Báo cáo không có published_at
+                           bị loại — không có timestamp = unsafe cho backtest.
+            backtest_mode: True = chế độ backtest, bật strict date filtering.
         """
         if not self.available:
             return []
         try:
-            return self._safe_query(self._reports, query, n, where={"symbol": symbol})
+            if backtest_mode and as_of_date:
+                # ChromaDB $lte unsupported on string dates → Python post-filter.
+                # Fetch extra candidates by symbol, then filter by published_at in Python.
+                # Documents without published_at are excluded — no timestamp = unsafe.
+                print(
+                    f"[knowledge_base] backtest_mode: filtering reports by published_at <= {as_of_date}"
+                )
+                total = self._reports.count()
+                if total == 0:
+                    return []
+                n_fetch = min(n * 5 + 1, total)
+                raw = self._reports.query(
+                    query_texts=[query],
+                    n_results=n_fetch,
+                    where={"symbol": symbol},
+                )
+                docs  = raw.get("documents", [[]])[0]
+                metas = raw.get("metadatas",  [[]])[0]
+                result = []
+                for doc, meta in zip(docs, metas):
+                    if not doc or not doc.strip():
+                        continue
+                    pub = meta.get("published_at", "")
+                    if not pub:
+                        # No timestamp = unsafe for backtest — exclude
+                        continue
+                    if pub > as_of_date:
+                        # Published after backtest evaluation date — exclude (anti-leak)
+                        continue
+                    result.append(doc.strip())
+                    if len(result) >= n:
+                        break
+                return result
+            else:
+                return self._safe_query(self._reports, query, n, where={"symbol": symbol})
         except Exception as e:
             print(f"[knowledge_base] search_reports fail ({symbol}): {e}")
             return []
 
-    def search_stats(self, symbol: str, query: str, n: int = 2) -> list[str]:
+    def search_stats(
+        self,
+        symbol: str,
+        query: str,
+        n: int = 2,
+        as_of_date: str | None = None,
+        backtest_mode: bool = False,
+    ) -> list[str]:
         """Tìm insight thống kê lịch sử (seasonality, xác suất tăng/giảm).
 
-        Filter theo symbol trước. Trả về list text cô đọng.
+        vietstock_stats là dữ liệu lịch sử tổng hợp (10 năm) — không gắn thời điểm
+        cụ thể → WHITELISTED cho backtest, không cần filter theo as_of_date.
         """
         if not self.available:
             return []
         try:
+            # Stats are timeless historical summaries — safe for any backtest date
             return self._safe_query(self._stats, query, n, where={"symbol": symbol})
         except Exception as e:
             print(f"[knowledge_base] search_stats fail ({symbol}): {e}")
@@ -144,29 +199,39 @@ class KnowledgeBase:
         self,
         symbol: str,
         year: int,
-        quarter: int,   # 0 = báo cáo năm
-        doc_type: str,  # "BCTC" | "NGHI_QUYET" | "GIAI_TRINH"
-        section: str,   # "KET_QUA_KD" | "KE_HOACH" | "RUI_RO" | "CO_TUC" | ...
+        quarter: int,            # 0 = báo cáo năm
+        doc_type: str,           # "BCTC" | "NGHI_QUYET" | "GIAI_TRINH"
+        section: str,            # "KET_QUA_KD" | "KE_HOACH" | "RUI_RO" | "CO_TUC" | ...
         text: str,
+        published_at: str | None = None,  # YYYY-MM-DD — ngày báo cáo công bố chính thức
     ) -> bool:
         """Nạp 1 chunk báo cáo vào vietstock_reports.
 
         doc_id deterministic → upsert an toàn, chạy lại không duplicate.
+
+        Args:
+            published_at: Ngày công bố chính thức (YYYY-MM-DD). Nếu None, báo cáo này
+                          sẽ bị loại trong backtest_mode vì không có timestamp xác nhận.
+                          Ví dụ: Q4/2022 thường công bố tháng 3/2023 → "2023-03-31".
         """
         if not self.available or not text.strip():
             return False
         doc_id = f"{symbol}_{year}_Q{quarter}_{doc_type}_{section}"
+        metadata: dict = {
+            "symbol":   symbol,
+            "year":     year,
+            "quarter":  quarter,
+            "doc_type": doc_type,
+            "section":  section,
+        }
+        if published_at:
+            # Store publication date to enable anti-leak filtering in backtest
+            metadata["published_at"] = published_at
         try:
             self._reports.upsert(
                 ids=[doc_id],
                 documents=[text.strip()],
-                metadatas=[{
-                    "symbol":   symbol,
-                    "year":     year,
-                    "quarter":  quarter,
-                    "doc_type": doc_type,
-                    "section":  section,
-                }],
+                metadatas=[metadata],
             )
             return True
         except Exception as e:
@@ -245,10 +310,11 @@ class KnowledgeBase:
 
     def search_news(
         self,
-        symbol: str,
-        query:  str,
-        n:      int = 5,
+        symbol:    str,
+        query:     str,
+        n:         int = 5,
         date_from: str | None = None,
+        date_to:   str | None = None,
     ) -> list[dict]:
         """Tìm tin tức liên quan theo vector search.
 
@@ -256,7 +322,9 @@ class KnowledgeBase:
             symbol:    Lọc cứng theo mã CK
             query:     Câu truy vấn (VD: "tin tiêu cực về nợ xấu")
             n:         Số kết quả tối đa
-            date_from: Chỉ lấy tin từ ngày này trở đi (YYYY-MM-DD), None = tất cả
+            date_from: Chỉ lấy tin từ ngày này trở đi (YYYY-MM-DD)
+            date_to:   Chỉ lấy tin đến ngày này (YYYY-MM-DD).
+                       Trong backtest, set date_to=as_of_date để tránh leak tin tương lai.
 
         Returns:
             list[dict] — mỗi phần tử gồm: text, source, date, url, sentiment, distance
@@ -264,36 +332,45 @@ class KnowledgeBase:
         if self._news is None:
             return []
 
-        where: dict = {"symbol": symbol}
-        if date_from:
-            where["date"] = {"$gte": date_from}
-
+        # ChromaDB $lte/$gte unsupported on string dates → Python post-filter.
+        # Query by symbol only; filter date_from / date_to in Python after retrieval.
+        has_date_filter = bool(date_from or date_to)
         try:
-            results = self._safe_query(self._news, query, n, where=where)
-            if not results:
+            total   = self._news.count()
+            if total == 0:
                 return []
-
+            # Fetch extra results to compensate for Python-side date post-filtering
+            n_fetch = min(n * 4, total) if has_date_filter else min(n, total)
             raw = self._news.query(
                 query_texts = [query],
-                n_results   = min(n, self._news.count()),
-                where       = where,
+                n_results   = n_fetch,
+                where       = {"symbol": symbol},
             )
             docs      = raw.get("documents", [[]])[0]
             metas     = raw.get("metadatas",  [[]])[0]
             distances = raw.get("distances",  [[]])[0]
 
-            return [
-                {
+            result = []
+            for doc, meta, dist in zip(docs, metas, distances):
+                if not doc or not doc.strip():
+                    continue
+                d = meta.get("date", "")
+                if date_from and d < date_from:
+                    continue
+                if date_to and d > date_to:
+                    # Anti-leak: exclude news published after the backtest evaluation date
+                    continue
+                result.append({
                     "text":      doc,
                     "source":    meta.get("source"),
-                    "date":      meta.get("date"),
+                    "date":      d,
                     "url":       meta.get("url"),
                     "sentiment": meta.get("sentiment"),
                     "distance":  round(dist, 4),
-                }
-                for doc, meta, dist in zip(docs, metas, distances)
-                if doc and doc.strip()
-            ]
+                })
+                if len(result) >= n:
+                    break
+            return result
         except Exception as e:
             print(f"[knowledge_base] search_news fail ({symbol}): {e}")
             return []

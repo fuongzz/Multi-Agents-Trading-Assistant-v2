@@ -161,6 +161,7 @@ class DNSERestClient:
         to_ts: int,
         resolution: str = "1D",
         asset_type: str | None = None,
+        max_pages: int = 20,
     ) -> pd.DataFrame:
         """
         Lấy OHLCV lịch sử, tự động paginate nếu nextTime > 0.
@@ -173,7 +174,6 @@ class DNSERestClient:
 
         all_t, all_o, all_h, all_l, all_c, all_v = [], [], [], [], [], []
         current_from = from_ts
-        max_pages = 20
 
         for _ in range(max_pages):
             data = self.get_ohlcv_raw(symbol, resolution, current_from, to_ts, asset_type)

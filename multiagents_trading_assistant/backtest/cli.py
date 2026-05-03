@@ -9,7 +9,19 @@ Cách dùng:
 
 import argparse
 import importlib.metadata  # noqa: F401 — pandas-ta Python 3.11 fix
-from datetime import date as _date, datetime
+import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import date as _date, datetime, timedelta
+
+# Setups phù hợp cho blue-chip / ngân hàng (ổn định, biến động thấp):
+# Loại bỏ: NR7, RSI_BOUNCE, DOUBLE_BOTTOM, BULLISH_ENGULFING, INSIDE_BAR, HAMMER, PIN_BAR, KIJUN_BOUNCE
+# (các setup này cần biến động cao / pattern đảo chiều rõ — không phù hợp VCB, BID, CTG, ...)
+_BLUECHIP_SETUPS = [
+    "SPRING", "BB_SQUEEZE", "BREAKOUT_RETEST_ENTRY", "MACD_CROSSOVER",
+    "TREND_PULLBACK", "MA_PULLBACK", "GOLDEN_CROSS", "RETEST",
+    "BREAKOUT", "FLAG_PENNANT", "MOMENTUM_SURGE",
+    "KUMO_BREAKOUT", "TK_CROSS", "KUMO_TWIST_ENTRY",
+]
 
 
 def add_backtest_args(parser: argparse.ArgumentParser) -> None:
@@ -46,7 +58,8 @@ def add_backtest_args(parser: argparse.ArgumentParser) -> None:
         type=str,
         metavar="SETUP_NAME",
         help=(
-            "Chỉ test một setup (VD: BREAKOUT, MA_PULLBACK, RSI_BOUNCE). "
+            "Chỉ test một hoặc nhiều setup, phân tách bằng dấu phẩy "
+            "(VD: BREAKOUT hoặc KUMO_BREAKOUT,TK_CROSS). "
             "Có thể kết hợp với --symbol hoặc --universe."
         ),
     )
@@ -73,9 +86,37 @@ def add_backtest_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--mode",
         type=str,
-        choices=["ta", "money-flow"],
+        choices=["ta", "money-flow", "lifecycle"],
         default="ta",
-        help="Chế độ backtest: ta (TA setups, mặc định) | money-flow (Blackbox regime)",
+        help="Chế độ backtest: ta (TA setups, mặc định) | money-flow (Blackbox regime) | lifecycle (multi-leg position lifecycle)",
+    )
+    parser.add_argument(
+        "--lifecycle-playbook",
+        choices=["single", "scale-in", "auto"],
+        default="auto",
+        help="[lifecycle] Playbook quản trị vị thế: single | scale-in | auto (mặc định auto)",
+    )
+    parser.add_argument(
+        "--lifecycle-total-pct",
+        type=float,
+        default=9.0,
+        metavar="PCT",
+        help="[lifecycle] Tổng % NAV dự kiến khi scale-in full (mặc định 9%%)",
+    )
+    parser.add_argument(
+        "--max-total-risk",
+        dest="max_total_risk_pct",
+        type=float,
+        default=6.0,
+        metavar="PCT",
+        help="[lifecycle] Tổng rủi ro tối đa nếu toàn bộ SL hit, tính theo %% NAV (mặc định 6%%)",
+    )
+    parser.add_argument(
+        "--slippage-bps",
+        type=float,
+        default=10.0,
+        metavar="BPS",
+        help="[lifecycle] Slippage mô phỏng cho fill, basis points mỗi chiều (mặc định 10)",
     )
     parser.add_argument(
         "--min-score",
@@ -111,13 +152,119 @@ def add_backtest_args(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="[ta] Bat tang review thu 2 mo phong synthesis/trader/risk, khong goi LLM.",
     )
+    parser.add_argument(
+        "--candidate-llm-backtest",
+        action="store_true",
+        help=(
+            "[ta] Backtest pre-LLM candidate filter de uoc tinh so call LLM tiet kiem. "
+            "Tu dong bat --pipeline-review."
+        ),
+    )
+    parser.add_argument(
+        "--llm-lite-calls-per-candidate",
+        type=int,
+        default=4,
+        metavar="N",
+        help="[candidate-llm] So Haiku/lite calls moi candidate live (mac dinh 4).",
+    )
+    parser.add_argument(
+        "--llm-sonnet-calls-per-candidate",
+        type=int,
+        default=1,
+        metavar="N",
+        help="[candidate-llm] So Sonnet calls moi candidate live (mac dinh 1).",
+    )
+    parser.add_argument(
+        "--llm-lite-cost",
+        type=float,
+        default=float(os.getenv("LLM_LITE_COST_USD_PER_CALL", "0") or 0),
+        metavar="USD",
+        help="[candidate-llm] Optional USD/call cho lite model.",
+    )
+    parser.add_argument(
+        "--llm-sonnet-cost",
+        type=float,
+        default=float(os.getenv("LLM_SONNET_COST_USD_PER_CALL", "0") or 0),
+        metavar="USD",
+        help="[candidate-llm] Optional USD/call cho Sonnet model.",
+    )
+    parser.add_argument(
+        "--pending-entry",
+        action="store_true",
+        help="[ta] Mo phong recommendation-only: signal cho vao danh sach cho, chi khop khi gia cham entry zone.",
+    )
+    parser.add_argument(
+        "--pending-bars",
+        dest="pending_bars",
+        type=int,
+        default=3,
+        metavar="N",
+        help="[ta] So phien giu signal cho khop khi dung --pending-entry (mac dinh 3).",
+    )
+    parser.add_argument(
+        "--ichimoku-params",
+        type=str,
+        default=None,
+        metavar="T,K,SENKOUB,DISP,CHIKOU",
+        help="[ta] Override Ichimoku params, VD: 9,17,26,26,26. Mac dinh: 9,26,52,26,26.",
+    )
+    parser.add_argument(
+        "--cooldown",
+        dest="cooldown_bars",
+        type=int,
+        default=0,
+        metavar="N",
+        help=(
+            "[ta] Số bar chờ sau mỗi exit trước khi tìm signal mới. "
+            "SL/TSL → N bar, profitable exit → N//2 bar. "
+            "0 = tắt (mặc định). Đề xuất: 5 cho single-symbol, 3 cho universe."
+        ),
+    )
+    parser.add_argument(
+        "--loss-streak-pause",
+        dest="loss_streak_pause",
+        type=int,
+        default=0,
+        metavar="N",
+        help=(
+            "[ta] Sau N lần lỗ liên tiếp, kéo dài cooldown thêm cooldown × 2 bar. "
+            "0 = tắt (mặc định). Đề xuất: 3."
+        ),
+    )
+    parser.add_argument(
+        "--max-positions",
+        dest="max_positions",
+        type=int,
+        default=0,
+        metavar="N",
+        help=(
+            "[ta] [universe] Giới hạn số vị thế đồng thời tối đa. "
+            "Khi đầy, bỏ qua signal mới; khi nhiều signal cùng ngày, ưu tiên confluence cao hơn. "
+            "0 = không giới hạn (mặc định). Đề xuất: 5 cho universe."
+        ),
+    )
+    parser.add_argument(
+        "--stock-profile",
+        dest="stock_profile",
+        type=str,
+        choices=["bluechip", "banking", "speculative", "default"],
+        default="default",
+        help=(
+            "[ta] Lọc setup phù hợp với đặc điểm cổ phiếu: "
+            "bluechip/banking = loại bỏ setup cần biến động cao (NR7, RSI_BOUNCE, DOUBLE_BOTTOM, ...); "
+            "speculative/default = toàn bộ 22 setup. "
+            "Bị override bởi --setup nếu chỉ định rõ."
+        ),
+    )
 
 
 def run_backtest_cli(args: argparse.Namespace) -> None:
     """Entry point backtest, gọi từ main()."""
+    import pandas as pd
     from multiagents_trading_assistant.backtest.engine import run_symbol, run_universe
     from multiagents_trading_assistant.backtest.pipeline_review import (
         new_stats as new_pipeline_review_stats,
+        print_candidate_llm_budget,
         print_review_stats,
     )
     from multiagents_trading_assistant.backtest.report import print_report, save_report
@@ -125,6 +272,7 @@ def run_backtest_cli(args: argparse.Namespace) -> None:
         get_liquid_symbols,
         get_ohlcv,
         get_ohlcv_batch,
+        get_ohlcv_history,
         get_vn100_symbols,
         get_vn30_symbols,
         get_vnindex,
@@ -132,7 +280,15 @@ def run_backtest_cli(args: argparse.Namespace) -> None:
 
     from_date       = args.from_date
     to_date         = args.to_date or _date.today().strftime("%Y-%m-%d")
-    setups          = [args.setup.upper()] if getattr(args, "setup", None) else None
+    stock_profile   = getattr(args, "stock_profile", "default")
+    # --setup explicit overrides --stock-profile
+    if getattr(args, "setup", None):
+        setups = [s.strip().upper() for s in args.setup.split(",") if s.strip()]
+    elif stock_profile in ("bluechip", "banking"):
+        setups = _BLUECHIP_SETUPS
+        print(f"[backtest] stock-profile={stock_profile} → {len(setups)} setups (loại bỏ NR7, RSI_BOUNCE, DOUBLE_BOTTOM, ...)")
+    else:
+        setups = None
     symbol          = args.symbol.upper() if getattr(args, "symbol", None) else None
     max_hold        = getattr(args, "max_hold", 120)
     rr              = getattr(args, "rr", 1.5)
@@ -143,9 +299,28 @@ def run_backtest_cli(args: argparse.Namespace) -> None:
     allow_downtrend = getattr(args, "allow_downtrend", False)
     min_value_b     = getattr(args, "min_value_b", None)
     use_money_flow  = getattr(args, "use_money_flow", True)
-    pipeline_review = getattr(args, "pipeline_review", False)
-    mf_params       = {"min_avg_value": int(min_value_b * 1_000_000_000)} if min_value_b is not None else None
+    candidate_llm_backtest = getattr(args, "candidate_llm_backtest", False)
+    pipeline_review = getattr(args, "pipeline_review", False) or candidate_llm_backtest
+    pending_entry    = getattr(args, "pending_entry", False)
+    pending_bars     = getattr(args, "pending_bars", 3)
+    cooldown_bars    = getattr(args, "cooldown_bars", 0)
+    loss_streak_pause = getattr(args, "loss_streak_pause", 0)
+    max_positions    = getattr(args, "max_positions", 0)
+    ichimoku_params  = getattr(args, "ichimoku_params", None)
+    mf_params        = {"min_avg_value": int(min_value_b * 1_000_000_000)} if min_value_b is not None else None
     review_stats    = new_pipeline_review_stats() if pipeline_review else None
+    if ichimoku_params:
+        os.environ["ICHIMOKU_PARAMS"] = ichimoku_params
+        print(f"[backtest] Ichimoku params: {ichimoku_params}")
+    else:
+        os.environ.pop("ICHIMOKU_PARAMS", None)
+
+    # Tính khoảng history cần fetch cho TA/lifecycle modes.
+    start_dt      = datetime.strptime(from_date, "%Y-%m-%d")
+    end_dt        = datetime.strptime(to_date,   "%Y-%m-%d")
+    calendar_span = (end_dt - start_dt).days
+    n_days = max(300, int((calendar_span + 90) * 0.72) + 90)
+    history_start = (start_dt - timedelta(days=220)).strftime("%Y-%m-%d")
 
     # ── Money-flow mode ────────────────────────────────────────────────────────
     if mode == "money-flow":
@@ -170,17 +345,36 @@ def run_backtest_cli(args: argparse.Namespace) -> None:
         )
         return
 
-    # Tính n_days cần fetch: khoảng thời gian + buffer lookback (60 bars) + ngày nghỉ
-    start_dt      = datetime.strptime(from_date, "%Y-%m-%d")
-    end_dt        = datetime.strptime(to_date,   "%Y-%m-%d")
-    calendar_span = (end_dt - start_dt).days
-    # ~0.72 trading days / calendar day; thêm 90 ngày buffer cho lookback
-    n_days = max(300, int((calendar_span + 90) * 0.72) + 90)
+    if mode == "lifecycle":
+        _run_lifecycle_backtest(
+            symbol=symbol,
+            universe=universe,
+            from_date=from_date,
+            to_date=to_date,
+            setups=setups,
+            rr=rr,
+            min_score=min_score,
+            use_money_flow=use_money_flow,
+            mf_params=mf_params,
+            pipeline_review=pipeline_review,
+            no_save=no_save,
+            get_ohlcv_history=get_ohlcv_history,
+            get_vn30_symbols=get_vn30_symbols,
+            get_vn100_symbols=get_vn100_symbols,
+            get_liquid_symbols=get_liquid_symbols,
+            playbook=getattr(args, "lifecycle_playbook", "auto"),
+            lifecycle_total_pct=getattr(args, "lifecycle_total_pct", 9.0),
+            max_positions=max_positions if max_positions > 0 else 5,
+            max_total_risk_pct=getattr(args, "max_total_risk_pct", 6.0),
+            slippage_bps=getattr(args, "slippage_bps", 10.0),
+            history_start=history_start,
+        )
+        return
 
     if symbol:
         # ── Single-symbol mode ────────────────────────────────────
-        print(f"[backtest] Fetching {symbol} ({n_days} bars)...")
-        df = get_ohlcv(symbol, n_days=n_days)
+        print(f"[backtest] Fetching {symbol} history {history_start} → {to_date}...")
+        df = get_ohlcv_history(symbol, start=history_start, end=to_date)
         if df.empty:
             print(f"[backtest] Không có data cho {symbol}")
             return
@@ -198,8 +392,21 @@ def run_backtest_cli(args: argparse.Namespace) -> None:
             money_flow_params=mf_params,
             pipeline_review=pipeline_review,
             pipeline_review_stats=review_stats,
+            pending_entry=pending_entry,
+            pending_bars=pending_bars,
+            cooldown_bars=cooldown_bars,
+            loss_streak_pause=loss_streak_pause,
         )
         print_review_stats(review_stats)
+        if candidate_llm_backtest:
+            print_candidate_llm_budget(
+                review_stats,
+                trades,
+                lite_calls_per_candidate=getattr(args, "llm_lite_calls_per_candidate", 4),
+                sonnet_calls_per_candidate=getattr(args, "llm_sonnet_calls_per_candidate", 1),
+                lite_cost_per_call=getattr(args, "llm_lite_cost", 0.0),
+                sonnet_cost_per_call=getattr(args, "llm_sonnet_cost", 0.0),
+            )
         print_report(trades, label=symbol, from_date=from_date, to_date=to_date)
         if not no_save:
             save_report(trades, label=symbol, from_date=from_date, to_date=to_date)
@@ -214,8 +421,17 @@ def run_backtest_cli(args: argparse.Namespace) -> None:
             symbols = get_liquid_symbols(min_avg_vol=500_000)
 
         print(f"[backtest] Universe {universe.upper()}: {len(symbols)} mã")
-        print(f"[backtest] Fetching OHLCV batch ({n_days} bars)...")
-        ohlcv_map = get_ohlcv_batch(symbols, n_days=n_days)
+        print(f"[backtest] Fetching OHLCV history batch {history_start} → {to_date} ({len(symbols)} mã, 8 workers)...")
+        ohlcv_map: dict = {}
+        with ThreadPoolExecutor(max_workers=8) as ex:
+            fut_map = {ex.submit(get_ohlcv_history, sym, history_start, to_date): sym for sym in symbols}
+            for fut in as_completed(fut_map):
+                sym = fut_map[fut]
+                try:
+                    ohlcv_map[sym] = fut.result()
+                except Exception as e:
+                    print(f"[backtest] {sym} fetch error: {e}")
+                    ohlcv_map[sym] = pd.DataFrame()
 
         results = run_universe(
             ohlcv_map=ohlcv_map,
@@ -229,10 +445,28 @@ def run_backtest_cli(args: argparse.Namespace) -> None:
             money_flow_params=mf_params,
             pipeline_review=pipeline_review,
             pipeline_review_stats=review_stats,
+            pending_entry=pending_entry,
+            pending_bars=pending_bars,
+            cooldown_bars=cooldown_bars,
+            loss_streak_pause=loss_streak_pause,
         )
 
         all_trades = [t for sym_trades in results.values() for t in sym_trades]
+        if max_positions > 0:
+            from multiagents_trading_assistant.backtest.engine import apply_portfolio_filter
+            before = len(all_trades)
+            all_trades = apply_portfolio_filter(all_trades, max_positions=max_positions)
+            print(f"[backtest] Portfolio filter (max={max_positions}): {before} → {len(all_trades)} trades")
         print_review_stats(review_stats)
+        if candidate_llm_backtest:
+            print_candidate_llm_budget(
+                review_stats,
+                all_trades,
+                lite_calls_per_candidate=getattr(args, "llm_lite_calls_per_candidate", 4),
+                sonnet_calls_per_candidate=getattr(args, "llm_sonnet_calls_per_candidate", 1),
+                lite_cost_per_call=getattr(args, "llm_lite_cost", 0.0),
+                sonnet_cost_per_call=getattr(args, "llm_sonnet_cost", 0.0),
+            )
         print_report(
             all_trades,
             label=universe.upper(),
@@ -342,3 +576,249 @@ def _run_money_flow_backtest(
         print("[money_flow_bt] Cần --symbol <MÃ> hoặc --universe <vn30|vn100|liquid>")
         print("  VD: --backtest --mode money-flow --symbol HPG --from 2024-01-01")
         print("  VD: --backtest --mode money-flow --universe vn30 --from 2023-01-01")
+
+
+def _run_lifecycle_backtest(
+    *,
+    symbol,
+    universe,
+    from_date,
+    to_date,
+    setups,
+    rr,
+    min_score,
+    use_money_flow,
+    mf_params,
+    pipeline_review,
+    no_save,
+    get_ohlcv_history,
+    get_vn30_symbols,
+    get_vn100_symbols,
+    get_liquid_symbols,
+    playbook,
+    lifecycle_total_pct,
+    max_positions,
+    max_total_risk_pct,
+    slippage_bps,
+    history_start,
+) -> None:
+    """Lifecycle backtest entry point.
+
+    Phase 1 supports single-symbol first. Universe lifecycle needs a chronological
+    event loop across symbols to keep portfolio cash/exposure exact.
+    """
+    if universe:
+        print("[lifecycle_bt] Universe mode chưa bật cho lifecycle.")
+        print("[lifecycle_bt] Lý do: cần event loop theo ngày trên toàn universe để portfolio cash/exposure không bị lệch.")
+        print("[lifecycle_bt] Hãy chạy trước với --symbol <MÃ>.")
+        return
+    if not symbol:
+        print("[lifecycle_bt] Cần --symbol <MÃ> cho lifecycle mode.")
+        return
+
+    from multiagents_trading_assistant.backtest.execution import ExecutionConfig
+    from multiagents_trading_assistant.backtest.lifecycle_detector import LifecycleSignalDetector
+    from multiagents_trading_assistant.backtest.lifecycle_engine import LifecycleEngine
+    from multiagents_trading_assistant.backtest.lifecycle_metrics import (
+        portfolio_metrics,
+        position_metrics,
+    )
+    from multiagents_trading_assistant.backtest.pipeline_review import (
+        new_stats as new_pipeline_review_stats,
+        print_review_stats,
+    )
+    from multiagents_trading_assistant.backtest.sector_rotation import (
+        DEFAULT_SECTOR_MAP,
+        SectorRotationModel,
+    )
+    from multiagents_trading_assistant.backtest.playbook import (
+        CoreTrendPlaybook,
+        DefensiveExitPlaybook,
+        ProbeOnlyBearPlaybook,
+        PlaybookRouter,
+        RangeReversalPlaybook,
+        ScaleInReversalPlaybook,
+        SingleEntryPlaybook,
+        TrendFollowingPlaybook,
+    )
+    from multiagents_trading_assistant.backtest.portfolio import (
+        PortfolioConstraints,
+        PortfolioEngine,
+    )
+
+    print(f"[lifecycle_bt] Fetching {symbol} history {history_start} → {to_date}...")
+    df = get_ohlcv_history(symbol, start=history_start, end=to_date)
+    if df.empty:
+        print(f"[lifecycle_bt] Không có data cho {symbol}")
+        return
+    sector_model = _build_lifecycle_sector_model(
+        symbol=symbol,
+        symbol_df=df,
+        history_start=history_start,
+        to_date=to_date,
+        get_ohlcv_history=get_ohlcv_history,
+        sector_map=DEFAULT_SECTOR_MAP,
+    )
+
+    single = SingleEntryPlaybook()
+    scale = ScaleInReversalPlaybook(intended_total_pct=float(lifecycle_total_pct))
+    core = CoreTrendPlaybook(core_pct=95.0)
+    trend = TrendFollowingPlaybook(max_position_pct=25.0)
+    range_pb = RangeReversalPlaybook()
+    bear = ProbeOnlyBearPlaybook()
+    defensive = DefensiveExitPlaybook()
+    if playbook == "single":
+        router = PlaybookRouter(playbooks=[single], default=single)
+    elif playbook == "scale-in":
+        router = PlaybookRouter(playbooks=[scale], default=scale)
+    else:
+        router = PlaybookRouter(
+            playbooks=[core, trend, range_pb, bear, defensive, scale, single],
+            default=single,
+        )
+
+    constraints = PortfolioConstraints(
+        max_open_positions=int(max_positions),
+        max_total_exposure_pct=100.0 if playbook == "auto" else 50.0,
+        max_total_risk_pct=float(max_total_risk_pct),
+        max_position_pct=100.0 if playbook == "auto" else max(10.0, float(lifecycle_total_pct)),
+    )
+    portfolio = PortfolioEngine(constraints)
+    engine = LifecycleEngine(
+        router=router,
+        portfolio=portfolio,
+        execution_cfg=ExecutionConfig(slippage_bps=float(slippage_bps)),
+        lookback=60,
+    )
+
+    # Lifecycle should approximate live pipeline by default, so keep review on
+    # even if user did not pass --pipeline-review.
+    review_stats = new_pipeline_review_stats()
+    detector = LifecycleSignalDetector(
+        symbol,
+        df,
+        setups=setups,
+        use_money_flow=use_money_flow,
+        money_flow_min_score=min_score,
+        money_flow_params=mf_params,
+        pipeline_review=True if not pipeline_review else pipeline_review,
+        pipeline_review_stats=review_stats,
+        rr_ratio=rr,
+        sector_model=sector_model,
+    )
+
+    result = engine.run_symbol(
+        symbol,
+        df,
+        signal_detector=detector,
+        from_date=from_date,
+        to_date=to_date,
+    )
+    closed = result["closed_positions"]
+    print_review_stats(review_stats)
+    _print_lifecycle_report(
+        closed,
+        audit_log=result["audit_log"],
+        label=f"{symbol} lifecycle/{playbook}",
+        from_date=from_date,
+        to_date=to_date,
+        benchmark_df=df,
+    )
+    if not no_save:
+        print("[lifecycle_bt] CSV save chưa nối cho Position lifecycle; dùng --no-save hoặc đọc audit log trong memory.")
+
+
+def _build_lifecycle_sector_model(
+    *,
+    symbol,
+    symbol_df,
+    history_start,
+    to_date,
+    get_ohlcv_history,
+    sector_map,
+):
+    from multiagents_trading_assistant.backtest.sector_rotation import SectorRotationModel
+
+    symbols = sorted({s for names in sector_map.values() for s in names})
+    ohlcv_map = {symbol.upper(): symbol_df}
+    fetch_symbols = [s for s in symbols if s != symbol.upper()]
+    print(f"[lifecycle_bt] Building sector rotation model ({len(symbols)} symbols, 8 workers)...")
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        fut_map = {ex.submit(get_ohlcv_history, sym, history_start, to_date): sym for sym in fetch_symbols}
+        for fut in as_completed(fut_map):
+            sym = fut_map[fut]
+            try:
+                df = fut.result()
+                if not df.empty:
+                    ohlcv_map[sym] = df
+            except Exception as e:
+                print(f"[lifecycle_bt] sector fetch skip {sym}: {e}")
+    return SectorRotationModel(sector_map, ohlcv_map)
+
+
+def _print_lifecycle_report(closed_positions, *, audit_log, label, from_date, to_date, benchmark_df=None) -> None:
+    from multiagents_trading_assistant.backtest.lifecycle_metrics import (
+        buy_hold_benchmark,
+        portfolio_metrics,
+        position_metrics,
+    )
+
+    sep = "═" * 62
+    print()
+    print(sep)
+    print(f"  LIFECYCLE BACKTEST: {label}   {from_date} → {to_date}")
+    print(sep)
+    bh = buy_hold_benchmark(benchmark_df, from_date, to_date) if benchmark_df is not None else {}
+    if not closed_positions:
+        print("  Không có position nào đóng trong giai đoạn này.")
+        if bh:
+            print(
+                "  Buy & hold benchmark : "
+                f"{bh['open_to_close_pct']:+.2f}% open-to-close "
+                f"({bh['start_date']} {bh['first_open']} -> {bh['end_date']} {bh['last_close']})"
+            )
+        rejects = [e for e in audit_log if str(e.get("status", "")).startswith("reject")]
+        portfolio_rejects = [e for e in audit_log if "portfolio_reject" in str(e.get("status", ""))]
+        print(f"  Audit events: {len(audit_log)} | rejects={len(rejects)} | portfolio_rejects={len(portfolio_rejects)}")
+        return
+
+    m = portfolio_metrics(closed_positions, label=label)
+    pf_str = f"{m['profit_factor']:.2f}" if m["profit_factor"] != float("inf") else "∞"
+    print()
+    print("  TỔNG QUAN")
+    print(f"    Tổng positions       : {m['total_positions']}")
+    print(f"    Win rate             : {m['win_rate_pct']:.1f}%  ({m['win_count']}W / {m['loss_count']}L)")
+    print(f"    Avg PnL / position   : {m['avg_pnl_nav_pct']:+.3f}% NAV")
+    print(f"    Avg PnL on capital   : {m['avg_pnl_capital_pct']:+.2f}%")
+    print(f"    Total realized       : {m['total_realized_nav_pct']:+.3f}% NAV")
+    if bh:
+        relative = m["total_realized_nav_pct"] - bh["open_to_close_pct"]
+        print(
+            f"    Buy & hold benchmark : {bh['open_to_close_pct']:+.2f}% "
+            f"({bh['start_date']} open {bh['first_open']} -> {bh['end_date']} close {bh['last_close']})"
+        )
+        print(f"    Excess vs buy & hold : {relative:+.2f}% NAV")
+    print(f"    Profit factor        : {pf_str}")
+    print(f"    Best / Worst         : {m['best_position_nav']:+.3f}% / {m['worst_position_nav']:+.3f}% NAV")
+    prog = m["stage_progression"]
+    print(
+        "    Stage progression    : "
+        f"probe_only={prog['PROBE_ONLY']}, added={prog['REACHED_ADDED']}, full={prog['REACHED_FULL']}"
+    )
+
+    print()
+    print("  POSITIONS")
+    print(f"    {'Open':>10} {'Close':>10} {'Legs':>4} {'Buys':>4} {'MaxNAV':>7} {'PnL NAV':>9} {'Exit':>14}")
+    print("    " + "─" * 70)
+    for pos in closed_positions[-15:]:
+        pm = position_metrics(pos)
+        print(
+            f"    {str(pm['open_date'])[:10]:>10} {str(pm['close_date'])[:10]:>10} "
+            f"{pm['num_legs']:>4} {pm['num_buys']:>4} {pm['max_nav_pct']:>6.2f}% "
+            f"{pm['realized_pnl_nav_pct']:>+8.3f}% {pm['exit_reason']:>14}"
+        )
+
+    rejects = [e for e in audit_log if str(e.get("status", "")).startswith("reject")]
+    portfolio_rejects = [e for e in audit_log if "portfolio_reject" in str(e.get("status", ""))]
+    print()
+    print(f"  Audit events: {len(audit_log)} | rejects={len(rejects)} | portfolio_rejects={len(portfolio_rejects)}")

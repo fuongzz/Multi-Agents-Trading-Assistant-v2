@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vnstock Installer - Công cụ cài đặt chuyên nghiệp</title>
+    <link rel="icon" type="image/x-icon" href="/img/vnstock-icon.ico">
+    <script type="text/javascript" src="/eel.js"></script>
+    <link rel="stylesheet" href="/css/main.css">
+    <link rel="stylesheet" href="/css/tabs.css">
+</head>
+
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo-section">
+                <img src="https://vnstocks.com/_next/image?url=%2Fimg%2Fvnstock-logo-rec-rgb.png&w=256&q=75"
+                    alt="Vnstock" class="logo" onerror="this.src='/img/vnstock-logo.png'">
+                <div class="header-text">
+                    <h1 class="title">VNSTOCK INSTALLER</h1>
+                    <p class="tagline">API dữ liệu & công cụ lập trình phân tích chứng khoán #1 Việt Nam</p>
+                </div>
+            </div>
+        </header>
+
+        <!-- Tab Navigation -->
+        <div class="tab-container">
+            <button class="tab-btn active" data-tab="install">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                Cài Đặt
+            </button>
+            <button class="tab-btn" data-tab="settings">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path
+                        d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+                    <circle cx="12" cy="12" r="3" />
+                </svg>
+                Cấu Hình
+            </button>
+            <button class="tab-btn" data-tab="log">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="16" y1="13" x2="8" y2="13" />
+                    <line x1="16" y1="17" x2="8" y2="17" />
+                    <polyline points="10 9 9 9 8 9" />
+                </svg>
+                Nhật Ký
+            </button>
+        </div>
+
+        <!-- Install Tab -->
+        <div id="install-tab" class="tab-content active">
+            <!-- Python Environment FIRST -->
+            <div class="form-section">
+                <h3 class="section-title">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    </svg>
+                    Môi Trường Python
+                </h3>
+                <div class="form-group">
+                    <label for="pythonVersion">Phiên bản Python</label>
+                    <div class="input-group">
+                        <select id="pythonVersion" class="select">
+                            <option value="">Đang tải...</option>
+                        </select>
+                        <button id="refreshPython" class="btn-icon-inline" title="Làm mới">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path
+                                    d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" />
+                            </svg>
+                        </button>
+                    </div>
+                    <small class="help-text">Yêu cầu Python 3.10 trở lên. Chọn phiên bản trước khi xác thực.</small>
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <input type="checkbox" id="useVenv" checked>
+                    <label for="useVenv">Sử dụng môi trường ảo (khuyến nghị)</label>
+                </div>
+
+                <div class="form-group" id="venvPathGroup">
+                    <label for="venvPath">Đường dẫn môi trường ảo</label>
+                    <input type="text" id="venvPath" class="input" placeholder="Mặc định: ~/.venv">
+                </div>
+            </div>
+
+            <!-- API Authentication SECOND -->
+            <div class="form-section">
+                <div class="section-header">
+                    <h3 class="section-title">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                        </svg>
+                        Xác Thực API
+                    </h3>
+                </div>
+
+                <div class="auth-method active">
+                    <div class="oauth-info">
+                        <p class="info-text">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4CAF50"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10" />
+                                <path d="M12 16v-4M12 8h.01" />
+                            </svg>
+                            Nhấn nút bên dưới để mở trang Vnstocks.com và lấy khóa API của bạn, sau đó dán vào ô bên
+                            dưới.
+                        </p>
+                        <button id="openApiPageBtn" class="btn-oauth-inline">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                <polyline points="15 3 21 3 21 9" />
+                                <line x1="10" y1="14" x2="21" y2="3" />
+                            </svg>
+                            Lấy API Key
+                        </button>
+
+                        <!-- API Key input -->
+                        <div style="margin-top: 16px;">
+                            <div class="form-group">
+                                <label for="apiKey">Dán khóa API vừa lấy được <span class="required">*</span></label>
+                                <div class="input-group">
+                                    <input type="password" id="apiKey" class="input"
+                                        placeholder="Dán khóa API từ vnstocks.com/account">
+                                    <button id="toggleApiKey" class="btn-icon-inline" title="Hiện/ẩn">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                            stroke-linejoin="round">
+                                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                            <circle cx="12" cy="12" r="3" />
+                                        </svg>
+                                    </button>
+                                </div>
+                                <small class="help-text">Khóa API có dạng: vnstock_xxxxxxxx...</small>
+                            </div>
+
+                            <button id="loadPackagesBtn" class="btn-continue" disabled>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="9 18 15 12 9 6" />
+                                </svg>
+                                Tiếp Tục
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Package List -->
+            <div class="form-section">
+                <h3 class="section-title">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path
+                            d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                        <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                        <line x1="12" y1="22.08" x2="12" y2="12" />
+                    </svg>
+                    Gói Cài Đặt
+                </h3>
+                <div id="packageList" class="package-list">
+                    <div class="empty-state">
+                        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path
+                                d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                            <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                            <line x1="12" y1="22.08" x2="12" y2="12" />
+                        </svg>
+                        <p>Nhấn "Tải Danh Sách Gói" ở trên để xem các gói vnstock có sẵn</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="actions">
+                <button id="installBtn" class="btn-primary" disabled>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <polyline points="8 12 12 16 16 12" />
+                        <line x1="12" y1="8" x2="12" y2="16" />
+                    </svg>
+                    Bắt Đầu Cài Đặt
+                </button>
+            </div>
+
+            <p id="installInfo"
+                style="display:none; margin-top: 8px; text-align: center; color: #64748B; font-size: 12px;">
+                Chương trình sẽ tự động cài đặt tất cả gói đã chọn theo đúng thứ tự
+            </p>
+
+            <!-- Progress -->
+            <div id="progressSection" class="progress-section" style="display:none;">
+                <div class="progress-bar">
+                    <div id="progressBar" class="progress-fill"></div>
+                    <span id="progressPercent" class="progress-percent">0%</span>
+                </div>
+                <p id="progressText" class="progress-text">Đang chuẩn bị...</p>
+            </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div id="settings-tab" class="tab-content">
+            <div class="form-section">
+                <h3 class="section-title">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
+                        <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
+                        <line x1="6" y1="6" x2="6.01" y2="6" />
+                        <line x1="6" y1="18" x2="6.01" y2="18" />
+                    </svg>
+                    Thông Tin Hệ Thống
+                </h3>
+                <div class="info-box">
+                    <div class="info-row">
+                        <span class="info-label">Hệ điều hành:</span>
+                        <span id="osInfo" class="info-value">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Python:</span>
+                        <span id="pythonInfo" class="info-value">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Thư mục cấu hình:</span>
+                        <span id="configDir" class="info-value">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Phiên bản:</span>
+                        <span id="appVersion" class="info-value">v3.0.5</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="actions">
+                <button id="openConfigBtn" class="btn-secondary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                    </svg>
+                    Mở Thư Mục Cấu Hình
+                </button>
+            </div>
+        </div>
+
+        <!-- Log Tab -->
+        <div id="log-tab" class="tab-content">
+            <div class="form-section">
+                <h3 class="section-title">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="16" y1="13" x2="8" y2="13" />
+                        <line x1="16" y1="17" x2="8" y2="17" />
+                    </svg>
+                    Nhật Ký Cài Đặt
+                </h3>
+                <div class="log-container">
+                    <pre id="logContent" class="log-content">Chờ thao tác...</pre>
+                </div>
+                <div class="actions">
+                    <button id="clearLogBtn" class="btn-secondary">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="3 6 5 6 21 6" />
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        </svg>
+                        Xóa
+                    </button>
+                    <button id="copyLogBtn" class="btn-secondary">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                        </svg>
+                        Sao Chép
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <span id="statusText" class="status">
+                <span class="status-indicator"></span>
+                Sẵn sàng
+            </span>
+            <span class="copyright">© 2026 vnstocks.com</span>
+        </footer>
+    </div>
+
+    <!-- Success Modal -->
+    <div id="successModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🎉 Cài Đặt Thành Công!</h2>
+                <button class="modal-close"
+                    onclick="document.getElementById('successModal').style.display='none'">&times;</button>
+            </div>
+            <div class="modal-body" id="successModalBody">
+                <!-- Content will be dynamically inserted -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn-primary" onclick="document.getElementById('successModal').style.display='none'">
+                    Đóng
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/main.js"></script>
+    <script src="/js/tabs.js"></script>
+    <script src="/js/install.js"></script>
+</body>
+
+</html>

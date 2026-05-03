@@ -55,6 +55,10 @@ class TradeState(TypedDict, total=False):
     market_context: dict
     macro_context: dict
 
+    # Backtest flag — when True, all memory/RAG retrieval is filtered by date <= state["date"]
+    # to prevent look-ahead data leak. Set this in the initial state when running backtests.
+    backtest_mode: bool
+
     # Analyst outputs (parallel)
     technical_analysis: dict
     foreign_flow_analysis: dict
@@ -67,7 +71,7 @@ class TradeState(TypedDict, total=False):
     # Hybrid RAG context (retrieved before trader_trade)
     # {
     #   "internal": {recent_decisions, similar_setups, has_position, t3_blocked, ...},
-    #   "external": {fundamental_summary, historical_stats},
+    #   "external": {fundamental_summary, historical_stats, news_summary},
     # }
     memory_context: dict
 
@@ -147,27 +151,45 @@ def run_synthesis(state: TradeState) -> dict:
         sentiment_analysis=state.get("sentiment_analysis", {}),
         money_flow_analysis=state.get("money_flow_analysis", {}),
         setup_type=state.get("setup_type", ""),
+        market_context=state.get("market_context", {}),
     )
     print(f"[trade_graph] synthesis → conf={result.get('confluence_score')} ({result.get('setup_quality')})")
     return {"synthesis": result}
 
 
 def run_retrieve_context(state: TradeState) -> dict:
-    """Hybrid RAG: truy xuất internal (L1+L2) + external (Vietstock KB) song song."""
-    symbol     = state.get("symbol", "")
-    setup_type = state.get("setup_type", "")
-    ma_trend   = state.get("technical_analysis", {}).get("ma_trend", "UNKNOWN")
-    confluence = float(state.get("synthesis", {}).get("confluence_score") or 50.0)
-    date       = state.get("date", "")
+    """Hybrid RAG: truy xuất internal (L1+L2) + external (Vietstock KB) song song.
+
+    Anti-leak: khi backtest_mode=True, mọi truy vấn bị giới hạn bởi state["date"].
+    Không có dữ liệu nào được lấy sau ngày đang evaluate.
+    """
+    symbol        = state.get("symbol", "")
+    setup_type    = state.get("setup_type", "")
+    ma_trend      = state.get("technical_analysis", {}).get("ma_trend", "UNKNOWN")
+    confluence    = float(state.get("synthesis", {}).get("confluence_score") or 50.0)
+    date          = state.get("date", "")
+    backtest_mode = bool(state.get("backtest_mode", False))
+
+    # Anti-leak: in backtest mode, use the candle date as the hard ceiling for all
+    # memory lookups. In live mode, as_of_date=None = no filtering applied.
+    as_of_date = date if backtest_mode else None
 
     internal = {}
-    external = {"fundamental_summary": "", "historical_stats": ""}
+    external = {"fundamental_summary": "", "historical_stats": "", "news_summary": ""}
 
     def _internal():
-        return retrieve_trade_context(symbol, setup_type, ma_trend, confluence)
+        return retrieve_trade_context(
+            symbol, setup_type, ma_trend, confluence,
+            as_of_date=as_of_date,
+            backtest_mode=backtest_mode,
+        )
 
     def _external():
-        return retrieve_knowledge(symbol, date)
+        return retrieve_knowledge(
+            symbol, date,
+            as_of_date=as_of_date,
+            backtest_mode=backtest_mode,
+        )
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         fut_int = pool.submit(_internal)
@@ -183,12 +205,13 @@ def run_retrieve_context(state: TradeState) -> dict:
 
     ctx = {"internal": internal, "external": external}
     print(
-        f"[trade_graph] context: "
+        f"[trade_graph] context{'[BT]' if backtest_mode else ''}: "
         f"{len(internal.get('recent_decisions', []))} recent, "
         f"{len(internal.get('similar_setups', []))} similar, "
         f"pos={internal.get('has_position')}, t3={internal.get('t3_blocked')}, "
         f"fund={'✓' if external.get('fundamental_summary') else '–'}, "
-        f"stats={'✓' if external.get('historical_stats') else '–'}"
+        f"stats={'✓' if external.get('historical_stats') else '–'}, "
+        f"news={'✓' if external.get('news_summary') else '–'}"
     )
     return {"memory_context": ctx}
 
@@ -258,14 +281,24 @@ def run_pipeline(
     setup_type: str = "BREAKOUT",
     market_context: dict | None = None,
     date: str | None = None,
+    backtest_mode: bool = False,
 ) -> TradeState:
+    """Chạy trade pipeline cho 1 mã.
+
+    Args:
+        backtest_mode: True = bật anti-leak filter trên toàn bộ memory/RAG.
+                       Mọi truy vấn bị giới hạn bởi date để ngăn look-ahead bias.
+                       Bắt buộc khi chạy backtest. False = live mode (không filter).
+    """
     if date is None:
         date = datetime.now().strftime("%Y-%m-%d")
 
-    print(f"\n{'=' * 60}\n[trade_graph] START: {symbol} | {setup_type} | {date}\n{'=' * 60}")
+    print(f"\n{'=' * 60}\n[trade_graph] START: {symbol} | {setup_type} | {date}"
+          f"{' [BACKTEST]' if backtest_mode else ''}\n{'=' * 60}")
 
     initial: TradeState = {
         "symbol": symbol, "date": date, "setup_type": setup_type,
+        "backtest_mode": backtest_mode,
         "market_context": market_context or {}, "macro_context": {},
         "technical_analysis": {}, "foreign_flow_analysis": {}, "sentiment_analysis": {},
         "money_flow_analysis": {},

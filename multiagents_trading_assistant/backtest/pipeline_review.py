@@ -14,20 +14,13 @@ from typing import Any
 
 import pandas as pd
 
-
-_STRICT_SETUPS = {"BREAKOUT", "MOMENTUM_SURGE", "MACD_CROSSOVER"}
-_COMPRESSION_SETUPS = {"NR7", "BB_SQUEEZE", "INSIDE_BAR", "FLAG_PENNANT"}
-_REVERSAL_SETUPS = {
-    "RETEST",
-    "SPRING",
-    "HAMMER",
-    "RSI_BOUNCE",
-    "DOUBLE_BOTTOM",
-    "BULLISH_ENGULFING",
-    "PIN_BAR",
-    "BREAKOUT_RETEST_ENTRY",
-    "TREND_PULLBACK",
-}
+from multiagents_trading_assistant.setup_scoring import (
+    score_setup,
+    MF_STRICT_SETUPS as _STRICT_SETUPS,
+    MF_COMPRESSION_SETUPS as _COMPRESSION_SETUPS,
+    MF_REVERSAL_SETUPS as _REVERSAL_SETUPS,
+    MIN_CONFLUENCE_BY_REGIME as _MIN_CONFLUENCE_BY_REGIME,
+)
 
 
 @dataclass(frozen=True)
@@ -69,6 +62,17 @@ def record_stats(stats: dict[str, Any] | None, decision: ReviewDecision) -> None
     stats.setdefault("reject_reasons", Counter()).update([reason])
 
 
+def record_soft_approval(stats: dict[str, Any] | None, decision: ReviewDecision) -> None:
+    if stats is None:
+        return
+    stats["reviewed"] = int(stats.get("reviewed", 0)) + 1
+    stats["approved"] = int(stats.get("approved", 0)) + 1
+    stats["soft_approved"] = int(stats.get("soft_approved", 0)) + 1
+    stats.setdefault("approved_quality", Counter()).update([decision.quality])
+    reason = decision.blockers[0] if decision.blockers else "soft_approved"
+    stats.setdefault("soft_approve_reasons", Counter()).update([reason])
+
+
 def print_review_stats(stats: dict[str, Any] | None) -> None:
     if not stats:
         return
@@ -78,15 +82,97 @@ def print_review_stats(stats: dict[str, Any] | None) -> None:
         return
     approved = int(stats.get("approved", 0))
     rejected = int(stats.get("rejected", 0))
+    soft_approved = int(stats.get("soft_approved", 0))
     rate = approved / reviewed * 100
+    soft_suffix = f", soft_approved={soft_approved}" if soft_approved else ""
     print(
         f"[pipeline_review] reviewed={reviewed}, approved={approved} "
-        f"({rate:.1f}%), rejected={rejected}"
+        f"({rate:.1f}%), rejected={rejected}{soft_suffix}"
     )
     rejects = stats.get("reject_reasons", Counter())
     if rejects:
         top = ", ".join(f"{k}:{v}" for k, v in rejects.most_common(5))
         print(f"[pipeline_review] top reject reasons: {top}")
+    soft_reasons = stats.get("soft_approve_reasons", Counter())
+    if soft_reasons:
+        top = ", ".join(f"{k}:{v}" for k, v in soft_reasons.most_common(5))
+        print(f"[pipeline_review] top soft approve reasons: {top}")
+
+
+def print_candidate_llm_budget(
+    stats: dict[str, Any] | None,
+    trades: list[Any],
+    *,
+    lite_calls_per_candidate: int = 4,
+    sonnet_calls_per_candidate: int = 1,
+    lite_cost_per_call: float = 0.0,
+    sonnet_cost_per_call: float = 0.0,
+) -> None:
+    """Print LLM call/cost savings from pre-LLM candidate filtering.
+
+    The live trade pipeline currently spends per candidate on:
+      - lite analyst calls: technical, flow, sentiment, synthesis
+      - sonnet decision call: trader
+
+    Backtest review is deterministic, so it estimates how many candidates
+    would be rejected before those live LLM calls are made.
+    """
+    if not stats:
+        return
+
+    reviewed = int(stats.get("reviewed", 0))
+    approved = int(stats.get("approved", 0))
+    rejected = int(stats.get("rejected", 0))
+    if reviewed == 0:
+        print("[candidate_llm] No reviewed candidates; run with --candidate-llm-backtest on a wider period/universe.")
+        return
+
+    lite_calls_per_candidate = max(0, int(lite_calls_per_candidate))
+    sonnet_calls_per_candidate = max(0, int(sonnet_calls_per_candidate))
+
+    baseline_lite = reviewed * lite_calls_per_candidate
+    baseline_sonnet = reviewed * sonnet_calls_per_candidate
+    optimized_lite = approved * lite_calls_per_candidate
+    optimized_sonnet = approved * sonnet_calls_per_candidate
+    saved_lite = baseline_lite - optimized_lite
+    saved_sonnet = baseline_sonnet - optimized_sonnet
+    total_baseline = baseline_lite + baseline_sonnet
+    total_optimized = optimized_lite + optimized_sonnet
+    total_saved = total_baseline - total_optimized
+
+    approval_rate = approved / reviewed * 100
+    closed_trades = len([t for t in trades if getattr(t, "is_closed", False)])
+
+    print()
+    print("[candidate_llm] PRE-LLM CANDIDATE BACKTEST")
+    print(f"[candidate_llm] candidates={reviewed}, pass_pre_llm={approved} ({approval_rate:.1f}%), rejected={rejected}")
+    print(f"[candidate_llm] closed_trades_after_backtest={closed_trades}")
+    print(
+        "[candidate_llm] baseline calls: "
+        f"lite={baseline_lite}, sonnet={baseline_sonnet}, total={total_baseline}"
+    )
+    print(
+        "[candidate_llm] optimized calls: "
+        f"lite={optimized_lite}, sonnet={optimized_sonnet}, total={total_optimized}"
+    )
+    print(
+        "[candidate_llm] saved calls: "
+        f"lite={saved_lite}, sonnet={saved_sonnet}, total={total_saved}"
+    )
+
+    if lite_cost_per_call > 0 or sonnet_cost_per_call > 0:
+        baseline_usd = baseline_lite * lite_cost_per_call + baseline_sonnet * sonnet_cost_per_call
+        optimized_usd = optimized_lite * lite_cost_per_call + optimized_sonnet * sonnet_cost_per_call
+        saved_usd = baseline_usd - optimized_usd
+        print(
+            "[candidate_llm] estimated cost: "
+            f"baseline=${baseline_usd:.4f}, optimized=${optimized_usd:.4f}, saved=${saved_usd:.4f}"
+        )
+
+    rejects = stats.get("reject_reasons", Counter())
+    if rejects:
+        top = ", ".join(f"{k}:{v}" for k, v in rejects.most_common(8))
+        print(f"[candidate_llm] reject mix: {top}")
 
 
 def review_entry(
@@ -98,7 +184,14 @@ def review_entry(
     stop_loss: float,
     rr_ratio: float,
 ) -> ReviewDecision:
-    tech_score = float(ind.get("confluence_score") or 0.0) * 10.0
+    mf_dict = _mf_dict(mf_row)
+    setup_scoring = score_setup(
+        setup_name,
+        ind,
+        money_flow=mf_dict,
+        reference_trend=str(ind.get("ma_trend") or "SIDEWAY"),
+    )
+    tech_score = float(setup_scoring.get("score") or 0.0)
     money_score = _money_points(mf_row)
     confluence = round(0.40 * tech_score + 0.25 * money_score + 17.5, 1)
     quality = "STRONG" if confluence >= 70 else "MEDIUM" if confluence >= 50 else "WEAK"
@@ -106,6 +199,7 @@ def review_entry(
     reasons = [
         f"pipeline_conf={confluence}",
         f"pipeline_quality={quality}",
+        f"setup_score={tech_score:.0f}",
         f"pipeline_money={money_score:.0f}",
     ]
     blockers: list[str] = []
@@ -124,6 +218,11 @@ def review_entry(
 
     if not liquidity_ok:
         blockers.append("liquidity_low")
+    if tech_score < 50:
+        blockers.append(f"weak_setup_score_{setup_name.lower()}")
+    min_confluence = _MIN_CONFLUENCE_BY_REGIME.get(ma_trend, 62.0)
+    if confluence < min_confluence:
+        blockers.append(f"regime_confluence_{ma_trend.lower() or 'unknown'}")
     if mf_regime in {"DISTRIBUTION", "MONEY_OUT", "EXHAUSTION_INFLOW"}:
         blockers.append(f"money_flow_{mf_regime.lower()}")
     if recent_distribution:
@@ -192,6 +291,16 @@ def _money_points(mf_row: pd.Series | None) -> float:
     if not liquidity_ok:
         base -= 20.0
     return max(0.0, min(100.0, base))
+
+
+def _mf_dict(mf_row: pd.Series | None) -> dict[str, Any]:
+    if mf_row is None:
+        return {}
+    return {
+        "regime": str(mf_row.get("mf_regime", "NEUTRAL")),
+        "score": float(mf_row.get("mf_score", 0) or 0),
+        "signals": {"liquidity_ok": bool(mf_row.get("liquidity_ok", True))},
+    }
 
 
 def _nearest_resistance_rr(ind: dict, entry: float, stop_loss: float) -> float | None:

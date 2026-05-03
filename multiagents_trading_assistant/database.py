@@ -353,20 +353,25 @@ def record_trade(
         """, (symbol, action, price, quantity, trade_date, strategy, note))
 
 
-def get_buys_last_n_days(symbol: str, n: int = 3) -> list[dict]:
+def get_buys_last_n_days(symbol: str, n: int = 3, as_of_date: str | None = None) -> list[dict]:
     """
-    Lấy danh sách lệnh MUA của 1 mã trong n ngày gần nhất.
-    Risk Manager dùng để kiểm tra T+2.5: nếu có → không mua lại.
+    Lấy danh sách lệnh MUA của 1 mã trong n ngày gần nhất tính từ as_of_date.
 
-    Ví dụ: mua VNM ngày T, thì T+1, T+2 đều không mua thêm (hàng về chiều T+2).
+    Args:
+        as_of_date: Ngày tham chiếu (YYYY-MM-DD). None = dùng datetime.now() (live mode).
+                    Trong backtest, truyền ngày đang evaluate để tránh data leak.
     """
-    cutoff = (datetime.now() - timedelta(days=n)).strftime("%Y-%m-%d")
+    # Anti-leak: compute cutoff relative to as_of_date, not wall-clock now()
+    reference = datetime.strptime(as_of_date, "%Y-%m-%d") if as_of_date else datetime.now()
+    cutoff = (reference - timedelta(days=n)).strftime("%Y-%m-%d")
+    upper  = as_of_date or "9999-12-31"   # live mode: no upper bound needed
     with get_connection() as conn:
         rows = conn.execute("""
             SELECT * FROM trades
-            WHERE symbol = ? AND action = 'MUA' AND trade_date >= ?
+            WHERE symbol = ? AND action = 'MUA'
+              AND trade_date >= ? AND trade_date <= ?
             ORDER BY trade_date DESC
-        """, (symbol, cutoff)).fetchall()
+        """, (symbol, cutoff, upper)).fetchall()
         return [dict(r) for r in rows]
 
 
@@ -418,33 +423,51 @@ def save_decision(
         ))
 
 
-def get_decisions(symbol: str = None, date: str = None, limit: int = 50) -> list[dict]:
-    """Lấy lịch sử quyết định — dùng cho dashboard và backtest."""
+def get_decisions(
+    symbol: str = None,
+    date: str = None,
+    limit: int = 50,
+    as_of_date: str | None = None,
+) -> list[dict]:
+    """Lấy lịch sử quyết định — dùng cho dashboard và backtest.
+
+    Args:
+        as_of_date: Nếu set, chỉ trả về decisions có date <= as_of_date.
+                    Dùng trong backtest để tránh leak quyết định tương lai.
+    """
+    # Anti-leak: khi backtest, loại bỏ mọi decision sau ngày đang evaluate
+    aod_clause = "AND date <= ?" if as_of_date else ""
+    aod_param  = (as_of_date,) if as_of_date else ()
+
     with get_connection() as conn:
         if symbol and date:
-            rows = conn.execute("""
-                SELECT * FROM decisions WHERE symbol = ? AND date = ?
+            rows = conn.execute(f"""
+                SELECT * FROM decisions
+                WHERE symbol = ? AND date = ? {aod_clause}
                 ORDER BY created_at DESC
-            """, (symbol, date)).fetchall()
+            """, (symbol, date) + aod_param).fetchall()
         elif symbol:
-            rows = conn.execute("""
-                SELECT * FROM decisions WHERE symbol = ?
+            rows = conn.execute(f"""
+                SELECT * FROM decisions
+                WHERE symbol = ? {aod_clause}
                 ORDER BY date DESC LIMIT ?
-            """, (symbol, limit)).fetchall()
+            """, (symbol,) + aod_param + (limit,)).fetchall()
         elif date:
-            rows = conn.execute("""
-                SELECT * FROM decisions WHERE date = ?
+            rows = conn.execute(f"""
+                SELECT * FROM decisions
+                WHERE date = ? {aod_clause}
                 ORDER BY created_at DESC
-            """, (date,)).fetchall()
+            """, (date,) + aod_param).fetchall()
         else:
-            rows = conn.execute("""
-                SELECT * FROM decisions ORDER BY date DESC, created_at DESC LIMIT ?
-            """, (limit,)).fetchall()
+            rows = conn.execute(f"""
+                SELECT * FROM decisions
+                WHERE 1=1 {aod_clause}
+                ORDER BY date DESC, created_at DESC LIMIT ?
+            """, aod_param + (limit,)).fetchall()
 
         result = []
         for r in rows:
             d = dict(r)
-            # Parse lại full_output từ JSON string → dict
             if d.get("full_output"):
                 try:
                     d["full_output"] = json.loads(d["full_output"])

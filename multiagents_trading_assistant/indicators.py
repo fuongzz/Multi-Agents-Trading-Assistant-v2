@@ -1,4 +1,5 @@
 import importlib.metadata  # FIX: pandas-ta-openbb AttributeError Python 3.11
+import os
 
 import pandas as pd
 import pandas_ta as ta
@@ -74,6 +75,9 @@ def compute_indicators(df: pd.DataFrame) -> dict:
     result["volume_current"] = _last(volume)
     result["volume_ma20"]    = _last(volume.rolling(20).mean())
 
+    # Ichimoku(9,26,52). Keep standard parameters used by most VN practitioners.
+    result.update(compute_ichimoku(df))
+
     # ── Tín hiệu dẫn xuất ──
     result["rsi_signal"]          = _rsi_signal(result["rsi"])
     result["ma_trend"]            = _ma_trend(result)
@@ -91,6 +95,108 @@ def compute_indicators(df: pd.DataFrame) -> dict:
     result["confluence_score"] = compute_confluence_score(result)
 
     return result
+
+
+def get_ichimoku_config() -> tuple[int, int, int, int, int]:
+    """Return Ichimoku params: tenkan, kijun, senkou_b, displacement, chikou."""
+    raw = os.environ.get("ICHIMOKU_PARAMS", "").strip()
+    if not raw:
+        return 9, 26, 52, 26, 26
+    try:
+        values = [int(part.strip()) for part in raw.replace("/", ",").split(",") if part.strip()]
+    except ValueError:
+        return 9, 26, 52, 26, 26
+    if len(values) == 4:
+        tenkan, kijun, senkou_b, displacement = values
+        return tenkan, kijun, senkou_b, displacement, displacement
+    if len(values) >= 5:
+        return tuple(values[:5])  # type: ignore[return-value]
+    return 9, 26, 52, 26, 26
+
+
+def compute_ichimoku(
+    df: pd.DataFrame,
+    tenkan_period: int | None = None,
+    kijun_period: int | None = None,
+    senkou_b_period: int | None = None,
+    displacement: int | None = None,
+    chikou_lookback: int | None = None,
+) -> dict:
+    """Compute latest Ichimoku values without look-ahead."""
+    if None in {tenkan_period, kijun_period, senkou_b_period, displacement, chikou_lookback}:
+        tenkan_period, kijun_period, senkou_b_period, displacement, chikou_lookback = get_ichimoku_config()
+    empty = {
+        "ichimoku_tenkan": None,
+        "ichimoku_kijun": None,
+        "ichimoku_senkou_a": None,
+        "ichimoku_senkou_b": None,
+        "ichimoku_cloud_top": None,
+        "ichimoku_cloud_bottom": None,
+        "ichimoku_future_senkou_a": None,
+        "ichimoku_future_senkou_b": None,
+        "ichimoku_future_cloud_green": False,
+        "ichimoku_chikou_confirm": False,
+        "ichimoku_regime": "UNKNOWN",
+        "ichimoku_kijun_slope": None,
+    }
+    min_len = max(tenkan_period, kijun_period, senkou_b_period) + max(displacement, chikou_lookback)
+    if df.empty or len(df) < min_len:
+        return empty
+
+    high = df["high"]
+    low = df["low"]
+    close = df["close"]
+
+    tenkan = (high.rolling(tenkan_period).max() + low.rolling(tenkan_period).min()) / 2
+    kijun = (high.rolling(kijun_period).max() + low.rolling(kijun_period).min()) / 2
+    senkou_a_raw = (tenkan + kijun) / 2
+    senkou_b_raw = (high.rolling(senkou_b_period).max() + low.rolling(senkou_b_period).min()) / 2
+
+    # Values visible at the current bar were projected `displacement` bars ago.
+    senkou_a = senkou_a_raw.shift(displacement)
+    senkou_b = senkou_b_raw.shift(displacement)
+
+    cur_close = _last(close)
+    cur_a = _last(senkou_a)
+    cur_b = _last(senkou_b)
+    future_a = _last(senkou_a_raw)
+    future_b = _last(senkou_b_raw)
+    cloud_top = max(cur_a, cur_b) if cur_a is not None and cur_b is not None else None
+    cloud_bottom = min(cur_a, cur_b) if cur_a is not None and cur_b is not None else None
+
+    if cur_close is None or cloud_top is None or cloud_bottom is None:
+        regime = "UNKNOWN"
+    elif cur_close > cloud_top:
+        regime = "BULLISH"
+    elif cur_close < cloud_bottom:
+        regime = "BEARISH"
+    else:
+        regime = "NEUTRAL"
+
+    chikou_confirm = False
+    if len(close) > chikou_lookback:
+        past_close = float(close.iloc[-1 - chikou_lookback])
+        chikou_confirm = bool(cur_close is not None and cur_close > past_close)
+
+    kijun_slope = None
+    kijun_clean = kijun.dropna()
+    if len(kijun_clean) >= 6:
+        kijun_slope = float(kijun_clean.iloc[-1] - kijun_clean.iloc[-6])
+
+    return {
+        "ichimoku_tenkan": _last(tenkan),
+        "ichimoku_kijun": _last(kijun),
+        "ichimoku_senkou_a": cur_a,
+        "ichimoku_senkou_b": cur_b,
+        "ichimoku_cloud_top": cloud_top,
+        "ichimoku_cloud_bottom": cloud_bottom,
+        "ichimoku_future_senkou_a": future_a,
+        "ichimoku_future_senkou_b": future_b,
+        "ichimoku_future_cloud_green": bool(future_a is not None and future_b is not None and future_a >= future_b),
+        "ichimoku_chikou_confirm": chikou_confirm,
+        "ichimoku_regime": regime,
+        "ichimoku_kijun_slope": kijun_slope,
+    }
 
 
 def compute_support_resistance(df: pd.DataFrame, window: int = 20) -> dict:

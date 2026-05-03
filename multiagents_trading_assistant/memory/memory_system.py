@@ -121,18 +121,32 @@ class L1Memory:
 
     # ── Decisions ──
 
-    def get_recent_decisions(self, symbol: str = None, days: int = 7) -> list[dict]:
-        """Lấy decisions gần đây (trong n ngày)."""
-        cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
-        decisions = db.get_decisions(symbol=symbol, limit=100)
+    def get_recent_decisions(
+        self,
+        symbol: str = None,
+        days: int = 7,
+        as_of_date: str | None = None,
+    ) -> list[dict]:
+        """Lấy decisions gần đây (trong n ngày).
+
+        Args:
+            as_of_date: Ngày tham chiếu. None = live (dùng now()).
+                        Trong backtest, truyền ngày đang evaluate để tránh data leak.
+        """
+        # Anti-leak: compute window relative to as_of_date, not wall-clock now()
+        reference = datetime.strptime(as_of_date, "%Y-%m-%d") if as_of_date else datetime.now()
+        cutoff = (reference - timedelta(days=days)).strftime("%Y-%m-%d")
+        decisions = db.get_decisions(symbol=symbol, limit=100, as_of_date=as_of_date)
         return [d for d in decisions if d.get("date", "") >= cutoff]
 
-    def get_decision_streak(self, symbol: str) -> dict:
+    def get_decision_streak(self, symbol: str, as_of_date: str | None = None) -> dict:
+        """Tính streak CHỜ liên tiếp của 1 mã.
+
+        Args:
+            as_of_date: Nếu set, chỉ xét decisions tới ngày này (anti-leak).
         """
-        Tính streak CHỜ liên tiếp của 1 mã.
-        Dùng để phát hiện mã đã được phân tích nhiều ngày liên tiếp mà không có tín hiệu.
-        """
-        decisions = db.get_decisions(symbol=symbol, limit=20)
+        # Anti-leak: pass as_of_date so future decisions are excluded
+        decisions = db.get_decisions(symbol=symbol, limit=20, as_of_date=as_of_date)
         streak_cho = 0
         last_action = None
 
@@ -178,9 +192,14 @@ class L1Memory:
         cutoff  = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
         return [t for t in history if t.get("trade_date", "") >= cutoff]
 
-    def get_t3_status(self, symbol: str) -> bool:
-        """True nếu đã mua trong 2 ngày qua — T+2.5 (hàng về chiều T+2)."""
-        buys = db.get_buys_last_n_days(symbol, 2)
+    def get_t3_status(self, symbol: str, as_of_date: str | None = None) -> bool:
+        """True nếu đã mua trong 2 ngày qua — T+2.5 (hàng về chiều T+2).
+
+        Args:
+            as_of_date: Ngày tham chiếu. Trong backtest, truyền ngày đang evaluate.
+        """
+        # Anti-leak: pass as_of_date so future buys are excluded
+        buys = db.get_buys_last_n_days(symbol, 2, as_of_date=as_of_date)
         return len(buys) > 0
 
 
@@ -280,14 +299,16 @@ class L2Memory:
         query: str,
         symbol: str | None = None,
         n_results: int = 5,
+        as_of_date: str | None = None,
     ) -> list[dict]:
-        """
-        Tìm các decisions tương tự theo query text.
+        """Tìm các decisions tương tự theo query text.
 
         Args:
-            query:    Text mô tả situation hiện tại
-            symbol:   Filter theo mã (optional)
-            n_results: Số kết quả trả về
+            query:      Text mô tả situation hiện tại
+            symbol:     Filter theo mã (optional)
+            n_results:  Số kết quả trả về
+            as_of_date: Nếu set, chỉ trả về decisions có date <= as_of_date.
+                        Anti-leak: ngăn backtest đọc decisions từ tương lai.
 
         Returns:
             List dict với fields: id, document, metadata, distance
@@ -295,30 +316,40 @@ class L2Memory:
         if not self.available:
             return []
 
+        # ChromaDB $lte/$gte only support numeric values — cannot filter string dates natively.
+        # Use symbol-only filter in ChromaDB, then post-filter by date in Python.
         where = {"symbol": symbol} if symbol else None
 
+        # Fetch extra results to compensate for Python-side date post-filtering reduction
         try:
             count = self._collection.count()
             if count == 0:
                 return []
-            n_safe = min(n_results, count)
+            n_fetch = min(n_results * 4, count) if as_of_date else min(n_results, count)
             results = self._collection.query(
                 query_texts=[query],
-                n_results=n_safe,
+                n_results=n_fetch,
                 where=where,
             )
 
             output = []
             for i, doc_id in enumerate(results["ids"][0]):
+                meta = results["metadatas"][0][i]
+                # Anti-leak post-filter: YYYY-MM-DD lexicographic order == chronological order
+                doc_date = meta.get("date")
+                if as_of_date and (not doc_date or doc_date > as_of_date):
+                    continue  # exclude undated or future documents in backtest
                 output.append({
                     "id":       doc_id,
                     "document": results["documents"][0][i],
-                    "metadata": results["metadatas"][0][i],
+                    "metadata": meta,
                     "distance": results["distances"][0][i] if "distances" in results else None,
                 })
+                if len(output) >= n_results:
+                    break
             return output
         except Exception as e:
-            print(f"[memory_L2] Lỗi search: {e}")
+            print(f"[memory_L2] search error: {e}")
             return []
 
     def get_historical_actions(self, symbol: str, limit: int = 10) -> list[dict]:
@@ -381,16 +412,29 @@ class MemorySystem:
     def get_positions(self) -> list[dict]:
         return self.l1.get_positions()
 
-    def is_t3_blocked(self, symbol: str) -> bool:
-        """True nếu không được mua do T+2.5 (đã mua trong 2 ngày qua)."""
-        return self.l1.get_t3_status(symbol)
+    def is_t3_blocked(self, symbol: str, as_of_date: str | None = None) -> bool:
+        """True nếu không được mua do T+2.5 (đã mua trong 2 ngày qua).
 
-    def get_decision_history(self, symbol: str, days: int = 7) -> list[dict]:
-        return self.l1.get_recent_decisions(symbol, days)
+        Args:
+            as_of_date: Ngày tham chiếu. Trong backtest, truyền ngày đang evaluate.
+        """
+        return self.l1.get_t3_status(symbol, as_of_date=as_of_date)
 
-    def get_streak(self, symbol: str) -> int:
-        """Số ngày CHỜ liên tiếp của mã."""
-        return self.l1.get_decision_streak(symbol)["streak_cho"]
+    def get_decision_history(
+        self,
+        symbol: str,
+        days: int = 7,
+        as_of_date: str | None = None,
+    ) -> list[dict]:
+        return self.l1.get_recent_decisions(symbol, days, as_of_date=as_of_date)
+
+    def get_streak(self, symbol: str, as_of_date: str | None = None) -> int:
+        """Số ngày CHỜ liên tiếp của mã.
+
+        Args:
+            as_of_date: Nếu set, chỉ xét decisions tới ngày này (anti-leak).
+        """
+        return self.l1.get_decision_streak(symbol, as_of_date=as_of_date)["streak_cho"]
 
     # ── L2: ChromaDB ──
 
@@ -398,9 +442,19 @@ class MemorySystem:
         """Lưu pipeline state vào L2 (nếu ChromaDB available)."""
         return self.l2.save_decision(state)
 
-    def find_similar_setups(self, query: str, symbol: str = None, n: int = 3) -> list[dict]:
-        """Tìm các setup tương tự trong quá khứ (L2)."""
-        return self.l2.search_similar(query, symbol, n)
+    def find_similar_setups(
+        self,
+        query: str,
+        symbol: str | None = None,
+        n: int = 3,
+        as_of_date: str | None = None,
+    ) -> list[dict]:
+        """Tìm các setup tương tự trong quá khứ (L2).
+
+        Args:
+            as_of_date: Nếu set, chỉ trả về decisions có date <= as_of_date (anti-leak).
+        """
+        return self.l2.search_similar(query, symbol, n, as_of_date=as_of_date)
 
     # ── Compress (20:00 job) ──
 

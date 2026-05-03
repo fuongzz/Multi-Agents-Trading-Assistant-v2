@@ -41,12 +41,23 @@ def compute_metrics(trades: list[Trade], label: Optional[str] = None) -> dict:
     sum_losses = abs(sum(losses))   if losses else 0.0
     pf = round(sum_wins / sum_losses, 2) if sum_losses > 0 else float("inf")
 
-    # Tổng lợi nhuận cộng gộp (geometric, mỗi trade 3% NAV)
-    position_size = 0.03
+    # Dynamic position sizing: confluence ≥70 → 5% NAV, 55-69 → 3%, <55 but >0 → 2%, no review → 3%
     equity = 1.0
-    for p in pnls:
-        equity *= 1.0 + (p / 100.0) * position_size
+    pos_sizes: list[float] = []
+    for t in closed:
+        c = t.confluence_score
+        if c >= 70:
+            pos = 0.05
+        elif c >= 55:
+            pos = 0.03
+        elif c > 0:
+            pos = 0.02
+        else:
+            pos = 0.03  # baseline: no pipeline_review info
+        pos_sizes.append(pos)
+        equity *= 1.0 + (t.pnl_pct / 100.0) * pos
     total_return_pct = round((equity - 1.0) * 100, 2)
+    avg_position_pct = round(sum(pos_sizes) / len(pos_sizes) * 100, 1)
 
     return {
         "label":             label or "",
@@ -67,6 +78,7 @@ def compute_metrics(trades: list[Trade], label: Optional[str] = None) -> dict:
         "best_trade_pct":    round(max(pnls), 2),
         "worst_trade_pct":   round(min(pnls), 2),
         "total_return_pct":  total_return_pct,
+        "avg_position_pct":  avg_position_pct,
     }
 
 

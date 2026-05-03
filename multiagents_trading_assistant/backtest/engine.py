@@ -35,6 +35,11 @@ import numpy as np
 import pandas as pd
 
 from multiagents_trading_assistant.indicators import compute_indicators
+from multiagents_trading_assistant.setup_scoring import (
+    MF_STRICT_SETUPS as _MF_STRICT_SETUPS,
+    MF_COMPRESSION_SETUPS as _MF_COMPRESSION_SETUPS,
+    MF_REVERSAL_SETUPS as _MF_REVERSAL_SETUPS,
+)
 from multiagents_trading_assistant.agents.trade.money_flow_agent import (
     BLACKBOX_DEFAULTS,
     add_money_flow_features,
@@ -59,6 +64,11 @@ from multiagents_trading_assistant.screener.trade_screener import (
     detect_bullish_engulfing,
     detect_trend_pullback,
     detect_breakout_retest_entry,
+    # Ichimoku setups
+    detect_kumo_breakout,
+    detect_tk_cross,
+    detect_kijun_bounce,
+    detect_kumo_twist_entry,
 )
 from multiagents_trading_assistant.backtest.positions import Trade
 from multiagents_trading_assistant.backtest.pipeline_review import (
@@ -94,7 +104,34 @@ _STRATEGIES = [
     ("BREAKOUT_RETEST_ENTRY",  detect_breakout_retest_entry),
     ("BULLISH_ENGULFING",      detect_bullish_engulfing),
     ("PIN_BAR",                detect_pin_bar),
+    # Ichimoku setups
+    ("KUMO_BREAKOUT",          detect_kumo_breakout),
+    ("TK_CROSS",               detect_tk_cross),
+    ("KIJUN_BOUNCE",           detect_kijun_bounce),
+    ("KUMO_TWIST_ENTRY",       detect_kumo_twist_entry),
 ]
+
+SETUP_REGIME_REQUIREMENT = {
+    "BREAKOUT": ["UPTREND"],
+    "INSIDE_BAR": ["UPTREND"],
+    "MOMENTUM_SURGE": ["UPTREND"],
+    "FLAG_PENNANT": ["UPTREND"],
+    "GOLDEN_CROSS": ["UPTREND", "SIDEWAY"],
+    "DOUBLE_BOTTOM": ["SIDEWAY", "DOWNTREND"],
+    "RSI_BOUNCE": ["SIDEWAY", "DOWNTREND"],
+    "BB_SQUEEZE": ["SIDEWAY"],
+    "NR7": ["UPTREND", "SIDEWAY"],
+    "BULLISH_ENGULFING": ["UPTREND", "SIDEWAY", "DOWNTREND"],
+    "KUMO_BREAKOUT": ["UPTREND"],
+    "TK_CROSS": ["UPTREND"],
+    "KIJUN_BOUNCE": ["UPTREND"],
+    "KUMO_TWIST_ENTRY": ["UPTREND", "SIDEWAY"],
+}
+
+
+def _is_setup_allowed_in_regime(setup_type: str, ref_trend: str) -> bool:
+    allowed = SETUP_REGIME_REQUIREMENT.get(setup_type)
+    return allowed is None or ref_trend in allowed
 
 
 def _date_str(val) -> str:
@@ -188,9 +225,7 @@ def _prep_ta_money_flow_features(df: pd.DataFrame, params: Optional[dict] = None
     return feat.reset_index(drop=True)
 
 
-_MF_STRICT_SETUPS = {"BREAKOUT", "MOMENTUM_SURGE", "MACD_CROSSOVER"}
-_MF_COMPRESSION_SETUPS = {"NR7", "BB_SQUEEZE", "INSIDE_BAR", "FLAG_PENNANT"}
-_MF_REVERSAL_SETUPS = {"RETEST", "SPRING", "HAMMER", "RSI_BOUNCE", "DOUBLE_BOTTOM", "BULLISH_ENGULFING", "PIN_BAR", "BREAKOUT_RETEST_ENTRY", "TREND_PULLBACK"}
+# _MF_STRICT/COMPRESSION/REVERSAL_SETUPS imported from setup_scoring
 
 
 def _money_flow_entry_ok(row: pd.Series, min_score: int, setup_name: str) -> tuple[bool, list[str]]:
@@ -322,6 +357,37 @@ def _detect_reversal(
     return False, ""
 
 
+def _calc_cooldown(
+    trade: "Trade",
+    bar_idx: int,
+    cooldown_bars: int,
+    loss_streak_pause: int,
+    cur_streak: int,
+) -> tuple[int, int]:
+    """Tính cooldown_until và cur_loss_streak mới sau khi một lệnh đóng.
+
+    SL/TSL:         cooldown đầy đủ (reassess sau thua)
+    Profitable exit: cooldown / 2 (thở ngắn, không phải reassess)
+    Loss streak:    sau N lần lỗ liên tiếp → thêm cooldown × 2
+    """
+    is_loss = (trade.pnl_pct or 0.0) < 0.0
+    new_streak = cur_streak + 1 if is_loss else 0
+
+    if cooldown_bars <= 0:
+        return 0, new_streak
+
+    # SL/TSL: stop-out surprise → full cooldown. SAFETY_CAP: zombie exit → full cooldown.
+    # Profitable reversals: lighter cooldown (half), voluntary, price-action confirmed.
+    hard_exit = trade.exit_reason in {"SL", "TSL", "SAFETY_CAP"}
+    base = cooldown_bars if hard_exit else max(0, cooldown_bars // 2)
+
+    streak_bonus = 0
+    if loss_streak_pause > 0 and new_streak >= loss_streak_pause:
+        streak_bonus = cooldown_bars * 2
+
+    return bar_idx + base + streak_bonus, new_streak
+
+
 def run_symbol(
     symbol: str,
     df: pd.DataFrame,
@@ -336,6 +402,10 @@ def run_symbol(
     money_flow_params: Optional[dict] = None,
     pipeline_review: bool = False,
     pipeline_review_stats: Optional[dict] = None,
+    pending_entry: bool = False,
+    pending_bars: int = 3,
+    cooldown_bars: int = 0,
+    loss_streak_pause: int = 0,
 ) -> list[Trade]:
     """Walk-forward backtest cho một mã cổ phiếu.
 
@@ -347,7 +417,12 @@ def run_symbol(
         rr_ratio:  Tỷ lệ dùng tính initial_target tham chiếu (không phải hard TP).
         from_date: Bắt đầu tính tín hiệu (YYYY-MM-DD). Lookback vẫn tích lũy trước ngày này.
         to_date:   Kết thúc tính tín hiệu.
-        setups:    Lọc theo tên setup (None = toàn bộ 18 setups).
+        setups:              Lọc theo tên setup (None = toàn bộ 18 setups).
+        cooldown_bars:       Số bar chờ sau mỗi exit trước khi tìm signal mới (0 = tắt).
+                             SL/TSL exit → cooldown_bars đầy đủ.
+                             Profitable exit → cooldown_bars // 2 (min 0).
+        loss_streak_pause:   Sau N lần lỗ liên tiếp, tự động kéo dài cooldown thêm
+                             cooldown_bars × 2. 0 = tắt.
 
     Returns:
         Danh sách Trade đã đóng.
@@ -379,6 +454,10 @@ def run_symbol(
     dynamic_sl: float = 0.0
     peak_close: float = 0.0
 
+    # Cooldown / loss-streak state
+    cooldown_until: int = 0   # bar index không được vào lệnh (i < cooldown_until)
+    cur_loss_streak: int = 0  # số lần lỗ liên tiếp gần nhất
+
     for i in range(lookback, len(df)):
         bar    = df.iloc[i]
         date   = _date_str(bar["date"])
@@ -408,6 +487,8 @@ def run_symbol(
                 exit_px = min(dynamic_sl, op)
                 open_pos.close(date, exit_px, reason, bars_held)
                 trades.append(open_pos)
+                cooldown_until, cur_loss_streak = _calc_cooldown(
+                    open_pos, i, cooldown_bars, loss_streak_pause, cur_loss_streak)
                 open_pos = None
 
             # Exit 2: Reversal signal (chỉ khi đang có lãi ≥ 5%)
@@ -417,16 +498,22 @@ def run_symbol(
                 if rev:
                     open_pos.close(date, cl, f"REVERSAL_{rev_reason}", bars_held)
                     trades.append(open_pos)
+                    cooldown_until, cur_loss_streak = _calc_cooldown(
+                        open_pos, i, cooldown_bars, loss_streak_pause, cur_loss_streak)
                     open_pos = None
 
             # Exit 3: Safety cap — absolute backstop
             if open_pos is not None and bars_held >= _SAFETY_CAP:
                 open_pos.close(date, cl, "SAFETY_CAP", bars_held)
                 trades.append(open_pos)
+                cooldown_until, cur_loss_streak = _calc_cooldown(
+                    open_pos, i, cooldown_bars, loss_streak_pause, cur_loss_streak)
                 open_pos = None
 
         # ── 2. Signal detection ─────────────────────────────────────────────
         if open_pos is not None:
+            continue
+        if cooldown_bars > 0 and i < cooldown_until:
             continue
         if from_ts and bar_ts < from_ts:
             continue
@@ -443,6 +530,9 @@ def run_symbol(
         mf_row = mf_feat.iloc[i] if mf_feat is not None else None
 
         for setup_name, detect_fn in strategies:
+            ref_trend = str(ind.get("ma_trend") or "SIDEWAY")
+            if not _is_setup_allowed_in_regime(setup_name, ref_trend):
+                continue
             passed, reasons = detect_fn(window, ind)
             if not passed:
                 continue
@@ -455,14 +545,38 @@ def run_symbol(
             next_bar    = df.iloc[i + 1]
             entry_price = float(next_bar["open"])
             entry_date  = _date_str(next_bar["date"])
+            entry_bar_pos = i + 1
+            fill_ind = ind
+            fill_mf_row = mf_row
+            fill_reasons = list(reasons)
+
+            if pending_entry:
+                fill = _resolve_pending_entry(
+                    df=df,
+                    signal_idx=i,
+                    setup_name=setup_name,
+                    ind=ind,
+                    max_wait_bars=pending_bars,
+                    to_ts=to_ts,
+                )
+                if fill is None:
+                    continue
+                entry_bar_pos, entry_price, entry_date, pending_reason = fill
+                fill_reasons.append(pending_reason)
+                if entry_bar_pos > i + 1:
+                    fill_window = df.iloc[:entry_bar_pos]
+                    fill_ind = compute_indicators(fill_window) or ind
+                    if mf_feat is not None:
+                        fill_mf_row = mf_feat.iloc[entry_bar_pos - 1]
+
             if to_ts and pd.Timestamp(entry_date) > to_ts:
                 continue
 
             if pd.isna(entry_price) or entry_price <= 0:
                 continue
 
-            sl  = _compute_initial_sl(entry_price, ind)
-            atr = ind.get("atr") or 0.0
+            sl  = _compute_initial_sl(entry_price, fill_ind)
+            atr = fill_ind.get("atr") or 0.0
 
             if sl <= 0 or sl >= entry_price:
                 continue
@@ -470,11 +584,12 @@ def run_symbol(
             # initial_target = tham chiếu R:R — không dùng làm hard exit
             initial_target = round(entry_price + rr_ratio * (entry_price - sl), 0)
 
+            trade_confluence = 0.0
             if pipeline_review:
                 review = _review_pipeline_entry(
                     setup_name=setup_name,
-                    ind=ind,
-                    mf_row=mf_row,
+                    ind=fill_ind,
+                    mf_row=fill_mf_row,
                     entry_price=entry_price,
                     stop_loss=sl,
                     rr_ratio=rr_ratio,
@@ -482,7 +597,8 @@ def run_symbol(
                 _record_pipeline_review_stats(pipeline_review_stats, review)
                 if not review.approved:
                     continue
-                reasons = [*reasons, *review.reasons]
+                fill_reasons = [*fill_reasons, *review.reasons]
+                trade_confluence = review.confluence_score
 
             open_pos = Trade(
                 symbol=symbol,
@@ -493,9 +609,10 @@ def run_symbol(
                 stop_loss=sl,
                 take_profit=initial_target,  # lưu để tham chiếu trong metrics
                 entry_atr=atr,
-                reasons=reasons,
+                confluence_score=trade_confluence,
+                reasons=fill_reasons,
             )
-            entry_bar_idx = i + 1
+            entry_bar_idx = entry_bar_pos
             # Reset trailing state cho lệnh mới
             dynamic_sl = sl
             peak_close = entry_price
@@ -509,6 +626,151 @@ def run_symbol(
         trades.append(open_pos)
 
     return trades
+
+
+def _resolve_pending_entry(
+    *,
+    df: pd.DataFrame,
+    signal_idx: int,
+    setup_name: str,
+    ind: dict,
+    max_wait_bars: int,
+    to_ts: pd.Timestamp | None,
+) -> tuple[int, float, str, str] | None:
+    """Resolve a recommendation-only signal into a pending entry fill."""
+    if signal_idx + 1 >= len(df):
+        return None
+
+    signal_close = float(df.iloc[signal_idx]["close"])
+    zone_low, zone_high = _pending_entry_zone(setup_name, signal_close, ind)
+    if zone_low <= 0 or zone_high <= 0 or zone_low > zone_high:
+        return None
+
+    expiry = min(len(df) - 1, signal_idx + max(1, max_wait_bars))
+    for j in range(signal_idx + 1, expiry + 1):
+        bar = df.iloc[j]
+        entry_date = _date_str(bar["date"])
+        if to_ts and pd.Timestamp(entry_date) > to_ts:
+            return None
+
+        op = float(bar["open"])
+        hi = float(bar["high"])
+        lo = float(bar["low"])
+        cl = float(bar["close"])
+
+        # Avoid stale recommendations that break down before filling.
+        if cl < zone_low * 0.97:
+            return None
+        if op > zone_high * 1.03 and lo > zone_high:
+            return None
+
+        if lo <= zone_high and hi >= zone_low:
+            if zone_low <= op <= zone_high:
+                fill_price = op
+            elif op < zone_low:
+                fill_price = zone_low
+            else:
+                fill_price = zone_high
+            reason = (
+                f"pending_entry_fill:{setup_name} "
+                f"zone={zone_low:.0f}-{zone_high:.0f} wait={j - signal_idx}d"
+            )
+            return j, round(float(fill_price), 0), entry_date, reason
+
+    return None
+
+
+def _pending_entry_zone(setup_name: str, signal_close: float, ind: dict) -> tuple[float, float]:
+    """Approximate live entry_zone deterministically for backtests."""
+    atr = float(ind.get("atr") or 0.0)
+    ma20 = ind.get("ma20")
+    supports = ind.get("support_levels") or []
+    resistances = ind.get("resistance_levels") or []
+
+    if setup_name in {"BREAKOUT", "MOMENTUM_SURGE", "MACD_CROSSOVER"}:
+        return signal_close, signal_close * 1.01
+    if setup_name in {"KUMO_BREAKOUT", "TK_CROSS"}:
+        cloud_top = ind.get("ichimoku_cloud_top") or signal_close
+        level = max(signal_close, float(cloud_top))
+        return level, level * 1.01
+    if setup_name == "KIJUN_BOUNCE" and ind.get("ichimoku_kijun"):
+        level = float(ind["ichimoku_kijun"])
+        return level * 0.99, level * 1.01
+    if setup_name == "KUMO_TWIST_ENTRY":
+        trigger = max(
+            float(ind.get("ichimoku_tenkan") or signal_close),
+            float(ind.get("ichimoku_kijun") or signal_close),
+        )
+        return trigger * 0.995, trigger * 1.015
+    if setup_name in {"BB_SQUEEZE", "INSIDE_BAR", "NR7", "FLAG_PENNANT"}:
+        return signal_close * 0.995, signal_close * 1.01
+    if setup_name in {"RETEST", "TREND_PULLBACK", "BREAKOUT_RETEST_ENTRY"}:
+        level = float(supports[0]) if supports else signal_close
+        return level * 0.99, level * 1.01
+    if setup_name == "MA_PULLBACK" and ma20:
+        level = float(ma20)
+        return level * 0.99, level * 1.01
+    if setup_name in {"DOUBLE_BOTTOM", "SPRING", "HAMMER", "RSI_BOUNCE", "BULLISH_ENGULFING", "PIN_BAR"}:
+        low = signal_close * 0.99
+        if atr > 0:
+            low = min(low, signal_close - 0.5 * atr)
+        high = signal_close * 1.01
+        if resistances:
+            high = min(high, float(resistances[0]) * 0.97)
+        return low, max(low, high)
+    return signal_close * 0.99, signal_close * 1.01
+
+
+def apply_portfolio_filter(
+    all_trades: list["Trade"],
+    max_positions: int = 0,
+) -> list["Trade"]:
+    """Lọc trades theo giới hạn vị thế đồng thời (portfolio cap).
+
+    Chạy chronologically: mỗi ngày, nếu portfolio đầy (>= max_positions) và
+    symbol chưa có vị thế mở → bỏ qua signal, nhường slot cho signal tốt hơn đã vào.
+    Signal với confluence cao hơn được ưu tiên khi cùng ngày.
+
+    Args:
+        all_trades:    Toàn bộ trades từ run_universe (chưa lọc portfolio).
+        max_positions: Số vị thế đồng thời tối đa (0 = không giới hạn).
+
+    Returns:
+        Danh sách trades đã qua lọc portfolio.
+    """
+    if max_positions <= 0:
+        return all_trades
+
+    # Sort by entry_date ASC, confluence_score DESC (ưu tiên signal mạnh hơn cùng ngày)
+    sorted_trades = sorted(
+        all_trades,
+        key=lambda t: (t.entry_date, -(t.confluence_score or 0.0)),
+    )
+
+    accepted: list["Trade"] = []
+    open_positions: dict[str, "Trade"] = {}  # symbol → open trade đang held
+
+    for trade in sorted_trades:
+        # Đóng các vị thế đã exit trước ngày entry của trade này
+        closed_syms = [
+            sym for sym, t in open_positions.items()
+            if t.exit_date is not None and t.exit_date <= trade.entry_date
+        ]
+        for sym in closed_syms:
+            del open_positions[sym]
+
+        # Bỏ qua nếu symbol đang có vị thế mở
+        if trade.symbol in open_positions:
+            continue
+
+        # Bỏ qua nếu portfolio đầy
+        if len(open_positions) >= max_positions:
+            continue
+
+        accepted.append(trade)
+        open_positions[trade.symbol] = trade
+
+    return accepted
 
 
 def run_universe(
@@ -525,6 +787,10 @@ def run_universe(
     money_flow_params: Optional[dict] = None,
     pipeline_review: bool = False,
     pipeline_review_stats: Optional[dict] = None,
+    pending_entry: bool = False,
+    pending_bars: int = 3,
+    cooldown_bars: int = 0,
+    loss_streak_pause: int = 0,
 ) -> dict[str, list[Trade]]:
     """Walk-forward backtest cho nhiều mã, chạy song song.
 
@@ -543,6 +809,10 @@ def run_universe(
                 money_flow_params=money_flow_params,
                 pipeline_review=pipeline_review,
                 pipeline_review_stats=local_stats,
+                pending_entry=pending_entry,
+                pending_bars=pending_bars,
+                cooldown_bars=cooldown_bars,
+                loss_streak_pause=loss_streak_pause,
             )
             return sym, t, local_stats
         except Exception as e:

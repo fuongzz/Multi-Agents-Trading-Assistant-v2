@@ -15,6 +15,7 @@ Setup quality derived:
 import importlib.metadata  # noqa: F401
 
 from multiagents_trading_assistant.services.llm_service import run_agent_lite
+from multiagents_trading_assistant.setup_scoring import score_setup
 
 
 _W_TECH, _W_FLOW, _W_MONEY, _W_SENT = 0.40, 0.20, 0.25, 0.15
@@ -96,9 +97,17 @@ def run(
     sentiment_analysis: dict,
     setup_type: str,
     money_flow_analysis: dict | None = None,
+    market_context: dict | None = None,
 ) -> dict:
     """Tính confluence_score 0-100 + gọi LLM viết drivers/blockers."""
-    tech_score = float(technical_analysis.get("confluence_score") or 0) * 10.0
+    reference_trend = (market_context or {}).get("reference_trend") or (market_context or {}).get("trend")
+    setup_scoring = score_setup(
+        setup_type,
+        technical_analysis,
+        money_flow=money_flow_analysis or {},
+        reference_trend=reference_trend,
+    )
+    tech_score = float(setup_scoring.get("score") or 0.0)
     flow_score = _flow_points(foreign_flow_analysis)
     money_score = _money_flow_points(money_flow_analysis or {})
     sent_score = float(sentiment_analysis.get("sentiment_score") or 50)
@@ -122,7 +131,8 @@ def run(
 Confluence score: {confluence}/100 ({quality})
 
 Thành phần:
-- Technical ({tech_score:.0f}/100): {technical_analysis.get('technical_summary', '')}
+- Technical setup score ({tech_score:.0f}/100): {technical_analysis.get('technical_summary', '')}
+  Setup family {setup_scoring.get('setup_family')}, dimensions {setup_scoring.get('dimensions')}
   Trend {technical_analysis.get('ma_trend')}, RSI {technical_analysis.get('rsi_signal')}, MACD {technical_analysis.get('macd_signal')}
 - Flow ({flow_score:.0f}/100): {foreign_flow_analysis.get('foreign_summary', '')}
   Room {foreign_flow_analysis.get('room_status')}, trend {foreign_flow_analysis.get('flow_trend')}
@@ -149,6 +159,9 @@ Trả JSON theo schema."""
     return {
         "confluence_score": confluence,
         "setup_quality": quality,
+        "technical_setup_score": round(tech_score, 1),
+        "technical_setup_dimensions": setup_scoring.get("dimensions", {}),
+        "technical_setup_family": setup_scoring.get("setup_family"),
         "tech_score": round(tech_score, 1),
         "flow_score": round(flow_score, 1),
         "money_flow_score": round(money_score, 1),

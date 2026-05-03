@@ -181,6 +181,16 @@ def _load_cache(key: str) -> list[dict] | None:
     return None
 
 
+def _load_cache_with_ttl(key: str, ttl_seconds: int | None = None) -> list[dict] | None:
+    """Load cache with optional TTL. None means cache never expires."""
+    p = _cache_path(key)
+    if ttl_seconds is not None and p.exists():
+        age = time.time() - p.stat().st_mtime
+        if age > ttl_seconds:
+            return None
+    return _load_cache(key)
+
+
 def _save_cache(key: str, records: list[dict]) -> None:
     try:
         _cache_path(key).write_text(
@@ -227,6 +237,28 @@ def _normalize_df(df: pd.DataFrame, n_days: int) -> pd.DataFrame:
     df     = df[cols].copy()
     df     = df.tail(n_days).reset_index(drop=True)
     return df
+
+
+def _normalize_history_df(df: pd.DataFrame, start: str, end: str) -> pd.DataFrame:
+    """Chuẩn hóa OHLCV theo khoảng ngày tuyệt đối."""
+    if df is None or df.empty:
+        return pd.DataFrame()
+    df = df.rename(columns={"time": "date", "ticker": "symbol"})
+    needed = ["date", "open", "high", "low", "close", "volume"]
+    cols = [c for c in needed if c in df.columns]
+    df = df[cols].copy()
+    if "date" not in df.columns:
+        return pd.DataFrame()
+    df["date"] = (
+        pd.to_datetime(df["date"], utc=True, errors="coerce")
+        .dt.tz_convert("Asia/Ho_Chi_Minh")
+        .dt.tz_localize(None)
+        .dt.normalize()
+    )
+    start_ts = pd.Timestamp(start)
+    end_ts = pd.Timestamp(end)
+    df = df[(df["date"] >= start_ts) & (df["date"] <= end_ts)]
+    return df.sort_values("date").reset_index(drop=True)
 
 
 def _fetch_single(symbol: str, n_days: int) -> pd.DataFrame:
@@ -279,9 +311,100 @@ def _fetch_single(symbol: str, n_days: int) -> pd.DataFrame:
     return pd.DataFrame()
 
 
+def _fetch_history(symbol: str, start: str, end: str, resolution: str = "1D") -> pd.DataFrame:
+    """
+    Lấy OHLCV theo khoảng ngày tuyệt đối. DNSE trước, VCI nếu lỗi, KBS nếu VCI cũng lỗi.
+    """
+    # ── DNSE (primary) ──
+    try:
+        client = _get_dnse_client()
+        if client is not None:
+            from_ts = _to_unix_ts(start)
+            to_ts = _to_unix_ts(end) + 86400  # include end date
+            df = client.get_ohlcv(
+                symbol,
+                from_ts,
+                to_ts,
+                resolution=resolution,
+                max_pages=100,
+            )
+            df = _normalize_history_df(df, start, end)
+            if df is not None and not df.empty:
+                print(f"[fetcher] DNSE hist ✓ {symbol}: {len(df)} nến")
+                return df
+            print(f"[fetcher] DNSE hist trống {symbol} — thử VCI...")
+    except Exception as e:
+        print(f"[fetcher] DNSE hist ✗ {symbol}: {e} — thử VCI...")
+
+    # ── VCI fallback ──
+    try:
+        _throttle()
+        df = _get_vci_quote_class()(symbol).history(start=start, end=end, interval=resolution)
+        df = _normalize_history_df(df, start, end)
+        if df is not None and not df.empty:
+            print(f"[fetcher] VCI hist ✓ {symbol}: {len(df)} nến")
+            return df
+    except Exception as e:
+        print(f"[fetcher] VCI hist ✗ {symbol}: {e} — thử KBS...")
+
+    # ── KBS fallback ──
+    try:
+        _throttle()
+        df = _get_kbs_quote_class()(symbol=symbol, source="KBS").history(
+            start=start,
+            end=end,
+            interval=resolution,
+        )
+        df = _normalize_history_df(df, start, end)
+        if df is not None and not df.empty:
+            print(f"[fetcher] KBS hist ✓ {symbol}: {len(df)} nến")
+            return df
+    except Exception as e:
+        print(f"[fetcher] KBS hist ✗ {symbol}: {e}")
+
+    print(f"[fetcher] Không lấy được history {symbol} {start}→{end}")
+    return pd.DataFrame()
+
+
 # ──────────────────────────────────────────────
 # Public API
 # ──────────────────────────────────────────────
+
+def get_ohlcv_history(
+    symbol: str,
+    start: str,
+    end: str | None = None,
+    resolution: str = "1D",
+) -> pd.DataFrame:
+    """
+    Lấy OHLCV theo khoảng ngày tuyệt đối.
+
+    Args:
+        symbol: Mã cổ phiếu, VD "VCB"
+        start: Ngày bắt đầu YYYY-MM-DD
+        end: Ngày kết thúc YYYY-MM-DD. None = hôm nay.
+        resolution: Khung thời gian DNSE/vnstock, mặc định "1D"
+
+    Returns:
+        DataFrame với columns [date, open, high, low, close, volume]
+    """
+    symbol = symbol.upper().strip()
+    end = end or _TODAY
+    key = f"{symbol}_{start}_{end}_{resolution}_hist"
+
+    end_date = datetime.strptime(end, "%Y-%m-%d").date()
+    today = _date.today()
+    ttl = None if end_date < today else 4 * 60 * 60
+    cached = _load_cache_with_ttl(key, ttl_seconds=ttl)
+    if cached is not None:
+        print(f"[fetcher] Cache hist ✓ {symbol}")
+        return _records_to_df(cached)
+
+    df = _fetch_history(symbol, start, end, resolution=resolution)
+    if not df.empty:
+        _save_cache(key, _df_to_records(df))
+    return df
+
 
 def get_ohlcv(symbol: str, n_days: int = 200) -> pd.DataFrame:
     """

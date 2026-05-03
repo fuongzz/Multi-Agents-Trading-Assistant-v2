@@ -27,6 +27,8 @@ def retrieve_trade_context(
     setup_type: str,
     ma_trend: str,
     confluence_score: float,
+    as_of_date: str | None = None,
+    backtest_mode: bool = False,
 ) -> dict:
     """Truy xuất ngữ cảnh lịch sử nội bộ trước khi trader_trade ra quyết định.
 
@@ -35,14 +37,22 @@ def retrieve_trade_context(
       2. similar_setups    — L2 ChromaDB: vector search setup tương tự
       3. position_status   — L1 SQLite: vị thế / T+2.5 block
 
+    Args:
+        as_of_date:    Ngày tham chiếu (YYYY-MM-DD). Trong backtest, bắt buộc truyền
+                       ngày đang evaluate. None = live mode (không filter).
+        backtest_mode: True = bật strict date filtering trên tất cả các nguồn.
+                       Khi False, as_of_date vẫn được dùng để tính cửa sổ thời gian
+                       nhưng không block nguồn không có timestamp.
+
     Hoàn toàn safe — không raise exception kể cả khi DB trống.
     """
     mem = get_memory()
     ctx: dict = {}
 
     # ── Part 1: L1 Recent decisions (7 ngày) ──
+    # Anti-leak: as_of_date shifts the window so "recent" = 7 days before candle date
     try:
-        recent = mem.get_decision_history(symbol, days=7)
+        recent = mem.get_decision_history(symbol, days=7, as_of_date=as_of_date)
         ctx["recent_decisions"] = [
             {
                 "date":            d.get("date"),
@@ -56,13 +66,14 @@ def retrieve_trade_context(
             }
             for d in recent
         ]
-        ctx["cho_streak"] = mem.get_streak(symbol)
+        ctx["cho_streak"] = mem.get_streak(symbol, as_of_date=as_of_date)
     except Exception as e:
         print(f"[memory_service] L1 retrieve fail: {e}")
         ctx["recent_decisions"] = []
         ctx["cho_streak"] = 0
 
     # ── Part 2: L2 ChromaDB similar setups ──
+    # Anti-leak: as_of_date adds $lte filter so future decisions are excluded
     try:
         if confluence_score >= 70:
             conf_band = "HIGH confluence STRONG"
@@ -76,8 +87,10 @@ def retrieve_trade_context(
             f"Score {int(confluence_score)}"
         )
 
-        same_symbol  = mem.find_similar_setups(query, symbol=symbol, n=2)
-        cross_market = mem.find_similar_setups(query, symbol=None,   n=3)
+        same_symbol  = mem.find_similar_setups(query, symbol=symbol, n=2,
+                                                as_of_date=as_of_date)
+        cross_market = mem.find_similar_setups(query, symbol=None,   n=3,
+                                                as_of_date=as_of_date)
 
         seen_ids     = {r["id"] for r in same_symbol}
         cross_unique = [r for r in cross_market if r["id"] not in seen_ids]
@@ -90,21 +103,28 @@ def retrieve_trade_context(
         ctx["l2_available"]   = False
 
     # ── Part 3: Position / T+2.5 status ──
+    # Anti-leak: as_of_date passed to T+2.5 check so future buys are excluded
     try:
-        ctx["has_position"] = mem.has_position(symbol)
-        ctx["t3_blocked"]   = mem.is_t3_blocked(symbol)
-        if ctx["has_position"]:
-            pos = mem.l1.get_position(symbol)
-            ctx["current_position"] = {
-                "entry_price": pos.get("entry_price"),
-                "entry_date":  pos.get("entry_date"),
-                "strategy":    pos.get("strategy"),
-                "sl":          pos.get("sl"),
-                "tp":          pos.get("tp"),
-                "nav_pct":     pos.get("nav_pct"),
-            }
-        else:
+        if backtest_mode:
+            # No dated position snapshot is available here. Reading live portfolio
+            # state during historical replay would leak today's holdings.
+            ctx["has_position"] = False
             ctx["current_position"] = None
+        else:
+            ctx["has_position"] = mem.has_position(symbol)
+            if ctx["has_position"]:
+                pos = mem.l1.get_position(symbol)
+                ctx["current_position"] = {
+                    "entry_price": pos.get("entry_price"),
+                    "entry_date":  pos.get("entry_date"),
+                    "strategy":    pos.get("strategy"),
+                    "sl":          pos.get("sl"),
+                    "tp":          pos.get("tp"),
+                    "nav_pct":     pos.get("nav_pct"),
+                }
+            else:
+                ctx["current_position"] = None
+        ctx["t3_blocked"]   = mem.is_t3_blocked(symbol, as_of_date=as_of_date)
     except Exception as e:
         print(f"[memory_service] position check fail: {e}")
         ctx["has_position"]     = False
@@ -118,12 +138,24 @@ def retrieve_trade_context(
 # RAG External: Vietstock Knowledge Base
 # ──────────────────────────────────────────────
 
-def retrieve_knowledge(symbol: str, date: str) -> dict:
+def retrieve_knowledge(
+    symbol: str,
+    date: str,
+    as_of_date: str | None = None,
+    backtest_mode: bool = False,
+) -> dict:
     """Truy xuất external knowledge từ Vietstock Knowledge Base.
 
-    Gồm 2 phần:
+    Gồm 3 phần:
       1. fundamental_summary — vietstock_reports: BCTC, nghị quyết, giải trình
       2. historical_stats    — vietstock_stats: insight chu kỳ, xác suất
+      3. news_summary        — news_articles: tin tức giới hạn theo ngày công bố
+
+    Args:
+        as_of_date:    Ngày tham chiếu. Trong backtest, phải truyền để lọc BCTC.
+        backtest_mode: True = chỉ trả về báo cáo có published_at <= as_of_date.
+                       Báo cáo không có published_at bị loại (unsafe, no timestamp).
+                       Stats luôn được trả về (timeless data, whitelisted).
 
     Trả về "" cho từng phần nếu collection trống (cold start graceful).
     Không raise exception.
@@ -131,14 +163,18 @@ def retrieve_knowledge(symbol: str, date: str) -> dict:
     from multiagents_trading_assistant.memory.knowledge_base import get_knowledge_base
 
     kb = get_knowledge_base()
-    result = {"fundamental_summary": "", "historical_stats": ""}
+    result = {"fundamental_summary": "", "historical_stats": "", "news_summary": ""}
 
     # ── Báo cáo tài chính / nghị quyết ──
+    # Anti-leak: in backtest_mode, only reports with published_at <= as_of_date are returned.
+    # Reports without published_at are excluded — no timestamp = unsafe for backtest.
     try:
         docs = kb.search_reports(
             symbol=symbol,
             query=f"Sức khỏe tài chính lợi nhuận nợ xấu rủi ro doanh nghiệp {symbol}",
             n=3,
+            as_of_date=as_of_date,
+            backtest_mode=backtest_mode,
         )
         if docs:
             result["fundamental_summary"] = " | ".join(d.strip() for d in docs if d.strip())
@@ -146,6 +182,7 @@ def retrieve_knowledge(symbol: str, date: str) -> dict:
         print(f"[memory_service] knowledge reports fail ({symbol}): {e}")
 
     # ── Thống kê lịch sử / chu kỳ ──
+    # Stats are timeless (10-year summaries, no event date) — whitelisted for backtest.
     try:
         month = int(date[5:7]) if len(date) >= 7 else 0
         month_str = f"tháng {month}" if month else ""
@@ -153,11 +190,31 @@ def retrieve_knowledge(symbol: str, date: str) -> dict:
             symbol=symbol,
             query=f"Xác suất tăng giá {symbol} {month_str} chu kỳ seasonality lịch sử",
             n=2,
+            as_of_date=as_of_date,
+            backtest_mode=backtest_mode,
         )
         if docs:
             result["historical_stats"] = " | ".join(d.strip() for d in docs if d.strip())
     except Exception as e:
         print(f"[memory_service] knowledge stats fail ({symbol}): {e}")
+
+    # ── Tin tức gần đây ──
+    # Anti-leak: in backtest_mode, cap news publication date at as_of_date.
+    try:
+        news = kb.search_news(
+            symbol=symbol,
+            query=f"tin tức rủi ro lợi nhuận lãnh đạo cổ tức giao dịch {symbol}",
+            n=3,
+            date_to=as_of_date if backtest_mode else None,
+        )
+        if news:
+            result["news_summary"] = " | ".join(
+                f"{item.get('date', '?')}: {item.get('text', '').strip()}"
+                for item in news
+                if item.get("text", "").strip()
+            )
+    except Exception as e:
+        print(f"[memory_service] knowledge news fail ({symbol}): {e}")
 
     return result
 

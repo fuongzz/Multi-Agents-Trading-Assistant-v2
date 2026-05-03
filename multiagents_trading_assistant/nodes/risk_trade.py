@@ -15,13 +15,18 @@ Hard rules VN:
 KHÔNG dùng LLM.
 """
 
+import os
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
 
 from multiagents_trading_assistant import database as db
+from multiagents_trading_assistant.setup_scoring import MIN_CONFLUENCE_BY_REGIME as _MIN_CONFLUENCE_BY_REGIME
 
 
 _VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
+
+# Số vị thế đồng thời tối đa — cấu hình qua env MAX_PORTFOLIO_POSITIONS
+_MAX_PORTFOLIO_POSITIONS = int(os.getenv("MAX_PORTFOLIO_POSITIONS", "5"))
 
 # R:R tối thiểu — 1.5 phù hợp VN (biên ±7%, thanh khoản mỏng)
 _MIN_RR = 1.5
@@ -44,8 +49,6 @@ _POLICY_LARGE_CAPS = {
 _MIN_LIQUIDITY_VOL = 200_000  # CP/ngày
 _BUY_ACTIONS = {"MUA", "GIA_TĂNG"}
 _POSITION_ACTIONS = {"GIỮ", "GIA_TĂNG", "GIẢM", "BÁN"}
-
-
 def _now_vn() -> time:
     return datetime.now(tz=_VN_TZ).time()
 
@@ -86,8 +89,9 @@ def check(state: dict) -> dict:
     flow   = state.get("foreign_flow_analysis", {})
     synth  = state.get("synthesis", {})
 
-    action   = trader.get("action", "CHỜ")
-    original = action
+    action     = trader.get("action", "CHỜ")
+    original   = action
+    confluence = float(synth.get("confluence_score") or 0.0)
     warnings: list[str] = []
     sizing = 1.0
     adjusted_position_pct = None  # set nếu max-loss rule cắt giảm position
@@ -132,6 +136,43 @@ def check(state: dict) -> dict:
     if vni_chg is not None and vni_chg < -3.0:
         return _override(action, "CHỜ", f"VN-Index {vni_chg:.1f}% — circuit breaker", warnings, 0.0)
 
+    # Rule 1c: Portfolio cap — không mua thêm khi đã đủ vị thế mở
+    if action in _BUY_ACTIONS:
+        try:
+            open_count = len(db.get_all_positions())
+            if open_count >= _MAX_PORTFOLIO_POSITIONS:
+                if confluence < 75.0:
+                    return _override(
+                        action, "CHỜ",
+                        f"Portfolio đầy ({open_count}/{_MAX_PORTFOLIO_POSITIONS} vị thế) — cần confluence ≥75 để override",
+                        warnings, 0.0,
+                    )
+                warnings.append(f"Portfolio tại ngưỡng ({open_count}/{_MAX_PORTFOLIO_POSITIONS}) — high-conviction override, sizing ×0.5")
+                sizing *= 0.5
+            elif open_count >= _MAX_PORTFOLIO_POSITIONS - 1:
+                if confluence < 65.0:
+                    return _override(
+                        action, "CHỜ",
+                        f"Portfolio gần đầy ({open_count}/{_MAX_PORTFOLIO_POSITIONS}) — cần confluence ≥65",
+                        warnings, 0.0,
+                    )
+        except Exception as e:
+            print(f"[risk_trade] portfolio cap check skipped: {e}")
+
+    # Rule 1b: Dynamic confluence threshold theo regime
+    if action in _BUY_ACTIONS:
+        reference_trend = mkt.get("reference_trend") or mkt.get("trend") or "SIDEWAY"
+        min_confluence = _MIN_CONFLUENCE_BY_REGIME.get(reference_trend, 62.0)
+        if confluence < min_confluence:
+            new_action = "GIỮ" if action == "GIA_TĂNG" and has_position else "CHỜ"
+            return _override(
+                action,
+                new_action,
+                f"Confluence {confluence:.1f} < {min_confluence:.0f} ({reference_trend})",
+                warnings,
+                0.0,
+            )
+
     # Rule 2: Foreign room — CHỈ chặn MUA, không ảnh hưởng BÁN/THOÁT
     # Mục đích: room cao → khó kéo thêm dòng ngoại; nhưng bán vẫn phải cho phép
     if action in _BUY_ACTIONS:
@@ -156,9 +197,15 @@ def check(state: dict) -> dict:
     # Rule 3: T+2.5 — hàng về chiều T+2, không mua lại trong 2 ngày
     if action in _BUY_ACTIONS and symbol:
         try:
-            recent = db.get_buys_last_n_days(symbol, 2)
-            if recent:
-                latest = recent[0].get("trade_date", "?")
+            backtest_mode = bool(state.get("backtest_mode", False))
+            as_of_date = state.get("date") if backtest_mode else None
+            t3_blocked = internal_ctx.get("t3_blocked")
+            recent = []
+            if t3_blocked is None:
+                recent = db.get_buys_last_n_days(symbol, 2, as_of_date=as_of_date)
+                t3_blocked = bool(recent)
+            if t3_blocked:
+                latest = recent[0].get("trade_date", "?") if recent else "gần đây"
                 return _override(action, "CHỜ", f"Đã mua {symbol} {latest} — chưa qua T+2.5", warnings, 0.0)
         except Exception as e:
             print(f"[risk_trade] T+2.5 check skipped: {e}")
@@ -169,7 +216,6 @@ def check(state: dict) -> dict:
     limit = {"HOSE": 7.0, "HNX": 10.0}.get(exch, 15.0)
 
     setup_type = state.get("setup_type", "")
-    confluence = float(synth.get("confluence_score") or 0.0)
     is_breakaway = (
         action in _BUY_ACTIONS
         and raw_chg >= _CHASE_THRESHOLD
