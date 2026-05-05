@@ -8,28 +8,45 @@
 
 ## Kiến trúc Tổng Quan — Dual Pipeline
 
-Hệ thống chạy **hai pipeline song song, hoàn toàn độc lập**, được trigger bởi APScheduler. Output gửi lên hai Discord channel riêng biệt.
+Hệ thống chạy **hai pipeline song song, hoàn toàn độc lập**, được trigger bởi APScheduler. Output gửi lên hai Discord channel riêng biệt. Tất cả output là **khuyến nghị** (RECOMMENDATION_ONLY) — không auto-execute lệnh.
 
 ```
-APScheduler
-  ├── Investment pipeline  [Thứ 2, 08:00]
-  │     HOSE liquid (vol≥300k) → Screener (FA criteria)
-  │       → [Fundamental + Valuation + Macro] song song
-  │       → Bull/Bear Debate (thesis dài hạn)
-  │       → Trader Invest → Risk Manager Invest
-  │       → #invest-signal (Discord)
+APScheduler (Asia/Ho_Chi_Minh)
+  ├── Investment pipeline  [Thứ 2, 08:00]          ID: invest_weekly
+  │     HOSE liquid (vol≥300k) → invest_screener
+  │       → load_macro [early exit nếu macro BEARISH]
+  │       → [fundamental_agent + valuation_agent] song song (Haiku)
+  │       → bull_debate (Sonnet) → bear_debate (Sonnet, 2 rounds)
+  │       → synthesize (Haiku)
+  │       → trader_invest (Sonnet) → risk_invest → format_output
+  │       → #invest-signal (Discord, màu xanh)
   │
-  ├── Trade pipeline  [Hàng ngày, 08:30 trước ATO]
-  │     HOSE liquid (vol≥500k) → Screener (TA criteria)
-  │       → [Technical + ForeignFlow + Sentiment] song song
-  │       → Signal Synthesis (confluence scoring)
-  │       → Trader Trade → Risk Manager Trade
-  │       → #trade-signal (Discord)
+  ├── Trade pipeline  [Hàng ngày, 08:30]            ID: trade_daily
+  │     HOSE liquid (vol≥500k) → trade_screener
+  │       → load_macro → portfolio_monitor (daily guard)
+  │       → [technical + flow + sentiment + money_flow] song song
+  │       → synthesis (rule-based) → retrieve_context (hybrid RAG)
+  │       → trader_trade (Sonnet) → risk_trade → persist_trade → format_output
+  │       → #trade-signal (Discord, màu cam)
   │
-  └── Session Monitor  [09:00–14:35, mỗi 15 phút]
-        Đọc MUA decisions hôm nay từ DB
-          → Re-analyze từng mã (technical_agent Haiku)
-          → Alert Discord nếu: confluence drop, setup flip, gần SL/TP
+  ├── Session Monitor  [Thứ 2–6, 09:00–14:35, mỗi 5 phút]  ID: session_monitor
+  │     [A] Hard exit check (positions table):
+  │           SL/TP hit + T+2.5 available → alert "⚡ THOÁT NGAY" / "💰 CHỐT LỜI"
+  │           SL hit + chưa T+2.5 → alert "🔴 BỊ KẸP" (lặp mỗi 5 phút)
+  │           TP hit + chưa T+2.5 → update peak_price → trailing SL alert "📈 ĐẠT TARGET"
+  │     [B] Re-analysis check (decisions table):
+  │           Re-run technical_agent (Haiku ~2s) trên BUY signals hôm nay
+  │           Alert nếu: confluence drop ≥3pt / setup flip / giá sát SL hoặc TP ±2%
+  │     Live price: DNSE WebSocket (≤60s cache) → DNSE HTTP fallback
+  │
+  ├── Bob Strategy Meeting  [Thứ 6, 20:00]          ID: bob_strategy_meeting
+  │     Review tuần → cập nhật strategy memory (ℳₛ)
+  │
+  ├── Code update check  [Mỗi giờ]                  ID: code_update_check
+  │     git fetch → pull → restart nếu có commit mới
+  │
+  └── Cleanup  [Chủ nhật, 02:00]                    ID: cleanup_weekly
+        Xoá cache/data cũ
 ```
 
 ---
@@ -39,14 +56,15 @@ APScheduler
 | Chiều | Investment pipeline | Trade pipeline |
 |---|---|---|
 | Mục tiêu | Nắm giữ trung-dài hạn | Giao dịch ngắn hạn ATO |
-| Khung thời gian | Tuần → Tháng → Quý | Phiên → Ngày → Tuần |
-| Tín hiệu chính | BCTC, định giá nội tại, macro | Giá, khối lượng, dòng NN |
+| Khung thời gian | 3–12 tháng | Price-action based (không fixed) |
+| Tín hiệu chính | BCTC, định giá nội tại, macro | Giá, khối lượng, dòng NN, money flow |
 | Logic ra quyết định | Valuation gap (giá < nội tại) | Price action + confluence |
-| Exit condition | Story thay đổi / định giá đủ | SL/TP hit / momentum mất |
-| Risk logic | Margin of safety, concentration | R:R ratio, max loss/trade |
+| Exit condition | Story thay đổi / định giá đủ | Price action signal (không exit theo thời gian) |
+| Risk logic | Margin of safety, sector concentration | R:R ratio, portfolio cap, money flow gate |
 | T+3 / biên độ ±7% | Ít ảnh hưởng | Ràng buộc cứng, tính vào SL/TP |
-| Screener criteria | ROE, P/E, tăng trưởng EPS | Breakout, volume spike, momentum |
-| Tần suất chạy | Hàng tuần (Thứ 2) | Hàng ngày (trước ATO) |
+| Screener criteria | ROE, P/E, tăng trưởng EPS | 18 setups TA |
+| Tần suất chạy | Hàng tuần (Thứ 2) | Hàng ngày (08:30 trước ATO) |
+| Persistence | RECOMMENDATION_ONLY | RECOMMENDATION_ONLY |
 
 ---
 
@@ -55,34 +73,38 @@ APScheduler
 ```
 multiagents_trading_assistant/
   orchestrator/
-    pipeline_runner.py        — APScheduler, chạy cả hai pipeline song song
-    investment_graph.py       — StateGraph cho Investment pipeline
-    trade_graph.py            — StateGraph cho Trade pipeline
+    pipeline_runner.py        — APScheduler (5 jobs), DNSE WebSocket feed, startup Discord
+    investment_graph.py       — LangGraph StateGraph cho Investment pipeline
+    trade_graph.py            — LangGraph StateGraph cho Trade pipeline
+    session_monitor.py        — 5-phút real-time monitor (SL/TP + re-analysis)
   screener/
-    invest_screener.py        — Lọc theo FA criteria (ROE, P/E, tăng trưởng)
-    trade_screener.py         — Lọc theo TA criteria (breakout, volume, momentum)
+    invest_screener.py        — Lọc FA (ROE, P/E, EPS growth)
+    trade_screener.py         — Lọc TA (18 setups, 20 workers parallel)
   agents/
     invest/
-      fundamental_agent.py   — BCTC, ROE, EPS growth (Haiku)
-      valuation_agent.py     — Định giá nội tại, P/E so ngành (Haiku)
-      macro_agent.py         — Vĩ mô, chu kỳ ngành (Haiku)
-      debate_agent.py        — Bull/Bear thesis dài hạn (Sonnet)
+      fundamental_agent.py   — ROE, EPS, financial_health (Haiku)
+      valuation_agent.py     — Intrinsic value PE/PB projection, MoS (Haiku, không DCF)
+      macro_agent.py         — Macro bias, cached daily (Haiku)
+      debate_agent.py        — Bull/Bear thesis 2 rounds + synthesize (Sonnet + Haiku)
     trade/
-      technical_agent.py     — MA, RSI, MACD, pattern (Haiku)
-      flow_agent.py          — Dòng tiền NN, net5d/net20d (Haiku)
-      sentiment_agent.py     — Tin ngắn hạn CafeF (Haiku)
-      synthesis_agent.py     — Confluence scoring (Haiku)
+      technical_agent.py     — MA, RSI, MACD, BB, S/R, confluence 0-10 (Haiku)
+      flow_agent.py          — Foreign room, net flow, accumulation signal (Haiku)
+      sentiment_agent.py     — News crawl CafeF/VnExpress, ingest SQLite+ChromaDB (Haiku)
+      money_flow_agent.py    — Blackbox regime detection (Rule-based, NO LLM)
+      synthesis_agent.py     — Weighted merge → confluence 0-100 (Rule-based)
   nodes/
-    trader_invest.py         — Exit: story thay đổi / định giá đủ (Sonnet)
-    trader_trade.py          — Exit: SL/TP cụ thể theo giá (Sonnet)
-    risk_invest.py           — Margin of safety, concentration check
-    risk_trade.py            — R:R ratio >= 1.5, max loss/trade (relative, không cần NAV tuyệt đối)
+    trader_invest.py         — MUA/CHỜ/TRÁNH, 3-12 tháng, position 3-5% NAV (Sonnet)
+    trader_trade.py          — State machine 7 actions, price-action exit (Sonnet)
+    risk_invest.py           — MoS gate, sector concentration, macro veto
+    risk_trade.py            — 9 hard rules (circuit breaker, portfolio cap, R:R, v.v.)
+    portfolio_monitor.py     — Daily guard: check exits, trailing SL suggestions
+    persist_trade.py         — Mark RECOMMENDATION_ONLY (không auto-write position)
   services/
     llm_service.py           — Provider abstraction (Haiku / Sonnet)
-    data_service.py          — vnstock_data Golden + FiinQuantX wrapper (dùng chung)
+    data_service.py          — vnstock_data Golden + FiinQuantX wrapper
     memory_service.py        — ChromaDB operations (dùng chung)
-    output_service.py        — send_to_channel(), send_pipeline_alert(), Discord + JSON output
-    dnse_client.py           — DNSE LightSpeed REST client (broker fallback, live data)
+    output_service.py        — send_to_channel(), send_pipeline_alert(), Discord + JSON
+    dnse_client.py           — DNSE LightSpeed REST + WebSocket client
   formatters/
     invest_embed.py          — Discord embed màu xanh, format weekly
     trade_embed.py           — Discord embed màu cam, format daily + SL/TP
@@ -91,8 +113,11 @@ multiagents_trading_assistant/
       base.py                — DataProvider Protocol (vendor-neutral interface)
       vnstock_provider.py    — vnstock_data Golden implementation
     repository.py            — get_data_provider() factory, env: MATA_DATA_PROVIDER
-  fetcher.py                 — Data layer: vnstock_data Golden primary, DNSE broker fallback
+  fetcher.py                 — Primary: vnstock_data Golden; fallback: DNSE broker
   main.py                    — CLI entry point
+  bob/                       — Bob's Strategy Development Meeting (Thứ 6)
+  backtest/                  — Walk-forward backtester
+  quantagents_backtest/      — QuantAgents backtester
 docs/
   fiinquant.md               — FiinQuantX API reference
 ```
@@ -108,14 +133,15 @@ class InvestState(TypedDict):
     date: str
     market_context: dict
     macro_context: dict
-    fundamental_analysis: dict    # output fundamental_agent
-    valuation_analysis: dict      # output valuation_agent
-    bull_argument: str
-    bear_argument: str
-    debate_synthesis: str
-    trader_decision: dict         # action, target_price, thesis, exit_condition
-    risk_output: dict             # position_size, margin_of_safety
-    discord_message: str
+    fundamental_analysis: dict    # output fundamental_agent (ROE, EPS, financial_health)
+    valuation_analysis: dict      # output valuation_agent (intrinsic, MoS, valuation label)
+    bull_argument: str            # output bull_debate (Sonnet)
+    bear_argument: str            # output bear_debate (Sonnet, 2 rounds)
+    debate_synthesis: dict        # output synthesize (Haiku): balance STRONG_BULL/NEUTRAL/STRONG_BEAR
+    trader_decision: dict         # action, target_price, position_pct, holding_horizon, exit_condition
+    risk_output: dict             # vetoed, margin_of_safety, warnings
+    formatted_text: str
+    error: Optional[str]
 ```
 
 ### TradeState (trade_graph.py)
@@ -125,24 +151,62 @@ class TradeState(TypedDict):
     date: str
     setup_type: str               # 18 setups — xem trade_screener.py
     market_context: dict
-    technical_analysis: dict      # output technical_agent
-    foreign_flow_analysis: dict   # output flow_agent
-    sentiment_analysis: dict      # output sentiment_agent
-    confluence_score: float       # output synthesis_agent (0-100)
-    trader_decision: dict         # action, entry_zone, stop_loss, take_profit
-    risk_output: dict             # rr_ratio, max_loss_vnd, t3_constraint
-    discord_message: str
+    macro_context: dict
+    backtest_mode: bool           # Anti-look-ahead: disable memory retrieval khi backtest
+    technical_analysis: dict      # confluence 0-10, ma_trend, RSI, MACD, BB, S/R
+    foreign_flow_analysis: dict   # room_status, flow_trend, accumulation_signal
+    sentiment_analysis: dict      # sentiment_score 0-100, news_count, key_positive/negative
+    money_flow_analysis: dict     # regime (Blackbox), score, action_bias (rule-based)
+    synthesis: dict               # confluence_score 0-100, setup_quality, drivers, blockers
+    memory_context: dict          # {internal: {recent_decisions, has_position, t3_blocked, ...},
+                                  #  external: {fundamental_summary, historical_stats, news_summary}}
+    trader_decision: dict         # action, entry_zone, SL, initial_target, R:R, trail_sl_guide
+    risk_output: dict             # vetoed, warnings, final_action
+    portfolio_summary: dict       # open positions, daily guard output
+    execution_plan: dict          # RECOMMENDATION_ONLY flag
+    formatted_text: str
+    error: Optional[str]
 ```
 
 ---
 
-## Models
+## Models & Agents
 
-| Agent | Model | Lý do |
-|---|---|---|
-| Fundamental, Valuation, Macro, Technical, Flow, Sentiment, Synthesis | `claude-haiku-4-5-20251001` | Nhanh + rẻ |
-| Bull debate, Bear debate | `claude-sonnet-4-6` | Reasoning thesis sâu |
-| Trader Invest, Trader Trade | `claude-sonnet-4-6` | Quyết định cuối |
+| Agent | Model | Loại | Mục đích |
+|---|---|---|---|
+| fundamental_agent | `claude-haiku-4-5-20251001` | LLM | ROE, EPS, financial_health |
+| valuation_agent | `claude-haiku-4-5-20251001` | LLM | Intrinsic value (PE/PB projection, không DCF), MoS |
+| macro_agent | `claude-haiku-4-5-20251001` | LLM | Macro bias, cached daily |
+| technical_agent | `claude-haiku-4-5-20251001` | LLM | MA, RSI, MACD, BB, S/R, confluence 0-10 |
+| flow_agent | `claude-haiku-4-5-20251001` | LLM | Foreign room, net flow, accumulation |
+| sentiment_agent | `claude-haiku-4-5-20251001` | LLM | News crawl + ingest SQLite/ChromaDB |
+| debate_agent (synthesize) | `claude-haiku-4-5-20251001` | LLM | Merge bull/bear → consensus |
+| money_flow_agent | — | Rule-based | Blackbox regime (BREAKOUT_FLOW / DISTRIBUTION / v.v.) |
+| synthesis_agent | — | Rule-based | Weighted merge → confluence 0-100 |
+| bull_debate / bear_debate | `claude-sonnet-4-6` | LLM | Thesis dài hạn (bear 2 rounds) |
+| trader_invest | `claude-sonnet-4-6` | LLM | MUA/CHỜ/TRÁNH, 3-12 tháng |
+| trader_trade | `claude-sonnet-4-6` | LLM | 7-action state machine, price-action exit |
+
+### Synthesis Weights (trade pipeline)
+```
+technical_score  × 0.40   (confluence 0-10 → normalize 0-100)
+flow_score       × 0.20   (room + trend + accumulation → 0-100)
+money_flow_score × 0.25   (regime-based → 0-100)
+sentiment_score  × 0.15   (sentiment_score 0-100)
+────────────────────────
+confluence_score 0-100
+  STRONG ≥70 | MEDIUM 50-69 | WEAK <50
+```
+
+### Valuation Method (valuation_agent — không dùng DCF)
+```
+EPS_next      = EPS × (1 + growth_clamped[0%, 30%])
+intrinsic_PE  = EPS_next × PE_median_industry
+intrinsic_PB  = projected_BVPS × PB_median_industry  (retention = 70%)
+intrinsic      = avg(intrinsic_PE, intrinsic_PB)
+MoS            = (intrinsic − price) / intrinsic
+label: RẺ (≥30%) | HỢP_LÝ (0-30%) | ĐẮT (<0%)
+```
 
 ---
 
@@ -243,11 +307,25 @@ class TradeState(TypedDict):
 
 ```python
 # Investment: Thứ 2 hàng tuần lúc 08:00
-scheduler.add_job(run_investment_pipeline, CronTrigger(day_of_week='mon', hour=8, minute=0))
+CronTrigger(day_of_week="mon", hour=8, minute=0, timezone=_VN_TZ)   # ID: invest_weekly
 
 # Trade: Hàng ngày lúc 08:30 (trước ATO 09:00)
-scheduler.add_job(run_trade_pipeline, CronTrigger(hour=8, minute=30))
+CronTrigger(hour=8, minute=30, timezone=_VN_TZ)                      # ID: trade_daily
+
+# Session Monitor: Thứ 2-6, 09:00-14:35, mỗi 5 phút
+CronTrigger(day_of_week="mon-fri", hour="9-11,13-14", minute="*/5")  # ID: session_monitor
+
+# Bob Strategy Meeting: Thứ 6, 20:00
+CronTrigger(day_of_week="fri", hour=20, minute=0, timezone=_VN_TZ)   # ID: bob_strategy_meeting
+
+# Code update check: mỗi giờ (git fetch → pull → restart nếu có commit mới)
+CronTrigger(minute=0, timezone=_VN_TZ)                               # ID: code_update_check
+
+# Cleanup: Chủ nhật, 02:00
+CronTrigger(day_of_week="sun", hour=2, minute=0, timezone=_VN_TZ)    # ID: cleanup_weekly
 ```
+
+**Startup:** gửi Discord notification kèm git commit hash + khởi động DNSE WebSocket price feed (background thread).
 
 ---
 
@@ -294,26 +372,74 @@ run.bat                                                           # 24/7 với a
 
 ## Risk Rules — Trade Pipeline (risk_trade.py)
 
-| Rule | Ngưỡng | Kết quả |
-|---|---|---|
-| Circuit breaker | VNI < -3%/ngày | Override → CHỜ |
-| Foreign room | >95% | Override → CHỜ |
-| | 90-95% | Sizing ×0.5 |
-| | 80-90% | Sizing ×0.8 |
-| T+2.5 | Đã mua mã này trong 2 ngày | Override → CHỜ |
-| Không mua đuổi | Mã tăng ≥5% trong phiên | Override → CHỜ |
-| R:R tối thiểu | R:R < 1.5 | Override → CHỜ |
-| Max loss | position_pct × (entry-SL)/entry > 2% | Giảm position_pct |
+| # | Rule | Ngưỡng | Kết quả |
+|---|---|---|---|
+| 1 | Circuit breaker | VNI < -3%/ngày | Override → CHỜ |
+| 2 | Foreign room | >95% | Override → CHỜ |
+| | | 90-95% | Sizing ×0.5 |
+| | | 80-90% | Sizing ×0.8 |
+| 3 | Portfolio cap | open ≥5 + confluence <75 | Override → CHỜ |
+| | | open ≥4 + confluence <65 | Override → CHỜ |
+| | | open ≥3 | Sizing ×0.5 |
+| 4 | Regime confluence min | UPTREND: <62 / SIDEWAY: <65 / DOWNTREND: <70 | Override → CHỜ |
+| 5 | T+2.5 | Đã mua mã này trong 2 ngày | Override → CHỜ |
+| 6 | Không mua đuổi | Mã tăng ≥5% trong phiên | Override → CHỜ (trừ breakaway) |
+| 7 | Thanh khoản | avg_vol_20d < 200k | Override → CHỜ |
+| 8 | Money flow gate | DISTRIBUTION hoặc AVOID_OR_EXIT | Override → CHỜ |
+| 9 | R:R tối thiểu | R:R < 1.5 | Override → CHỜ |
+| 10 | Max loss | position_pct × (entry-SL)/entry > 2% | Giảm position_pct |
 
-**Thiết kế sản phẩm**: max loss tính thuần relative (không cần NAV tuyệt đối) — áp dụng đúng cho mọi user.
+**Breakaway exception** (Rule 6): nhóm setup `_BREAKAWAY_SETUPS` (BREAKOUT, MOMENTUM_SURGE, BB_SQUEEZE, GOLDEN_CROSS, BREAKOUT_RETEST_ENTRY) + confluence ≥75 + large-cap → được mua dù tăng ≥5%, sizing ×0.5.
+
+**Thiết kế**: max loss tính thuần relative — không cần NAV tuyệt đối, áp dụng đúng cho mọi user.
 
 ## Trader Trade — Quy tắc LLM (trader_trade.py)
 
-- **SL**: ≤ 5% dưới entry_low (không phải 7% — SL 7% → cần TP 14% mới đạt R:R 2, không thực tế VN)
+- **SL**: ≤ 5% dưới entry_low (không phải 7%)
 - **R:R**: ≥ 1.5 trong prompt (risk_trade enforce cứng)
-- **Position theo confluence**: ≥70 → 5% NAV, 55-69 → 3%, <55 → 2%
-- **Holding horizon**: 1-5 phiên (không phải 1-4 tuần)
+- **Position theo confluence**: ≥70 → 5% NAV, 55-69 → 3%, <55 → 2% (LLM output: confidence CAO/TRUNG_BÌNH/THẤP)
+- **Holding horizon**: **KHÔNG exit theo thời gian** — exit khi price action nói "dừng"
 - **Entry guide**: mỗi trong 18 setups có hướng dẫn entry/SL/TP riêng trong `_build_prompt()`
+- **GIA_TĂNG** chỉ hợp lệ khi: pnl ≥5% + SL hiện tại ≥99.5% entry + tổng NAV sau tăng <7%
+
+### Triết lý giữ lệnh (price-action based)
+- `initial_target` chỉ là mục tiêu **tham chiếu** — KHÔNG đặt lệnh bán tự động tại đó
+- Khi giá đạt `initial_target` → nâng SL lên khóa lợi nhuận, tiếp tục giữ
+- Chỉ thoát khi price action tín hiệu rõ:
+  - SL trailing bị chạm (swing low dưới entry giảm sâu)
+  - Double top xuất hiện (2 đỉnh ngang, pull back qua midpoint)
+  - MA20 bị phá 2 nến liên tiếp + MA20 đang dốc xuống
+  - Cấu trúc HH+HL bị phá (giá đóng dưới prior swing low 2 nến liên tiếp)
+
+### Trailing SL guide (3 mức)
+| Mức lãi | Hành động |
+|---|---|
+| +5% | Nâng SL lên entry (hòa vốn) hoặc swing low gần nhất − ATR×0.5 |
+| +10% | SL = swing low ngay trước (7-10 bar) − ATR×0.5 |
+| +20% | SL = swing low rộng hơn (15-20 bar) − ATR×0.5, cho trend thở |
+
+### State machine trader_trade
+- **CHƯA CÓ VỊ THẾ**: MUA / CHỜ / TRÁNH
+- **ĐANG CÓ VỊ THẾ**: GIỮ / GIA_TĂNG / GIẢM / BÁN (KHÔNG phát MUA mới)
+  - GIA_TĂNG: chỉ khi đang lãi + cấu trúc HH/HL còn nguyên + SL hiện tại đã gần hòa vốn
+
+## Risk Rules — Investment Pipeline (risk_invest.py)
+
+### Margin of Safety theo ngành
+| Nhóm | Ngưỡng MoS tối thiểu |
+|---|---|
+| Bluechip (FPT, VCB, VHM, ...) | ≥ 20% |
+| Banks / Tech / FMCG | ≥ 22-25% |
+| Cyclical / Real Estate / Securities | ≥ 30-35% |
+| Default | ≥ 30% |
+
+### Sector Concentration
+| Số vị thế cùng ngành | Kết quả |
+|---|---|
+| ≥ 3 | Override → CHỜ |
+| ≥ 2 | Cảnh báo |
+
+**Position sizing invest**: 3-5% NAV (MoS cao + debate STRONG_BULL → 5%, thấp → 3%)
 
 ---
 
@@ -368,4 +494,4 @@ python -m multiagents_trading_assistant.main --backtest --setup BREAKOUT --unive
 
 ---
 
-**Last Updated**: 2026-05-03 (session: migrate data layer → vnstock_data Golden primary, DNSE broker fallback, DataProvider abstraction layer)
+**Last Updated**: 2026-05-05 (session: full sync CLAUDE.md với code — pipeline graph structure, scheduler jobs, agents/models, state schema, synthesis weights, valuation method, risk rules thứ tự + dynamic confluence threshold, holding horizon price-action, GIA_TĂNG conditions, Bob meeting, code update check, cleanup job)
