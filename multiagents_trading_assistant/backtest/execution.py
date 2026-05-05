@@ -89,3 +89,114 @@ def simulate_fill(
 def can_sell_today(buy_bar_idx: int, today_idx: int, cfg: ExecutionConfig) -> bool:
     """T+N rule: hàng mua tại buy_bar_idx về tài khoản tại buy_bar_idx + N."""
     return today_idx >= buy_bar_idx + cfg.settlement_days
+
+
+# ── LLM Backtest execution layer ──────────────────────────────────────────────
+# Dùng bởi llm_backtest.py — tách riêng để không ảnh hưởng rule-based engine.
+
+from typing import Literal  # noqa: E402
+
+@dataclass
+class LLMExecutionConfig:
+    """Config cho execution simulator trong LLM backtest.
+
+    model:
+      "next_open"          → fill ở open bar kế, luôn fill (trừ khi vi phạm band)
+      "zone_only"          → chỉ fill nếu next_open nằm trong entry_zone
+      "zone_with_slippage" → zone_only + thêm slippage
+
+    max_position_vol_pct: max position size / avg_daily_volume
+    """
+    model: Literal["next_open", "zone_only", "zone_with_slippage"] = "zone_with_slippage"
+    slippage_bps: float = 20.0              # 0.2%
+    price_band_pct: float = 7.0             # HOSE ±7%
+    max_position_vol_pct: float = 0.10      # max 10% avg daily volume
+    settlement_days: int = 2                # T+2
+
+
+@dataclass
+class LLMFillResult:
+    filled: bool
+    price: float
+    reason: str = ""
+    skipped_volume: bool = False
+    skipped_zone: bool = False
+
+
+def simulate_llm_entry(
+    entry_zone: tuple[float, float],
+    stop_loss: float,
+    position_pct: float,          # 0.01–0.10 (% NAV)
+    nav: float,                   # NAV hiện tại (VND)
+    next_bar: dict,               # {open, high, low, close, volume}
+    avg_volume: float,
+    cfg: LLMExecutionConfig | None = None,
+) -> LLMFillResult:
+    """Mô phỏng entry cho LLM backtest.
+
+    Args:
+        entry_zone: (low, high) vùng giá hợp lệ.
+        stop_loss: Giá SL để tính position_shares.
+        position_pct: Tỷ trọng NAV đề xuất.
+        nav: NAV hiện tại dùng tính số cổ phiếu.
+        next_bar: OHLCV bar ngày thực thi.
+        avg_volume: Volume trung bình 20 phiên (để check liquidity).
+        cfg: LLMExecutionConfig.
+
+    Returns:
+        LLMFillResult
+    """
+    cfg = cfg or LLMExecutionConfig()
+    next_open = float(next_bar.get("open", 0))
+    prev_close = float(next_bar.get("prev_close", next_open))
+
+    if next_open <= 0:
+        return LLMFillResult(filled=False, price=0.0, reason="invalid open")
+
+    # Zone check
+    entry_low, entry_high = entry_zone
+    in_zone = entry_low <= next_open <= entry_high
+
+    if cfg.model in ("zone_only", "zone_with_slippage") and not in_zone:
+        return LLMFillResult(
+            filled=False, price=next_open,
+            reason=f"next_open {next_open} ngoài entry_zone [{entry_low}, {entry_high}]",
+            skipped_zone=True,
+        )
+
+    # Slippage
+    base_price = next_open
+    if cfg.model == "zone_with_slippage":
+        factor = cfg.slippage_bps / 10_000
+        base_price = round(next_open * (1 + factor), 2)
+
+    # Clamp trong high/low của bar
+    bar_high = float(next_bar.get("high", base_price))
+    bar_low = float(next_bar.get("low", base_price))
+    fill_price = min(base_price, bar_high)
+
+    # Price band check
+    if prev_close > 0:
+        upper = prev_close * (1 + cfg.price_band_pct / 100)
+        lower = prev_close * (1 - cfg.price_band_pct / 100)
+        if not (lower <= fill_price <= upper):
+            return LLMFillResult(
+                filled=False, price=fill_price,
+                reason=f"fill {fill_price} vượt biên độ ±{cfg.price_band_pct}%",
+            )
+
+    # Volume constraint — check position_shares vs avg_volume
+    if fill_price > 0 and avg_volume > 0 and nav > 0:
+        position_value = nav * position_pct
+        position_shares = position_value / fill_price
+        if position_shares > avg_volume * cfg.max_position_vol_pct:
+            return LLMFillResult(
+                filled=False, price=fill_price,
+                reason=(
+                    f"position_shares {position_shares:.0f} > "
+                    f"{cfg.max_position_vol_pct:.0%} avg_volume ({avg_volume:.0f})"
+                ),
+                skipped_volume=True,
+            )
+
+    return LLMFillResult(filled=True, price=fill_price, reason="ok")

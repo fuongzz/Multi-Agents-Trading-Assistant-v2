@@ -6,6 +6,11 @@ import pandas_ta as ta
 
 from multiagents_trading_assistant.fetcher import get_ohlcv
 
+try:
+    from vnstock_ta import Indicator as VnstockTAIndicator
+except Exception:
+    VnstockTAIndicator = None
+
 
 def compute_indicators_from_symbol(symbol: str, n_days: int = 200) -> dict:
     """Convenience: lấy OHLCV rồi tính indicators trong 1 bước."""
@@ -23,57 +28,78 @@ def compute_indicators(df: pd.DataFrame) -> dict:
         return {}
 
     close  = df["close"]
-    high   = df["high"]
-    low    = df["low"]
     volume = df["volume"]
 
     result = {}
+    ta_values = _compute_standard_indicators(df)
 
     # ── Moving Averages ──
-    result["ma20"]  = _last(close.rolling(20).mean())
-    result["ma60"]  = _last(close.rolling(60).mean()) if len(df) >= 60  else None
-    result["ma200"] = _last(close.rolling(200).mean()) if len(df) >= 200 else None
+    result["ma20"]  = _last(ta_values.get("sma20"))
+    result["ma60"]  = _last(ta_values.get("sma60")) if len(df) >= 60  else None
+    result["ma200"] = _last(ta_values.get("sma200")) if len(df) >= 200 else None
+    result["ema20"] = _last(ta_values.get("ema20"))
+    result["ema50"] = _last(ta_values.get("ema50")) if len(df) >= 50 else None
+    result["ema200"] = _last(ta_values.get("ema200")) if len(df) >= 200 else None
+    result["vwma20"] = _last(ta_values.get("vwma20"))
     result["current_price"] = _last(close)
 
     # ── RSI(14) ──
-    rsi_series = ta.rsi(close, length=14)
-    result["rsi"] = _last(rsi_series)
+    result["rsi"] = _last(ta_values.get("rsi14"))
 
     # ── MACD(12,26,9) ──
-    # pandas_ta columns: MACD_12_26_9, MACDh_12_26_9, MACDs_12_26_9
-    macd_df = ta.macd(close, fast=12, slow=26, signal=9)
-    if macd_df is not None and not macd_df.empty:
-        macd_cols = macd_df.columns.tolist()
-        macd_line = next((c for c in macd_cols if c.startswith("MACD_")),  None)
-        macd_sig  = next((c for c in macd_cols if c.startswith("MACDs_")), None)
-        macd_hist = next((c for c in macd_cols if c.startswith("MACDh_")), None)
-        result["macd"]        = _last(macd_df[macd_line])  if macd_line else None
-        result["macd_signal"] = _last(macd_df[macd_sig])   if macd_sig  else None
-        result["macd_hist"]   = _last(macd_df[macd_hist])  if macd_hist else None
-    else:
-        result["macd"] = result["macd_signal"] = result["macd_hist"] = None
+    result["macd"]        = _last(ta_values.get("macd"))
+    result["macd_signal"] = _last(ta_values.get("macd_signal"))
+    result["macd_hist"]   = _last(ta_values.get("macd_hist"))
+    result["macd_bullish_cross_recent"] = _crossed_above_recent(
+        ta_values.get("macd"),
+        ta_values.get("macd_signal"),
+        lookback=4,
+    )
 
     # ── Bollinger Bands(20,2) ──
-    # pandas_ta columns: BBL_20_2.0 (lower), BBM_20_2.0 (mid), BBU_20_2.0 (upper)
-    bb = ta.bbands(close, length=20, std=2)
-    if bb is not None and not bb.empty:
-        bb_cols = bb.columns.tolist()
-        bbl = next((c for c in bb_cols if c.startswith("BBL_")), None)
-        bbm = next((c for c in bb_cols if c.startswith("BBM_")), None)
-        bbu = next((c for c in bb_cols if c.startswith("BBU_")), None)
-        result["bb_upper"] = _last(bb[bbu]) if bbu else None
-        result["bb_mid"]   = _last(bb[bbm]) if bbm else None
-        result["bb_lower"] = _last(bb[bbl]) if bbl else None
-    else:
-        result["bb_upper"] = result["bb_mid"] = result["bb_lower"] = None
+    result["bb_upper"] = _last(ta_values.get("bb_upper"))
+    result["bb_mid"]   = _last(ta_values.get("bb_mid"))
+    result["bb_lower"] = _last(ta_values.get("bb_lower"))
+    bb_width = _bb_width_series(
+        ta_values.get("bb_upper"),
+        ta_values.get("bb_mid"),
+        ta_values.get("bb_lower"),
+    )
+    result["bb_width"] = _last(bb_width)
+    result["bb_width_min20"] = _last(bb_width.dropna().rolling(20).min()) if bb_width is not None else None
+    result["bb_percent"] = _last(_bb_percent_series(close, ta_values.get("bb_upper"), ta_values.get("bb_lower")))
 
     # ── ATR(14) ──
-    atr_series = ta.atr(high, low, close, length=14)
-    result["atr"] = _last(atr_series)
+    result["atr"] = _last(ta_values.get("atr14"))
+    result["adx_14"] = _last(ta_values.get("adx_14"))
+    result["dmp_14"] = _last(ta_values.get("dmp_14"))
+    result["dmn_14"] = _last(ta_values.get("dmn_14"))
+    result["aroon_up_14"] = _last(ta_values.get("aroon_up_14"))
+    result["aroon_down_14"] = _last(ta_values.get("aroon_down_14"))
+    result["aroon_osc_14"] = _last(ta_values.get("aroon_osc_14"))
+    result["supertrend_10_3"] = _last(ta_values.get("supertrend_10_3"))
+    result["supertrend_dir"] = _last(ta_values.get("supertrend_dir"))
+    result["willr_14"] = _last(ta_values.get("willr14"))
+    result["cmo_9"] = _last(ta_values.get("cmo9"))
+    result["stoch_k"] = _last(ta_values.get("stoch_k"))
+    result["stoch_d"] = _last(ta_values.get("stoch_d"))
+    result["roc_9"] = _last(ta_values.get("roc9"))
+    result["mom_10"] = _last(ta_values.get("mom10"))
+    result["kc_lower"] = _last(ta_values.get("kc_lower"))
+    result["kc_mid"] = _last(ta_values.get("kc_mid"))
+    result["kc_upper"] = _last(ta_values.get("kc_upper"))
+    kc_width = _channel_width_series(ta_values.get("kc_upper"), ta_values.get("kc_mid"), ta_values.get("kc_lower"))
+    result["kc_width"] = _last(kc_width)
+    result["stdev_14"] = _last(ta_values.get("stdev14"))
+    result["linreg_14"] = _last(ta_values.get("linreg14"))
+    result["linreg_slope_14"] = _last(_diff_series(ta_values.get("linreg14"), periods=5))
+    result["obv"] = _last(ta_values.get("obv"))
+    result["obv_ema20"] = _last(_ema_series(ta_values.get("obv"), span=20))
 
     # ── Volume ──
     result["volume_current"] = _last(volume)
     result["volume_ma20"]    = _last(volume.rolling(20).mean())
+    result["volume_ratio_20"] = _safe_ratio(result["volume_current"], result["volume_ma20"])
 
     # Ichimoku(9,26,52). Keep standard parameters used by most VN practitioners.
     result.update(compute_ichimoku(df))
@@ -95,6 +121,189 @@ def compute_indicators(df: pd.DataFrame) -> dict:
     result["confluence_score"] = compute_confluence_score(result)
 
     return result
+
+
+def _compute_standard_indicators(df: pd.DataFrame) -> dict:
+    """Compute standard indicators, preferring vnstock_ta and falling back to pandas_ta."""
+    if VnstockTAIndicator is not None:
+        try:
+            indicator = VnstockTAIndicator(data=_vnstock_ta_frame(df))
+            macd = indicator.macd(fast=12, slow=26, signal=9)
+            bb = indicator.bbands(length=20, std=2)
+            adx = indicator.adx(length=14)
+            aroon = indicator.aroon(length=14)
+            supertrend = indicator.supertrend(length=10, multiplier=3)
+            stoch = indicator.stoch(k=14, d=3, smooth_k=3)
+            kc = indicator.kc(length=20, scalar=2.0, mamode="ema")
+            return {
+                "sma20": indicator.sma(length=20),
+                "sma60": indicator.sma(length=60),
+                "sma200": indicator.sma(length=200),
+                "ema20": indicator.ema(length=20),
+                "ema50": indicator.ema(length=50),
+                "ema200": indicator.ema(length=200),
+                "vwma20": indicator.vwma(length=20),
+                "rsi14": indicator.rsi(length=14),
+                "macd": _prefixed_col(macd, "MACD_"),
+                "macd_signal": _prefixed_col(macd, "MACDs_"),
+                "macd_hist": _prefixed_col(macd, "MACDh_"),
+                "bb_lower": _prefixed_col(bb, "BBL_"),
+                "bb_mid": _prefixed_col(bb, "BBM_"),
+                "bb_upper": _prefixed_col(bb, "BBU_"),
+                "atr14": indicator.atr(length=14),
+                "adx_14": _prefixed_col(adx, "ADX_"),
+                "dmp_14": _prefixed_col(adx, "DMP_"),
+                "dmn_14": _prefixed_col(adx, "DMN_"),
+                "aroon_up_14": _prefixed_col(aroon, "AROONU_"),
+                "aroon_down_14": _prefixed_col(aroon, "AROOND_"),
+                "aroon_osc_14": _prefixed_col(aroon, "AROONOSC_"),
+                "supertrend_10_3": _prefixed_col(supertrend, "SUPERT_"),
+                "supertrend_dir": _prefixed_col(supertrend, "SUPERTd_"),
+                "willr14": indicator.willr(length=14),
+                "cmo9": indicator.cmo(length=9),
+                "stoch_k": _prefixed_col(stoch, "STOCHk_"),
+                "stoch_d": _prefixed_col(stoch, "STOCHd_"),
+                "roc9": indicator.roc(length=9),
+                "mom10": indicator.mom(length=10),
+                "kc_lower": _prefixed_col(kc, "KCL"),
+                "kc_mid": _prefixed_col(kc, "KCB"),
+                "kc_upper": _prefixed_col(kc, "KCU"),
+                "stdev14": indicator.stdev(length=14, ddof=1),
+                "linreg14": indicator.linreg(length=14),
+                "obv": indicator.obv(),
+            }
+        except Exception:
+            pass
+
+    close = df["close"]
+    high = df["high"]
+    low = df["low"]
+    volume = df["volume"]
+    macd = ta.macd(close, fast=12, slow=26, signal=9)
+    bb = ta.bbands(close, length=20, std=2)
+    adx = ta.adx(high, low, close, length=14)
+    aroon = ta.aroon(high, low, length=14)
+    supertrend = ta.supertrend(high, low, close, length=10, multiplier=3)
+    stoch = ta.stoch(high, low, close, k=14, d=3, smooth_k=3)
+    kc = ta.kc(high, low, close, length=20, scalar=2.0, mamode="ema")
+    return {
+        "sma20": close.rolling(20).mean(),
+        "sma60": close.rolling(60).mean(),
+        "sma200": close.rolling(200).mean(),
+        "ema20": ta.ema(close, length=20),
+        "ema50": ta.ema(close, length=50),
+        "ema200": ta.ema(close, length=200),
+        "vwma20": ta.vwma(close, volume, length=20),
+        "rsi14": ta.rsi(close, length=14),
+        "macd": _prefixed_col(macd, "MACD_"),
+        "macd_signal": _prefixed_col(macd, "MACDs_"),
+        "macd_hist": _prefixed_col(macd, "MACDh_"),
+        "bb_lower": _prefixed_col(bb, "BBL_"),
+        "bb_mid": _prefixed_col(bb, "BBM_"),
+        "bb_upper": _prefixed_col(bb, "BBU_"),
+        "atr14": ta.atr(high, low, close, length=14),
+        "adx_14": _prefixed_col(adx, "ADX_"),
+        "dmp_14": _prefixed_col(adx, "DMP_"),
+        "dmn_14": _prefixed_col(adx, "DMN_"),
+        "aroon_up_14": _prefixed_col(aroon, "AROONU_"),
+        "aroon_down_14": _prefixed_col(aroon, "AROOND_"),
+        "aroon_osc_14": _prefixed_col(aroon, "AROONOSC_"),
+        "supertrend_10_3": _prefixed_col(supertrend, "SUPERT_"),
+        "supertrend_dir": _prefixed_col(supertrend, "SUPERTd_"),
+        "willr14": ta.willr(high, low, close, length=14),
+        "cmo9": ta.cmo(close, length=9),
+        "stoch_k": _prefixed_col(stoch, "STOCHk_"),
+        "stoch_d": _prefixed_col(stoch, "STOCHd_"),
+        "roc9": ta.roc(close, length=9),
+        "mom10": ta.mom(close, length=10),
+        "kc_lower": _prefixed_col(kc, "KCL"),
+        "kc_mid": _prefixed_col(kc, "KCB"),
+        "kc_upper": _prefixed_col(kc, "KCU"),
+        "stdev14": ta.stdev(close, length=14, ddof=1),
+        "linreg14": ta.linreg(close, length=14),
+        "obv": ta.obv(close, volume),
+    }
+
+
+def _vnstock_ta_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """Return OHLCV data in the indexed shape expected by vnstock_ta."""
+    data = df.copy()
+    if "date" in data.columns:
+        data["date"] = pd.to_datetime(data["date"])
+        return data.set_index("date")
+    if "time" in data.columns:
+        data["time"] = pd.to_datetime(data["time"])
+        return data.set_index("time")
+    return data
+
+
+def _prefixed_col(frame: pd.DataFrame | None, prefix: str):
+    if frame is None or frame.empty:
+        return None
+    col = next((c for c in frame.columns if str(c).startswith(prefix)), None)
+    return frame[col] if col else None
+
+
+def _safe_ratio(numerator, denominator) -> float | None:
+    if numerator is None or denominator in (None, 0):
+        return None
+    try:
+        return float(numerator) / float(denominator)
+    except Exception:
+        return None
+
+
+def _crossed_above_recent(left, right, lookback: int) -> bool:
+    left_series = pd.Series(left).dropna() if left is not None else pd.Series(dtype=float)
+    right_series = pd.Series(right).dropna() if right is not None else pd.Series(dtype=float)
+    aligned = pd.concat([left_series, right_series], axis=1).dropna()
+    if len(aligned) < lookback:
+        return False
+    a = aligned.iloc[:, 0]
+    b = aligned.iloc[:, 1]
+    return any(
+        a.iloc[i - 1] < b.iloc[i - 1] and a.iloc[i] >= b.iloc[i]
+        for i in range(-lookback, 0)
+    )
+
+
+def _bb_width_series(upper, mid, lower) -> pd.Series | None:
+    if upper is None or mid is None or lower is None:
+        return None
+    data = pd.concat(
+        [pd.Series(upper), pd.Series(mid), pd.Series(lower)],
+        axis=1,
+    ).dropna()
+    if data.empty:
+        return None
+    width = (data.iloc[:, 0] - data.iloc[:, 2]) / data.iloc[:, 1]
+    return width.replace([float("inf"), float("-inf")], pd.NA)
+
+
+def _bb_percent_series(close, upper, lower) -> pd.Series | None:
+    if close is None or upper is None or lower is None:
+        return None
+    data = pd.concat([pd.Series(close), pd.Series(upper), pd.Series(lower)], axis=1).dropna()
+    if data.empty:
+        return None
+    denom = (data.iloc[:, 1] - data.iloc[:, 2]).replace(0, pd.NA)
+    return ((data.iloc[:, 0] - data.iloc[:, 2]) / denom).replace([float("inf"), float("-inf")], pd.NA)
+
+
+def _channel_width_series(upper, mid, lower) -> pd.Series | None:
+    return _bb_width_series(upper, mid, lower)
+
+
+def _diff_series(series, periods: int = 1) -> pd.Series | None:
+    if series is None:
+        return None
+    return pd.Series(series).diff(periods)
+
+
+def _ema_series(series, span: int) -> pd.Series | None:
+    if series is None:
+        return None
+    return pd.Series(series).ewm(span=span, adjust=False, min_periods=span).mean()
 
 
 def get_ichimoku_config() -> tuple[int, int, int, int, int]:

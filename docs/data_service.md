@@ -1,108 +1,104 @@
-# Data Service — fetcher.py
+# Data Service
 
-## Nguyên tắc
+Agents, screeners, backtests, and orchestrators must not import vendor data
+SDKs directly. They should call `multiagents_trading_assistant.services.data_service`,
+which re-exports the stable public functions from `fetcher.py`.
 
-**Agents KHÔNG BAO GIỜ import vnstock trực tiếp.**
-Tất cả data đi qua `fetcher.py`. Lý do:
-- Rate limit management tập trung
-- Cache logic tập trung
-- Dễ swap data source mà không sửa agents
-- Fixes pandas 3.x / vnstock compatibility ở 1 chỗ duy nhất
+## Current Design
 
----
+`fetcher.py` owns cache, schema normalization, and fallback behavior. Vendor
+calls are delegated to the internal provider layer:
 
-## Required Header (PHẢI có ở đầu fetcher.py)
-
-```python
-import importlib.metadata  # FIX: pandas-ta-openbb AttributeError Python 3.11
-import pandas as pd
-
-# FIX: pandas 3.x + vnstock compatibility
-if not hasattr(pd.DataFrame, "applymap"):
-    pd.DataFrame.applymap = pd.DataFrame.map
+```text
+multiagents_trading_assistant/data/
+  providers/base.py             # vendor-neutral contract
+  providers/vnstock_provider.py # current vnstock_data Golden implementation
+  repository.py                 # provider factory
 ```
 
----
+The default provider is `vnstock_data` Golden:
+
+```text
+MATA_DATA_PROVIDER=vnstock
+```
+
+This preserves the product path: when we build an in-house data library, it can
+implement the same `DataProvider` contract without changing agents, screeners,
+or backtest modules.
 
 ## Public API
 
 ```python
-def get_ohlcv(symbol: str, n_days: int = 200) -> pd.DataFrame
-    # columns: date, open, high, low, close, volume
-    # cache: cache/{symbol}_{date}_ohlcv.json
-
-def get_fundamentals(symbol: str) -> dict
-    # keys: pe, pb, roe, eps, revenue_growth, profit_growth, industry
-    # cache: 1 ngày
-
-def get_foreign_flow(symbol: str, n_days: int = 20) -> dict
-    # keys: room_usage_pct, net_flow_5d, net_flow_20d, flow_history[]
-    # cache: 1 ngày
-
-def get_vnindex(n_days: int = 200) -> pd.DataFrame
-    # OHLCV của VN-Index
-
-def get_global_macro() -> dict
-    # keys: sp500, dxy, oil_wti, gold, nikkei, kospi, hsi (mỗi key: {current, change_pct})
-    # source: yfinance | cache: 4 giờ
-
-def get_vn_macro() -> dict
-    # keys: usd_vnd, interbank_rate, sbv_rate
-    # cache: 1 ngày
-
-def get_ohlcv_batch(symbols: list[str], n_days: int = 200) -> dict[str, pd.DataFrame]
-    # Tự động sleep(60) sau mỗi 15 mã
+get_ohlcv(symbol: str, n_days: int = 200) -> pd.DataFrame
+get_ohlcv_history(symbol: str, start: str, end: str | None = None, resolution: str = "1D") -> pd.DataFrame
+get_ohlcv_batch(symbols: list[str], n_days: int = 200) -> dict[str, pd.DataFrame]
+get_vnindex(n_days: int = 200) -> pd.DataFrame
+get_vnmidcap(n_days: int = 200) -> pd.DataFrame
+get_vn30_symbols() -> list[str]
+get_vn100_symbols() -> list[str]
+get_all_symbols() -> list[str]
+get_liquid_symbols(min_avg_vol: int = 500_000, n_days: int = 20) -> list[str]
+get_price_board(symbols: list[str]) -> pd.DataFrame
+get_live_price(symbols: list[str]) -> dict[str, float]
+get_fundamentals(symbol: str) -> dict
+get_foreign_flow(symbol: str, n_days: int = 20) -> dict
+get_global_macro() -> dict
+get_vn_macro() -> dict
 ```
 
----
+## Stable Schemas
 
-## Cache Strategy
+OHLCV always returns:
 
-```python
-CACHE_DIR = Path("multiagents_trading_assistant/cache")
-
-# Key pattern: {SYMBOL}_{YYYY-MM-DD}_{type}.json
-# Ví dụ: VNM_2026-04-12_ohlcv.json
-
-def _load_cache(path: Path) -> dict | None:
-    if path.exists():
-        return json.loads(path.read_text(encoding="utf-8"))
-    return None
+```text
+date, open, high, low, close, volume
 ```
 
----
+Fundamentals always returns:
 
-## Rate Limit
-
-```python
-BATCH_SIZE = 15
-SLEEP_SECONDS = 60   # vnstock free tier
-
-def get_ohlcv_batch(symbols, n_days=200):
-    result = {}
-    for i, symbol in enumerate(symbols):
-        if i > 0 and i % BATCH_SIZE == 0:
-            print(f"⏳ Sleep {SLEEP_SECONDS}s sau {i} mã...")
-            time.sleep(SLEEP_SECONDS)
-        result[symbol] = get_ohlcv(symbol, n_days)
-    return result
+```text
+pe, pb, roe, eps, revenue_growth, profit_growth, industry
 ```
 
----
+Foreign flow always returns:
 
-## Data Sources
+```text
+room_usage_pct, net_flow_5d, net_flow_20d, flow_history
+```
 
-| Data | Source | Library |
-|------|--------|---------|
-| OHLCV VN stocks | VCI | vnstock==3.4.2 |
-| Fundamentals | VCI | vnstock==3.4.2 |
-| Foreign flow | VCI | vnstock==3.4.2 |
-| Global macro | Yahoo Finance | yfinance |
-| USD/VND | Yahoo Finance (VND=X) | yfinance |
-| News | CafeF, VnExpress | beautifulsoup4 |
+Price board always returns:
+
+```text
+symbol, price, listed_share, current_room, total_room,
+foreign_buy_vol, foreign_sell_vol, foreign_buy_val, foreign_sell_val
+```
+
+## Source Priority
+
+| Data | Primary | Fallback |
+| --- | --- | --- |
+| Vietnam OHLCV | `vnstock_data.Market` | DNSE OHLCV where available |
+| VN30/VN100/HOSE symbols | `vnstock_data.Reference` | static VN100 list |
+| Price board | `vnstock_data.Market` | empty DataFrame |
+| Fundamentals | `vnstock_data.Fundamental` | FiinQuantX, static VN30 |
+| Foreign flow | `vnstock_data.Market.foreign_flow` | FiinQuantX, price board snapshot |
+| Live broker price | DNSE WebSocket/REST | `vnstock_data` price board |
+| Global macro | yfinance | cached/stale output |
+| News | existing crawlers | migrate to `vnstock_news` where coverage is enough |
+
+## Usage Rule
+
+Use the stable project API:
 
 ```python
-# Luôn dùng VCI source
-from vnstock import Vnstock
-stock = Vnstock().stock(symbol=symbol, source="VCI")
+from multiagents_trading_assistant.services.data_service import get_ohlcv
+
+df = get_ohlcv("VCB", n_days=200)
+```
+
+Do not use this in agents or screeners:
+
+```python
+from vnstock import ...
+from vnstock_data import ...
 ```

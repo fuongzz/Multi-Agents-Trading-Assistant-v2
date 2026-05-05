@@ -24,12 +24,59 @@ from multiagents_trading_assistant.services import output_service
 from multiagents_trading_assistant.services.output_service import send_pipeline_alert
 from multiagents_trading_assistant.services.memory_service import save_trade_decision
 from multiagents_trading_assistant.orchestrator.session_monitor import run_session_monitor
+from multiagents_trading_assistant.bob.simulator import run_strategy_development_meeting
+from multiagents_trading_assistant.memory.strategy_memory import StrategyMemory
+from multiagents_trading_assistant.bob.reward_tracker import RewardTracker
+
+_reward_tracker = RewardTracker()
 
 _VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 
 
 def _today() -> str:
     return datetime.now(tz=_VN_TZ).strftime("%Y-%m-%d")
+
+
+def _load_active_strategies() -> list[dict]:
+    """Load active strategies from ℳₛ for injection into Otto's context.
+
+    Returns a list of dicts (serialisable) sorted by profit_factor desc.
+    Returns [] gracefully if memory file does not exist yet.
+    """
+    try:
+        mem = StrategyMemory()
+        records = mem.get_active_strategies()
+        return [
+            {
+                "setup": r.setup,
+                "regime": r.regime,
+                "win_rate": r.win_rate,
+                "profit_factor": r.profit_factor,
+                "avg_rr": r.avg_rr,
+                "sample_size": r.sample_size,
+                "updated_at": r.updated_at,
+            }
+            for r in records
+        ]
+    except Exception as e:
+        print(f"[runner] ℳₛ load failed: {e}")
+        return []
+
+
+def run_bob_strategy_meeting() -> None:
+    """Bob's weekly Strategy Development Meeting — updates ℳₛ.
+
+    Paper: "Bob executes simulated trading backtests on all potential new
+    strategies (μ't) ... selects strategies with strongest historical
+    performance to form new strategy set (μ')."
+    """
+    print(f"\n{'=' * 60}\n[runner] BOB STRATEGY MEETING — {_today()}\n{'=' * 60}")
+    try:
+        active = run_strategy_development_meeting()
+        print(f"[runner] Bob complete — {len(active)} active strategies in ℳₛ")
+    except Exception as e:
+        print(f"[runner] Bob meeting FAIL: {e}")
+        send_pipeline_alert("bob", e, date=_today())
 
 
 # ──────────────────────────────────────────────
@@ -78,18 +125,131 @@ def _run_investment_pipeline_inner(
 # Trade pipeline
 # ──────────────────────────────────────────────
 
+import os as _os
+
+_GRAPH_MODE = _os.environ.get("MATA_GRAPH_MODE", "fast").lower()
+
+
 def run_trade_pipeline(
     symbol: str | None = None,
     date: str | None = None,
 ) -> list[dict]:
     date = date or _today()
     db.init_db()
-    print(f"\n{'=' * 60}\n[runner] TRADE PIPELINE — {date}\n{'=' * 60}")
+    print(f"\n{'=' * 60}\n[runner] TRADE PIPELINE — {date} | mode={_GRAPH_MODE}\n{'=' * 60}")
     try:
+        if _GRAPH_MODE == "deep":
+            return _run_trade_pipeline_deep(symbol, date)
         return _run_trade_pipeline_inner(symbol, date)
     except Exception as e:
         send_pipeline_alert("trade", e, date=date)
         raise
+
+
+def _run_trade_pipeline_deep(
+    symbol: str | None,
+    date: str,
+) -> list[dict]:
+    """Deep mode: screener → top 3–5 candidates → TradingAgentsVN full debate → batch Discord."""
+    from multiagents_trading_assistant.tradingagents_vn.graph import TradingAgentsVN
+    from multiagents_trading_assistant.backtest.validator import validate_trade_plan
+    from multiagents_trading_assistant.backtest.plan_scorer import evaluate_plan
+    from multiagents_trading_assistant.services.data_service import get_ohlcv
+
+    _DEEP_TOP_N = int(_os.environ.get("MATA_DEEP_TOP_N", "3"))
+    cheap = _os.environ.get("MATA_DEEP_CHEAP", "true").lower() == "true"
+
+    graph = TradingAgentsVN(cheap=cheap, max_invest_rounds=2, max_risk_rounds=1)
+
+    if symbol:
+        candidates_sym = [symbol.upper()]
+    else:
+        _market_ctx, candidates = trade_screener()
+        if not _market_ctx.should_trade:
+            print(f"[runner:deep] should_trade=False — skip")
+            output_service.send_to_channel(
+                "trade",
+                f"📊 **{date}** — Thị trường không thuận, deep mode bỏ qua phiên hôm nay.\n"
+                f"Trend: {_market_ctx.reference_trend} | VNI: {_market_ctx.vni_change_pct:+.2f}%",
+            )
+            return []
+        candidates_sym = [c.symbol for c in candidates[:_DEEP_TOP_N]]
+
+    print(f"[runner:deep] Phân tích sâu: {candidates_sym}")
+
+    results = []
+    mua_plans = []
+
+    for sym in candidates_sym:
+        print(f"\n[runner:deep] → {sym}")
+        try:
+            # Lấy current price để validate
+            df = get_ohlcv(sym, 5)
+            current_price = float(df["close"].iloc[-1]) if not df.empty else 0.0
+
+            plan = graph.propagate(sym, signal_date=date, setup_type="UNKNOWN")
+
+            if plan is None:
+                print(f"[runner:deep] {sym}: không parse được TradePlan")
+                continue
+
+            vr = validate_trade_plan(plan, current_price)
+            if not vr:
+                print(f"[runner:deep] {sym}: validate fail — {vr.errors}")
+                continue
+
+            score, should_trade = evaluate_plan(plan, {})
+            print(f"[runner:deep] {sym}: action={plan.action} score={score:.3f}")
+
+            state_dict = {
+                "symbol": sym,
+                "date": date,
+                "plan": plan.model_dump(),
+                "score": score,
+                "should_trade": should_trade,
+            }
+            results.append(state_dict)
+
+            if should_trade and plan.action == "MUA":
+                mua_plans.append((sym, plan, score))
+
+        except Exception as e:
+            print(f"[runner:deep] {sym} FAIL: {e}")
+            send_pipeline_alert("trade", e, symbol=sym, date=date)
+
+    # Gửi Discord: 1 summary + detail top 1–3 MUA
+    _send_deep_mode_discord(date, results, mua_plans)
+    return results
+
+
+def _send_deep_mode_discord(
+    date: str,
+    all_results: list[dict],
+    mua_plans: list,
+) -> None:
+    """Gửi 1 summary embed + detail cho top 1–3 MUA. Không spam từng mã."""
+    analyzed = len(all_results)
+    mua_count = len(mua_plans)
+
+    summary_lines = [f"**TradingAgents-VN Deep Mode | {date}**", ""]
+    summary_lines.append(f"Đã phân tích: {analyzed} mã | MUA: {mua_count} mã")
+    summary_lines.append("")
+
+    for sym, plan, score in mua_plans[:3]:
+        entry_low, entry_high = plan.entry_zone
+        summary_lines.append(
+            f"🟢 **{sym}** | Entry: {entry_low:.1f}–{entry_high:.1f} | "
+            f"SL: {plan.stop_loss:.1f} | TP: {plan.take_profit:.1f} | "
+            f"R:R: {plan.rr_ratio:.2f} | Score: {score:.2f}"
+        )
+
+    if not mua_plans:
+        summary_lines.append("Không có tín hiệu MUA đủ chất lượng hôm nay.")
+
+    try:
+        output_service.send_to_channel("trade", "\n".join(summary_lines))
+    except Exception as e:
+        print(f"[runner:deep] Discord send fail: {e}")
 
 
 def _run_trade_pipeline_inner(
@@ -97,8 +257,11 @@ def _run_trade_pipeline_inner(
     date: str,
 ) -> list[dict]:
 
+    # Retrieve active strategies from ℳₛ for Otto — paper: ϕD(st, ℳret, μt)
+    active_strategies = _load_active_strategies()
+
     if symbol:
-        candidates_sym = [(symbol, "UNKNOWN", {"_portfolio_checked": False})]
+        candidates_sym = [(symbol, "UNKNOWN", {"_portfolio_checked": False, "active_strategies": active_strategies})]
     else:
         _market_ctx, candidates = trade_screener()
         candidates_sym = []
@@ -108,6 +271,7 @@ def _run_trade_pipeline_inner(
             ctx["stock_day_change_pct"] = c.indicators.get("stock_day_change_pct", 0.0)
             ctx["screener_money_flow"] = c.indicators.get("money_flow_analysis", {})
             ctx["avg_vol_20d"] = c.indicators.get("volume_ma20")
+            ctx["active_strategies"] = active_strategies
             candidates_sym.append((c.symbol, c.setup_type, ctx))
 
     results = []
@@ -122,6 +286,8 @@ def _run_trade_pipeline_inner(
                 save_trade_decision(state)
             except Exception as e:
                 print(f"[runner] memory save fail ({sym}): {e}")
+            # Record entry cho dual-reward tracking
+            _record_trade_entry(state, sym, setup, date)
         except Exception as e:
             print(f"[runner] Trade {sym} FAIL: {e}")
             send_pipeline_alert("trade", e, symbol=sym, date=date)
@@ -156,6 +322,11 @@ def start_scheduler() -> None:
         id="trade_daily",
     )
     scheduler.add_job(
+        run_bob_strategy_meeting,
+        CronTrigger(day_of_week="fri", hour=20, minute=0, timezone=_VN_TZ),
+        id="bob_strategy_meeting",
+    )
+    scheduler.add_job(
         _run_cleanup,
         CronTrigger(day_of_week="sun", hour=2, minute=0, timezone=_VN_TZ),
         id="cleanup_weekly",
@@ -172,6 +343,7 @@ def start_scheduler() -> None:
     )
 
     print("[runner] APScheduler started:")
+    print("  - Bob (ℳₛ)     : Thu 6 20:00 VN — Strategy Development Meeting")
     print("  - Investment    : Thu 2 08:00 VN")
     print("  - Trade         : Hang ngay 08:30 VN")
     print("  - Session mon.  : Moi 5 phut (09:00-14:35) — real-time risk")
@@ -341,6 +513,27 @@ def _run_cleanup() -> None:
 # ──────────────────────────────────────────────
 # Summary helpers
 # ──────────────────────────────────────────────
+
+def _record_trade_entry(state: dict, symbol: str, setup: str, date: str) -> None:
+    """Record MUA decision vào RewardTracker cho dual-reward tracking."""
+    try:
+        if state.get("risk_output", {}).get("final_action") != "MUA":
+            return
+        entry_price = (
+            state.get("trader_decision", {}).get("entry_price")
+            or state.get("market_context", {}).get("stock_current_price")
+        )
+        if not entry_price:
+            return
+        _reward_tracker.record_entry(
+            symbol=symbol,
+            setup=setup,
+            entry_date=date,
+            entry_price=float(entry_price),
+        )
+    except Exception as e:
+        print(f"[runner] reward_tracker record_entry fail ({symbol}): {e}")
+
 
 def _print_invest_summary(results: list[dict], date: str) -> None:
     mua  = sum(1 for s in results if s.get("risk_output", {}).get("final_action") == "MUA")

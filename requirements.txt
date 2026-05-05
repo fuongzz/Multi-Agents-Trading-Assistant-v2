@@ -8,10 +8,14 @@ langchain-anthropic>=0.2.0
 langchain-core>=0.2.0
 
 # === Data ===
-vnstock==3.4.2
+# Golden sponsor packages are installed via vnstock_installer into
+# C:\Users\NC\.venv. Do not depend on the free vnstock package here.
+vnstock_installer>=3.1.1
 yfinance>=0.2.40
-pandas>=2.0.0,<3.0.0
-numpy>=1.24.0,<2.0.0
+pandas>=2.3.0,<4.0.0
+numpy>=1.26.0
+pyarrow>=14.0.1
+openpyxl>=3.1.0
 
 # === Technical Indicators ===
 pandas-ta-openbb>=0.4.0
@@ -19,6 +23,7 @@ pandas-ta-openbb>=0.4.0
 # === Web Scraping ===
 beautifulsoup4>=4.12.0
 requests>=2.31.0
+vnstock_news>=2.2.0
 
 # === Discord ===
 discord.py>=2.3.0
@@ -42,3 +47,6 @@ tenacity>=8.2.0
 
 # === Observability ===
 langsmith>=0.1.0
+
+# === Tests ===
+pytest>=9.0.0

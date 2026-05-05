@@ -2,9 +2,8 @@
 fetcher.py — Data layer: lấy toàn bộ dữ liệu cho pipeline.
 
 Sources:
-  - DNSE (primary)  : REST GET /price/ohlc (LightSpeed API)
-  - VCI (fallback)  : vnstock.explorer.vci.Quote
-  - KBS (fallback)  : vnstock.Quote(source="KBS")
+  - vnstock_data Golden (primary): Market, Reference, Fundamental
+  - DNSE (fallback/broker)       : REST GET /price/ohlc (LightSpeed API)
   - FiinQuantX      : fundamentals (P/E, P/B, ROE, EPS, growth, industry)
   - FiinQuantX      : foreign flow net5d/net20d
   - yfinance        : global macro (S&P500, DXY, Oil, Gold, USD/VND)
@@ -54,24 +53,7 @@ except Exception:
 
 # ── DNSE LightSpeed API ──
 from multiagents_trading_assistant.services.dnse_client import _get_dnse_client
-
-
-def _get_vci_quote_class():
-    from vnstock.explorer.vci import Quote
-
-    return Quote
-
-
-def _get_kbs_quote_class():
-    from vnstock import Quote
-
-    return Quote
-
-
-def _get_trading_class():
-    from vnstock import Trading
-
-    return Trading
+from multiagents_trading_assistant.data import get_data_provider
 
 
 # ──────────────────────────────────────────────
@@ -130,36 +112,6 @@ _CACHE_DIR = _BASE_DIR / "cache"
 _CACHE_DIR.mkdir(exist_ok=True)
 
 _TODAY = datetime.now().strftime("%Y-%m-%d")
-
-_VCI_MAX_REQ_PER_MIN = 14
-_VCI_SLEEP_SECONDS   = 62
-_vci_count = 0
-_vci_window_start = time.time()
-
-
-# ──────────────────────────────────────────────
-# Rate limiter
-# ──────────────────────────────────────────────
-
-def _throttle() -> None:
-    """Sleep nếu đã gần đạt giới hạn VCI free tier."""
-    global _vci_count, _vci_window_start
-    elapsed = time.time() - _vci_window_start
-
-    if elapsed >= 60:
-        _vci_count = 0
-        _vci_window_start = time.time()
-
-    if _vci_count >= _VCI_MAX_REQ_PER_MIN:
-        wait = _VCI_SLEEP_SECONDS - elapsed
-        if wait > 0:
-            print(f"[fetcher] VCI rate limit — chờ {wait:.0f}s...")
-            time.sleep(wait)
-        _vci_count = 0
-        _vci_window_start = time.time()
-
-    _vci_count += 1
-
 
 # ──────────────────────────────────────────────
 # Cache helpers
@@ -263,12 +215,23 @@ def _normalize_history_df(df: pd.DataFrame, start: str, end: str) -> pd.DataFram
 
 def _fetch_single(symbol: str, n_days: int) -> pd.DataFrame:
     """
-    Lấy OHLCV 1 mã. DNSE trước, VCI nếu lỗi, KBS nếu VCI cũng lỗi.
-    Trả về DataFrame trống nếu cả 3 đều thất bại.
+    Lấy OHLCV 1 mã. vnstock_data Golden trước, DNSE fallback.
+    Trả về DataFrame trống nếu các nguồn đều thất bại.
     """
     start, end = _date_range(n_days)
 
-    # ── DNSE (primary) ──
+    # ── vnstock_data Golden (primary) ──
+    try:
+        df = get_data_provider().get_ohlcv(symbol, start, end, interval="1D")
+        if df is not None and not df.empty:
+            df = _normalize_df(df, n_days)
+            print(f"[fetcher] vnstock_data ✓ {symbol}: {len(df)} nến")
+            return df
+        print(f"[fetcher] vnstock_data trống {symbol} — thử DNSE...")
+    except Exception as e:
+        print(f"[fetcher] vnstock_data ✗ {symbol}: {e} — thử DNSE...")
+
+    # ── DNSE fallback ──
     try:
         client = _get_dnse_client()
         if client is not None:
@@ -279,33 +242,9 @@ def _fetch_single(symbol: str, n_days: int) -> pd.DataFrame:
                 df = _normalize_df(df, n_days)
                 print(f"[fetcher] DNSE ✓ {symbol}: {len(df)} nến")
                 return df
-            print(f"[fetcher] DNSE trống {symbol} — thử VCI...")
+            print(f"[fetcher] DNSE trống {symbol}")
     except Exception as e:
-        print(f"[fetcher] DNSE ✗ {symbol}: {e} — thử VCI...")
-
-    # ── VCI fallback ──
-    try:
-        _throttle()
-        df = _get_vci_quote_class()(symbol).history(start=start, end=end, interval="1D")
-        if df is not None and not df.empty:
-            df = _normalize_df(df, n_days)
-            print(f"[fetcher] VCI ✓ {symbol}: {len(df)} nến")
-            return df
-    except Exception as e:
-        print(f"[fetcher] VCI ✗ {symbol}: {e} — thử KBS...")
-
-    # ── KBS fallback ──
-    try:
-        _throttle()
-        df = _get_kbs_quote_class()(symbol=symbol, source="KBS").history(
-            start=start, end=end, interval="1D"
-        )
-        if df is not None and not df.empty:
-            df = _normalize_df(df, n_days)
-            print(f"[fetcher] KBS ✓ {symbol}: {len(df)} nến")
-            return df
-    except Exception as e:
-        print(f"[fetcher] KBS ✗ {symbol}: {e}")
+        print(f"[fetcher] DNSE ✗ {symbol}: {e}")
 
     print(f"[fetcher] Không lấy được data {symbol}")
     return pd.DataFrame()
@@ -313,9 +252,20 @@ def _fetch_single(symbol: str, n_days: int) -> pd.DataFrame:
 
 def _fetch_history(symbol: str, start: str, end: str, resolution: str = "1D") -> pd.DataFrame:
     """
-    Lấy OHLCV theo khoảng ngày tuyệt đối. DNSE trước, VCI nếu lỗi, KBS nếu VCI cũng lỗi.
+    Lấy OHLCV theo khoảng ngày tuyệt đối. vnstock_data Golden trước, DNSE fallback.
     """
-    # ── DNSE (primary) ──
+    # ── vnstock_data Golden (primary) ──
+    try:
+        df = get_data_provider().get_ohlcv(symbol, start, end, interval=resolution)
+        df = _normalize_history_df(df, start, end)
+        if df is not None and not df.empty:
+            print(f"[fetcher] vnstock_data hist ✓ {symbol}: {len(df)} nến")
+            return df
+        print(f"[fetcher] vnstock_data hist trống {symbol} — thử DNSE...")
+    except Exception as e:
+        print(f"[fetcher] vnstock_data hist ✗ {symbol}: {e} — thử DNSE...")
+
+    # ── DNSE fallback ──
     try:
         client = _get_dnse_client()
         if client is not None:
@@ -332,35 +282,9 @@ def _fetch_history(symbol: str, start: str, end: str, resolution: str = "1D") ->
             if df is not None and not df.empty:
                 print(f"[fetcher] DNSE hist ✓ {symbol}: {len(df)} nến")
                 return df
-            print(f"[fetcher] DNSE hist trống {symbol} — thử VCI...")
+            print(f"[fetcher] DNSE hist trống {symbol}")
     except Exception as e:
-        print(f"[fetcher] DNSE hist ✗ {symbol}: {e} — thử VCI...")
-
-    # ── VCI fallback ──
-    try:
-        _throttle()
-        df = _get_vci_quote_class()(symbol).history(start=start, end=end, interval=resolution)
-        df = _normalize_history_df(df, start, end)
-        if df is not None and not df.empty:
-            print(f"[fetcher] VCI hist ✓ {symbol}: {len(df)} nến")
-            return df
-    except Exception as e:
-        print(f"[fetcher] VCI hist ✗ {symbol}: {e} — thử KBS...")
-
-    # ── KBS fallback ──
-    try:
-        _throttle()
-        df = _get_kbs_quote_class()(symbol=symbol, source="KBS").history(
-            start=start,
-            end=end,
-            interval=resolution,
-        )
-        df = _normalize_history_df(df, start, end)
-        if df is not None and not df.empty:
-            print(f"[fetcher] KBS hist ✓ {symbol}: {len(df)} nến")
-            return df
-    except Exception as e:
-        print(f"[fetcher] KBS hist ✗ {symbol}: {e}")
+        print(f"[fetcher] DNSE hist ✗ {symbol}: {e}")
 
     print(f"[fetcher] Không lấy được history {symbol} {start}→{end}")
     return pd.DataFrame()
@@ -489,29 +413,28 @@ def get_vnindex(n_days: int = 200) -> pd.DataFrame:
     start, end = _date_range(n_days)
     df = pd.DataFrame()
 
-    # ── DNSE (primary, type=INDEX) ──
+    # ── vnstock_data Golden (primary) ──
     try:
-        client = _get_dnse_client()
-        if client is not None:
-            from_ts = _to_unix_ts(start)
-            to_ts   = _to_unix_ts(end) + 86400
-            df = client.get_ohlcv("VNINDEX", from_ts, to_ts, resolution="1D", asset_type="INDEX")
-            if df is not None and not df.empty:
-                df = _normalize_df(df, n_days)
-                print(f"[fetcher] DNSE ✓ VNINDEX: {len(df)} nến")
+        raw = get_data_provider().get_ohlcv("VNINDEX", start, end, interval="1D")
+        if raw is not None and not raw.empty:
+            df = _normalize_df(raw, n_days)
+            print(f"[fetcher] vnstock_data ✓ VNINDEX: {len(df)} nến")
     except Exception as e:
-        print(f"[fetcher] DNSE ✗ VNINDEX: {e} — thử vnstock...")
+        print(f"[fetcher] vnstock_data ✗ VNINDEX: {e} — thử DNSE...")
 
-    # ── vnstock fallback ──
+    # ── DNSE fallback ──
     if df.empty:
         try:
-            _throttle()
-            raw = _get_vci_quote_class()("VNINDEX").history(start=start, end=end, interval="1D")
-            if raw is not None and not raw.empty:
-                df = _normalize_df(raw, n_days)
-                print(f"[fetcher] VCI ✓ VNINDEX: {len(df)} nến")
+            client = _get_dnse_client()
+            if client is not None:
+                from_ts = _to_unix_ts(start)
+                to_ts   = _to_unix_ts(end) + 86400
+                df = client.get_ohlcv("VNINDEX", from_ts, to_ts, resolution="1D", asset_type="INDEX")
+                if df is not None and not df.empty:
+                    df = _normalize_df(df, n_days)
+                    print(f"[fetcher] DNSE ✓ VNINDEX: {len(df)} nến")
         except Exception as e:
-            print(f"[fetcher] VCI ✗ VNINDEX: {e}")
+            print(f"[fetcher] DNSE ✗ VNINDEX: {e}")
 
     if not df.empty:
         _save_cache(key, _df_to_records(df))
@@ -537,6 +460,14 @@ def get_vnmidcap(n_days: int = 200) -> pd.DataFrame:
 # ──────────────────────────────────────────────
 
 def get_vn30_symbols() -> list[str]:
+    try:
+        symbols = get_data_provider().get_symbols_by_group("VN30")
+        if len(symbols) >= 30:
+            print(f"[fetcher] VN30 from vnstock_data: {len(symbols)} symbols")
+            return symbols
+    except Exception as e:
+        print(f"[fetcher] VN30 vnstock_data failed: {e} - using static list")
+
     return [
         "ACB", "BCM", "BID", "BVH", "CTG",
         "FPT", "GAS", "GVR", "HDB", "HPG",
@@ -550,14 +481,12 @@ def get_vn30_symbols() -> list[str]:
 def get_vn100_symbols() -> list[str]:
     """VN100 từ Listing API. Fallback danh sách cứng 100 mã nếu API lỗi."""
     try:
-        from vnstock import Listing
-        df = Listing().symbols_by_group("VN100")
-        symbols = df.tolist() if hasattr(df, "tolist") else df["symbol"].tolist()
+        symbols = get_data_provider().get_symbols_by_group("VN100")
         if len(symbols) >= 90:
-            print(f"[fetcher] VN100 từ Listing API: {len(symbols)} mã")
+            print(f"[fetcher] VN100 from vnstock_data: {len(symbols)} symbols")
             return symbols
     except Exception as e:
-        print(f"[fetcher] VN100 API lỗi: {e} — dùng danh sách cứng")
+        print(f"[fetcher] VN100 vnstock_data failed: {e} - using static list")
 
     return [
         "ACB", "ANV", "BCM", "BID", "BMP", "BSI", "BSR", "BVH", "BWE", "CII",
@@ -583,6 +512,16 @@ def get_all_symbols() -> list[str]:
         Danh sách mã cổ phiếu HOSE (thường ~400 mã).
     """
     key    = f"all_symbols_{_TODAY}"
+    try:
+        symbols = get_data_provider().get_symbols_by_exchange("HOSE")
+        if len(symbols) >= 100:
+            print(f"[fetcher] vnstock_data Reference primary: {len(symbols)} ma HOSE")
+            _save_cache(key, [{"symbol": s, "source": "vnstock_data"} for s in symbols])
+            return symbols
+        print(f"[fetcher] vnstock_data Reference incomplete: {len(symbols)} ma")
+    except Exception as e:
+        print(f"[fetcher] vnstock_data Reference failed: {e} - trying cache/DNSE...")
+
     # DNSE instruments primary. `vnstock Listing` remains a fallback below.
     # Keep this block before cache loading during the migration so a stale
     # vnstock-sourced all_symbols cache does not hide DNSE diagnostics.
@@ -631,9 +570,7 @@ def get_all_symbols() -> list[str]:
 
     # ── vnstock Listing (primary — đầy đủ nhất) ──
     try:
-        from vnstock import Listing
-        df = Listing().symbols_by_group("HOSE")
-        symbols = df.tolist() if hasattr(df, "tolist") else df["symbol"].tolist()
+        symbols = get_data_provider().get_symbols_by_exchange("HOSE")
         if len(symbols) >= 100:
             print(f"[fetcher] vnstock Listing ✓: {len(symbols)} mã HOSE")
             _save_cache(key, [{"symbol": s} for s in symbols])
@@ -740,7 +677,7 @@ def get_liquid_symbols(
 
 def get_price_board(symbols: list[str]) -> pd.DataFrame:
     """
-    Lấy bảng giá realtime + thông tin khối ngoại từ Trading.price_board (VCI).
+    Lấy bảng giá realtime + thông tin khối ngoại từ data provider.
 
     Returns:
         DataFrame với columns:
@@ -756,26 +693,14 @@ def get_price_board(symbols: list[str]) -> pd.DataFrame:
         return pd.DataFrame(cached)
 
     try:
-        _throttle()
-        raw = _get_trading_class()(source="VCI").price_board(symbols_list=symbols)
-        raw.columns = ["_".join(str(c) for c in col).strip("_") for col in raw.columns]
-
-        df = pd.DataFrame()
-        df["symbol"]           = raw.get("listing_symbol",            pd.Series(dtype=str))
-        df["price"]            = raw.get("match_match_price",         pd.Series(dtype=float))
-        df["listed_share"]     = raw.get("listing_listed_share",      pd.Series(dtype=float))
-        df["current_room"]     = raw.get("match_current_room",        pd.Series(dtype=float))
-        df["total_room"]       = raw.get("match_total_room",          pd.Series(dtype=float))
-        df["foreign_buy_vol"]  = raw.get("match_foreign_buy_volume",  pd.Series(dtype=float))
-        df["foreign_sell_vol"] = raw.get("match_foreign_sell_volume", pd.Series(dtype=float))
-        df["foreign_buy_val"]  = raw.get("match_foreign_buy_value",   pd.Series(dtype=float))
-        df["foreign_sell_val"] = raw.get("match_foreign_sell_value",  pd.Series(dtype=float))
-
+        df = get_data_provider().get_price_board(symbols)
+        if df is None or df.empty:
+            return pd.DataFrame()
         _save_cache(key, _df_to_records(df))
-        print(f"[fetcher] price_board ✓ {len(df)} mã")
+        print(f"[fetcher] price_board vnstock_data ok {len(df)} ma")
         return df
     except Exception as e:
-        print(f"[fetcher] price_board ✗: {e}")
+        print(f"[fetcher] price_board vnstock_data failed: {e}")
         return pd.DataFrame()
 
 
@@ -785,7 +710,7 @@ def get_live_price(symbols: list[str]) -> dict[str, float]:
     Thứ tự ưu tiên:
       1. DNSE WebSocket cache (instant, real-time tick)
       2. DNSE REST 1m OHLCV (candle gần nhất, ~1-2 phút trễ)
-      3. VCI price_board (fallback cuối)
+      3. vnstock_data price_board (fallback cuối)
 
     Returns:
         {symbol: price} — chỉ gồm các mã lấy được giá.
@@ -832,20 +757,18 @@ def get_live_price(symbols: list[str]) -> dict[str, float]:
         except Exception as e:
             print(f"[fetcher] get_live_price DNSE REST: {e}")
 
-    # ── 3. VCI fallback ──
+    # ── 3. vnstock_data fallback ──
     if missing:
         try:
-            _throttle()
-            raw = _get_trading_class()(source="VCI").price_board(symbols_list=missing)
-            raw.columns = ["_".join(str(c) for c in col).strip("_") for col in raw.columns]
+            raw = get_data_provider().get_price_board(missing)
             for _, row in raw.iterrows():
-                sym   = row.get("listing_symbol")
-                price = row.get("match_match_price")
+                sym   = row.get("symbol")
+                price = row.get("price")
                 if sym and price and float(price) > 0:
                     result[str(sym)] = float(price)
-            print(f"[fetcher] get_live_price VCI fallback {len(missing)} mã")
+            print(f"[fetcher] get_live_price vnstock_data fallback {len(missing)} ma")
         except Exception as e:
-            print(f"[fetcher] get_live_price VCI fail: {e}")
+            print(f"[fetcher] get_live_price vnstock_data fail: {e}")
 
     return result
 
@@ -911,6 +834,24 @@ def get_fundamentals(symbol: str) -> dict:
         "pe": None, "pb": None, "roe": None, "eps": None,
         "revenue_growth": None, "profit_growth": None, "industry": None,
     }
+
+    try:
+        vn_result = get_data_provider().get_fundamentals(symbol)
+        if vn_result:
+            for key_name, value in vn_result.items():
+                if key_name in result:
+                    result[key_name] = value
+            if any(value is not None for value in result.values()):
+                print(
+                    f"[fetcher] fundamentals vnstock_data ok {symbol}: "
+                    f"PE={result['pe']}, ROE={result['roe']}, EPS={result['eps']}"
+                )
+    except Exception as e:
+        print(f"[fetcher] fundamentals vnstock_data failed {symbol}: {e}")
+
+    if all(value is not None for value in result.values()):
+        _save_cache(key, [result])
+        return result
 
     # ── FiinQuantX ──
     try:
@@ -1048,6 +989,35 @@ def get_foreign_flow(symbol: str, n_days: int = 20) -> dict:
         "flow_history":   [],
     }
 
+    try:
+        vn_result = get_data_provider().get_foreign_flow(symbol, n_days=n_days)
+        if vn_result:
+            result.update(vn_result)
+            if result["net_flow_5d"] is not None or result["net_flow_20d"] is not None:
+                print(
+                    f"[fetcher] foreign_flow vnstock_data ok {symbol}: "
+                    f"net5d={result['net_flow_5d']}, net20d={result['net_flow_20d']}"
+                )
+    except Exception as e:
+        print(f"[fetcher] foreign_flow vnstock_data failed {symbol}: {e}")
+
+    if result["net_flow_5d"] is not None and result["net_flow_20d"] is not None:
+        try:
+            pb = get_price_board([symbol])
+            if not pb.empty:
+                row = pb[pb["symbol"] == symbol]
+                if not row.empty:
+                    r = row.iloc[0]
+                    # Ưu tiên foreign_ownership_pct từ summary()
+                    # Banks cap=30%, others cap=49%. Dùng 49% làm mẫu số an toàn.
+                    own_pct = _safe_float(r.get("foreign_ownership_pct"))
+                    if own_pct is not None:
+                        result["room_usage_pct"] = round(own_pct / 49.0 * 100, 1)
+        except Exception:
+            pass
+        _save_cache(key, [result])
+        return result
+
     # ── FiinQuantX: lịch sử fb/fs/fn ──────────────────────────────────────
     try:
         client  = _get_fiin_client()
@@ -1089,11 +1059,9 @@ def get_foreign_flow(symbol: str, n_days: int = 20) -> dict:
             row = pb[pb["symbol"] == symbol]
             if not row.empty:
                 r = row.iloc[0]
-                total   = _safe_float(r.get("total_room"))
-                current = _safe_float(r.get("current_room"))
-                if total and total > 0:
-                    used = total - (current or 0)
-                    result["room_usage_pct"] = round(used / total * 100, 1)
+                own_pct = _safe_float(r.get("foreign_ownership_pct"))
+                if own_pct is not None:
+                    result["room_usage_pct"] = round(own_pct / 49.0 * 100, 1)
 
                 if result["net_flow_5d"] is None:
                     buy  = _safe_float(r.get("foreign_buy_vol"))  or 0.0

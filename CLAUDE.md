@@ -1,7 +1,7 @@
 # AI Trading Assistant — Project Reference
 
 **Dự án**: Multi-agent trading assistant cho thị trường chứng khoán Việt Nam  
-**Stack**: Python 3.11, LangGraph, Anthropic Claude, DNSE LightSpeed API, vnstock, FiinQuantX  
+**Stack**: Python 3.11, LangGraph, Anthropic Claude, DNSE LightSpeed API, vnstock_data (Golden), FiinQuantX  
 **Phạm vi**: Toàn bộ HOSE (~400 mã, lọc thanh khoản ≥500k/ngày)
 
 ---
@@ -79,15 +79,19 @@ multiagents_trading_assistant/
     risk_trade.py            — R:R ratio >= 1.5, max loss/trade (relative, không cần NAV tuyệt đối)
   services/
     llm_service.py           — Provider abstraction (Haiku / Sonnet)
-    data_service.py          — vnstock + FiinQuantX wrapper (dùng chung)
+    data_service.py          — vnstock_data Golden + FiinQuantX wrapper (dùng chung)
     memory_service.py        — ChromaDB operations (dùng chung)
     output_service.py        — send_to_channel(), send_pipeline_alert(), Discord + JSON output
+    dnse_client.py           — DNSE LightSpeed REST client (broker fallback, live data)
   formatters/
     invest_embed.py          — Discord embed màu xanh, format weekly
     trade_embed.py           — Discord embed màu cam, format daily + SL/TP
-  services/
-    dnse_client.py           — DNSE LightSpeed REST client (OHLCV history, instruments)
-  fetcher.py                 — Data layer: DNSE primary, vnstock fallback
+  data/
+    providers/
+      base.py                — DataProvider Protocol (vendor-neutral interface)
+      vnstock_provider.py    — vnstock_data Golden implementation
+    repository.py            — get_data_provider() factory, env: MATA_DATA_PROVIDER
+  fetcher.py                 — Data layer: vnstock_data Golden primary, DNSE broker fallback
   main.py                    — CLI entry point
 docs/
   fiinquant.md               — FiinQuantX API reference
@@ -146,13 +150,14 @@ class TradeState(TypedDict):
 
 | Dữ liệu | Nguồn | Dùng ở pipeline |
 |---|---|---|
-| OHLCV lịch sử | **DNSE REST** `GET /price/ohlc` (primary) → vnstock VCI → KBS | Cả hai |
-| Danh sách mã HOSE | vnstock `Listing().symbols_by_group("HOSE")` → DNSE instruments | Cả hai |
-| PE/PB hiện tại | FiinQuantX `MarketDepth.get_stock_valuation()` | Investment |
-| ROE/EPS/Growth | FiinQuantX `FundamentalAnalysis.get_financial_statement()` | Investment |
-| Industry | FiinQuantX `BasicInfor.get()` → `icbNameL2` | Investment |
-| Foreign flow net5d/net20d | FiinQuantX `Fetch_Trading_Data(fields=["fb","fs","fn"])` | Trade |
-| Foreign room usage | vnstock `Trading.price_board()` | Trade |
+| OHLCV lịch sử | **vnstock_data** `Market.equity().ohlcv()` (primary) → DNSE broker fallback | Cả hai |
+| Danh sách mã HOSE | **vnstock_data** `Reference.equity.by_exchange()` | Cả hai |
+| Danh sách theo nhóm (VN30/VN100) | **vnstock_data** `Reference.equity.by_group()` | Cả hai |
+| Price board / foreign room | **vnstock_data** `Market.equity().price_board()` | Trade |
+| PE/PB hiện tại | **vnstock_data** `Fundamental.equity().ratio()` | Investment |
+| ROE/EPS/Growth | **vnstock_data** `Fundamental.equity().income_statement()` | Investment |
+| Industry | **vnstock_data** `Reference.equity.list_by_industry()` → `icb_name` L2 | Investment |
+| Foreign flow net5d/net20d | **vnstock_data** `Market.equity().foreign_flow()` | Trade |
 | VN-Index / Macro | yfinance | Investment |
 | News/Sentiment | CafeF crawl (Crawl4AI) | Trade |
 
@@ -200,13 +205,16 @@ class TradeState(TypedDict):
 
 ## API Lỗi Đã Biết
 
-- **vnstock Finance (KBS)**: 404 — endpoint thay đổi, không dùng
+- **vnstock Finance (KBS)**: 404 — endpoint thay đổi, không dùng (đã migrate sang vnstock_data)
 - **vnstock `Vnstock(source='VCI')`**: `KeyError: 'data'` trong company init — không dùng
 - **vnstock VN100 symbols API**: `KeyError: 'data'` — dùng `get_liquid_symbols()` thay thế
+- **vnstock_data `price_board()` per-symbol loop**: gọi tuần tự từng mã — chậm với 80-130 mã screener; kiểm tra batch API nếu có
 - **DNSE instruments `securityGroupId='EQ'`**: trả 400 BAD_REQUEST — filter bằng `len(sym)==3 and sym.isalpha()` ở Python
 - **DNSE instruments `page=0`**: trả 400 — dùng `offset=0` thay thế
-- **DNSE instruments** chỉ trả 252 mã 3-ký-tự trong khi HOSE có 402 — dùng vnstock Listing làm primary, DNSE làm fallback cho `get_all_symbols()`
+- **DNSE instruments** chỉ trả 252 mã 3-ký-tự trong khi HOSE có 402 — không dùng DNSE cho listing nữa, dùng vnstock_data `Reference`
 - **Timestamp OHLCV từ DNSE**: trả UTC unix timestamp — cần convert sang Asia/Ho_Chi_Minh rồi `.normalize()` để ra date
+- **vnstock_data `Fundamental.equity().financial_health()`**: có thể không tồn tại trên một số tier — có try/except bảo vệ, fallback sang `balance_sheet()` + `income_statement()`
+- **ROE annualize**: tính `profit * 4 / equity` (giả định quarterly) — cần confirm data period trước khi dùng
 
 ---
 
@@ -360,4 +368,4 @@ python -m multiagents_trading_assistant.main --backtest --setup BREAKOUT --unive
 
 ---
 
-**Last Updated**: 2026-04-30 (session: 4 PA setups, backtest module, backtest VN30 2023-2024)
+**Last Updated**: 2026-05-03 (session: migrate data layer → vnstock_data Golden primary, DNSE broker fallback, DataProvider abstraction layer)

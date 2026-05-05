@@ -86,9 +86,49 @@ def add_backtest_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--mode",
         type=str,
-        choices=["ta", "money-flow", "lifecycle"],
+        choices=["ta", "money-flow", "lifecycle", "live-pipeline", "llm-graph"],
         default="ta",
-        help="Chế độ backtest: ta (TA setups, mặc định) | money-flow (Blackbox regime) | lifecycle (multi-leg position lifecycle)",
+        help=(
+            "Chế độ backtest: ta (TA setups, mặc định) | money-flow | lifecycle | "
+            "live-pipeline | llm-graph (TradingAgents-VN với LLM decisions)"
+        ),
+    )
+    # llm-graph specific args
+    parser.add_argument(
+        "--cheap",
+        action="store_true",
+        help="[llm-graph] Dùng Haiku cho tất cả agent (~$0.03/mã)",
+    )
+    parser.add_argument(
+        "--train-end",
+        dest="train_period_end",
+        type=str,
+        default=None,
+        metavar="YYYY-MM-DD",
+        help="[llm-graph] Ngày kết thúc train period. Performance chỉ tính từ sau ngày này.",
+    )
+    parser.add_argument(
+        "--max-candidates",
+        dest="max_candidates",
+        type=int,
+        default=5,
+        metavar="N",
+        help="[llm-graph] Số candidates top tối đa để deep analyze mỗi ngày (mặc định 5)",
+    )
+    parser.add_argument(
+        "--score-threshold",
+        dest="score_threshold",
+        type=float,
+        default=0.60,
+        metavar="FLOAT",
+        help="[llm-graph] Plan score threshold để vào lệnh (mặc định 0.60)",
+    )
+    parser.add_argument(
+        "--exec-model",
+        dest="exec_model",
+        choices=["next_open", "zone_only", "zone_with_slippage"],
+        default="zone_with_slippage",
+        help="[llm-graph] Entry execution model (mặc định zone_with_slippage)",
     )
     parser.add_argument(
         "--lifecycle-playbook",
@@ -244,6 +284,56 @@ def add_backtest_args(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
+        "--initial-capital",
+        dest="initial_capital",
+        type=float,
+        default=100_000_000.0,
+        metavar="VND",
+        help="[live-pipeline] Initial capital in VND.",
+    )
+    parser.add_argument(
+        "--max-candidates-per-day",
+        dest="max_candidates_per_day",
+        type=int,
+        default=10,
+        metavar="N",
+        help="[live-pipeline] Max screener candidates accepted per day.",
+    )
+    parser.add_argument(
+        "--setups",
+        dest="setups",
+        type=str,
+        default=None,
+        metavar="A,B,...",
+        help="[live-pipeline] Whitelist setup (comma-separated). VD: BB_SQUEEZE,FLAG_PENNANT",
+    )
+    parser.add_argument(
+        "--require-uptrend",
+        dest="require_uptrend",
+        action="store_true",
+        default=False,
+        help="[live-pipeline] Chỉ vào lệnh khi VNINDEX/reference đang UPTREND (bỏ qua SIDEWAY).",
+    )
+    parser.add_argument(
+        "--backtest-mode",
+        dest="backtest_mode",
+        choices=["raw_screener", "broad_pool", "simulated_llm_gate"],
+        default="raw_screener",
+        help=(
+            "[live-pipeline] raw_screener=screener tự trade (mặc định); "
+            "broad_pool=đo candidate flow, không execute; "
+            "simulated_llm_gate=broad + proxy LLM filter + execute."
+        ),
+    )
+    parser.add_argument(
+        "--label",
+        dest="label",
+        type=str,
+        default=None,
+        metavar="TEXT",
+        help="[live-pipeline] Custom label cho tên thư mục kết quả.",
+    )
+    parser.add_argument(
         "--stock-profile",
         dest="stock_profile",
         type=str,
@@ -322,6 +412,11 @@ def run_backtest_cli(args: argparse.Namespace) -> None:
     n_days = max(300, int((calendar_span + 90) * 0.72) + 90)
     history_start = (start_dt - timedelta(days=220)).strftime("%Y-%m-%d")
 
+    # ── LLM-graph mode ────────────────────────────────────────────────────────
+    if mode == "llm-graph":
+        _run_llm_graph_backtest(args, from_date, to_date)
+        return
+
     # ── Money-flow mode ────────────────────────────────────────────────────────
     if mode == "money-flow":
         _run_money_flow_backtest(
@@ -368,6 +463,27 @@ def run_backtest_cli(args: argparse.Namespace) -> None:
             max_total_risk_pct=getattr(args, "max_total_risk_pct", 6.0),
             slippage_bps=getattr(args, "slippage_bps", 10.0),
             history_start=history_start,
+        )
+        return
+
+    if mode == "live-pipeline":
+        _run_live_pipeline_backtest_cli(
+            symbol=symbol,
+            universe=universe,
+            from_date=from_date,
+            to_date=to_date,
+            initial_capital=getattr(args, "initial_capital", 100_000_000.0),
+            max_positions=max_positions if max_positions > 0 else 5,
+            max_candidates_per_day=getattr(args, "max_candidates_per_day", 10),
+            max_hold=max_hold,
+            rr=rr,
+            slippage_bps=getattr(args, "slippage_bps", 10.0),
+            allow_downtrend=allow_downtrend,
+            require_uptrend=getattr(args, "require_uptrend", False),
+            setups=getattr(args, "setups", None),
+            backtest_mode=getattr(args, "backtest_mode", "raw_screener"),
+            custom_label=getattr(args, "label", None),
+            no_save=no_save,
         )
         return
 
@@ -481,6 +597,198 @@ def run_backtest_cli(args: argparse.Namespace) -> None:
         print("[backtest] Cần chỉ định --symbol <MÃ> hoặc --universe <vn30|vn100|liquid>")
         print("  VD: --backtest --symbol VCB --from 2024-01-01")
         print("  VD: --backtest --universe vn30 --from 2023-01-01 --to 2024-12-31")
+
+
+def _run_llm_graph_backtest(
+    args: "argparse.Namespace",
+    from_date: str,
+    to_date: str,
+) -> None:
+    """Dispatch cho --mode llm-graph.
+
+    Chạy TradingAgentsVN trên mỗi ngày trong khoảng backtest.
+    Kết quả in ra console; không lưu CSV (phase 1).
+    """
+    from multiagents_trading_assistant.backtest.execution import LLMExecutionConfig
+    from multiagents_trading_assistant.backtest.llm_backtest import (
+        LLMBacktestConfig,
+        run_llm_backtest,
+    )
+
+    symbol = getattr(args, "symbol", None)
+    symbol = symbol.upper() if symbol else None
+    universe = getattr(args, "universe", None)
+
+    if not symbol and not universe:
+        print("[llm-graph] Cần --symbol hoặc --universe")
+        return
+
+    exec_cfg = LLMExecutionConfig(
+        model=getattr(args, "exec_model", "zone_with_slippage"),
+        slippage_bps=20.0,
+        max_position_vol_pct=0.10,
+    )
+
+    cfg = LLMBacktestConfig(
+        symbol=symbol,
+        universe=universe,
+        from_date=from_date,
+        to_date=to_date,
+        train_period_end=getattr(args, "train_period_end", None),
+        cheap_mode=getattr(args, "cheap", True),
+        execution=exec_cfg,
+        max_candidates_per_day=getattr(args, "max_candidates", 5),
+        score_threshold=getattr(args, "score_threshold", 0.60),
+        use_cache=True,
+        verbose=True,
+    )
+
+    print(f"\n[llm-graph] Backtest {symbol or universe} | {from_date} → {to_date}")
+    if cfg.train_period_end:
+        print(f"[llm-graph] Train period: {from_date} → {cfg.train_period_end}")
+        print(f"[llm-graph] Test period:  {cfg.train_period_end} → {to_date}")
+    print(f"[llm-graph] cheap={cfg.cheap_mode} | exec_model={exec_cfg.model} | threshold={cfg.score_threshold}")
+
+    trades = run_llm_backtest(cfg)
+
+    test_trades = [t for t in trades if t.is_test_period]
+    print(f"\n[llm-graph] Tổng trades (test period): {len(test_trades)}")
+    print(f"[llm-graph] Decision log: backtest_results/llm_decisions_{cfg.run_id}.jsonl")
+
+
+def _run_live_pipeline_backtest_cli(
+    *,
+    symbol: str | None,
+    universe: str | None,
+    from_date: str,
+    to_date: str,
+    initial_capital: float,
+    max_positions: int,
+    max_candidates_per_day: int,
+    max_hold: int,
+    rr: float,
+    slippage_bps: float,
+    allow_downtrend: bool,
+    require_uptrend: bool = False,
+    setups: str | None = None,
+    backtest_mode: str = "raw_screener",
+    custom_label: str | None = None,
+    no_save: bool = False,
+) -> None:
+    import pandas as pd
+    from multiagents_trading_assistant.backtest.live_pipeline import (
+        LivePipelineBacktestConfig,
+        run_live_pipeline_backtest,
+        save_live_pipeline_results,
+    )
+    from multiagents_trading_assistant.fetcher import (
+        get_ohlcv_history,
+        get_vn100_symbols,
+        get_vn30_symbols,
+    )
+
+    if symbol:
+        symbols = [symbol]
+        label = symbol
+    elif universe == "vn30":
+        symbols = get_vn30_symbols()
+        label = "VN30"
+    elif universe == "vn100":
+        symbols = get_vn100_symbols()
+        label = "VN100"
+    elif universe:
+        symbols = [item.strip().upper() for item in universe.split(",") if item.strip()]
+        label = universe.upper().replace(",", "_")
+    else:
+        print("[live-backtest] Can chi dinh --symbol hoac --universe vn30|vn100|A,B,C")
+        return
+
+    warmup_start = (pd.Timestamp(from_date) - pd.Timedelta(days=420)).strftime("%Y-%m-%d")
+    print(f"[live-backtest] Universe {label}: {len(symbols)} symbols")
+    print(f"[live-backtest] Fetching history {warmup_start} -> {to_date}")
+    data = {}
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        futures = {ex.submit(get_ohlcv_history, sym, warmup_start, to_date): sym for sym in symbols}
+        for idx, fut in enumerate(as_completed(futures), start=1):
+            sym = futures[fut]
+            try:
+                df = fut.result()
+            except Exception as e:
+                print(f"[live-backtest] {sym} fetch error: {e}")
+                df = pd.DataFrame()
+            if not df.empty:
+                data[sym] = df
+            if idx % 10 == 0:
+                print(f"[live-backtest] fetched {idx}/{len(symbols)}")
+
+    setup_whitelist = (
+        frozenset(s.strip().upper() for s in setups.split(",") if s.strip())
+        if setups else None
+    )
+    mode_tag = backtest_mode
+    if require_uptrend:
+        mode_tag += "_uptrend"
+    if setup_whitelist:
+        mode_tag += "_whitelist"
+    report_label = custom_label or f"{label}_{mode_tag}_{from_date}_{to_date}"
+
+    vnindex = get_ohlcv_history("VNINDEX", warmup_start, to_date)
+    cfg = LivePipelineBacktestConfig(
+        initial_capital=initial_capital,
+        start_date=from_date,
+        end_date=to_date,
+        max_positions=max_positions,
+        max_candidates_per_day=max_candidates_per_day,
+        max_hold_bars=max_hold,
+        rr_ratio=rr,
+        slippage_rate=slippage_bps / 10000.0,
+        allow_downtrend_entries=allow_downtrend,
+        require_uptrend=require_uptrend,
+        setup_whitelist=setup_whitelist,
+        backtest_mode=backtest_mode,
+    )
+    result = run_live_pipeline_backtest(data, vnindex, config=cfg)
+    print()
+    print("LIVE PIPELINE BACKTEST")
+    print(f"  Mode          : {backtest_mode}")
+    print(f"  Label         : {report_label}")
+    if setup_whitelist:
+        print(f"  Setups        : {', '.join(sorted(setup_whitelist))}")
+    if require_uptrend:
+        print(f"  Market gate   : UPTREND only")
+
+    if backtest_mode == "broad_pool":
+        pool = result.get("pool_summary", [])
+        cdf = result.get("candidate_log")
+        total = len(cdf) if cdf is not None and not cdf.empty else 0
+        print(f"  Total candidate appearances : {total}")
+        if pool:
+            print("  Setup pool summary:")
+            for row in pool:
+                print(
+                    f"    {row['setup_type']:<28} appearances={row['appearances']:>5} "
+                    f"symbols={row['unique_symbols']:>3} avg_score={row['avg_score']:>5.1f} "
+                    f"top_flag={row['top_risk_flag']}"
+                )
+    else:
+        metrics = result["metrics"]
+        print(f"  Total return  : {metrics.get('total_return', 0.0) * 100:+.2f}%")
+        print(f"  Sharpe        : {metrics.get('sharpe_ratio', 0.0):.2f}")
+        print(f"  Max drawdown  : {metrics.get('max_drawdown', 0.0) * 100:.2f}%")
+        print(f"  Win rate      : {metrics.get('win_rate', 0.0) * 100:.1f}%")
+        print(f"  Trades        : {metrics.get('number_of_trades', 0)}")
+        if result["setup_breakdown"]:
+            print("  All setups    :")
+            for row in result["setup_breakdown"]:
+                pf = row.get("profit_factor")
+                pf_str = f"{pf:.2f}" if pf is not None and pf != float("inf") else ("inf" if pf == float("inf") else "n/a")
+                print(
+                    f"    {row['setup_type']:<28} trades={row['trades']:>4} "
+                    f"wr={row['win_rate'] * 100:>5.1f}% avg={row['avg_pnl_pct'] * 100:+.2f}% pf={pf_str}"
+                )
+    if not no_save:
+        outdir = save_live_pipeline_results(result, label=report_label)
+        print(f"[live-backtest] Saved -> {outdir}")
 
 
 def _run_money_flow_backtest(

@@ -41,6 +41,10 @@ Ví dụ (backtest — không dùng LLM):
   python -m multiagents_trading_assistant.main --backtest --symbol VCB --from 2024-01-01 --to 2024-12-31
   python -m multiagents_trading_assistant.main --backtest --universe vn30 --from 2023-01-01
   python -m multiagents_trading_assistant.main --backtest --universe liquid --setup BREAKOUT
+
+Ví dụ (Bob — Strategy Development Meeting):
+  python -m multiagents_trading_assistant.main --bob
+  python -m multiagents_trading_assistant.main --bob --date 2024-12-31
         """,
     )
     parser.add_argument(
@@ -69,6 +73,13 @@ Ví dụ (backtest — không dùng LLM):
     from multiagents_trading_assistant.backtest.cli import add_backtest_args
     add_backtest_args(parser)
 
+    # ── Bob args ──
+    parser.add_argument(
+        "--bob",
+        action="store_true",
+        help="Chạy Bob's Strategy Development Meeting (simulated trading + ℳₛ update)",
+    )
+
     return parser
 
 
@@ -92,6 +103,12 @@ def main() -> None:
     if getattr(args, "backtest", False):
         from multiagents_trading_assistant.backtest.cli import run_backtest_cli
         run_backtest_cli(args)
+        sys.exit(0)
+
+    if getattr(args, "bob", False):
+        from multiagents_trading_assistant.bob.simulator import run_strategy_development_meeting
+        active = run_strategy_development_meeting(to_date=date if args.date else None)
+        print(f"\n[Bob] {len(active)} active strategies returned.")
         sys.exit(0)
 
     if args.pipeline in ("invest", "all"):

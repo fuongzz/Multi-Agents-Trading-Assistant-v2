@@ -19,6 +19,9 @@ MOMENTUM_SETUPS = {
     "KUMO_BREAKOUT",
     "TK_CROSS",
     "KUMO_TWIST_ENTRY",
+    "ADX_TREND",
+    "AROON_TREND_SHIFT",
+    "LINREG_MOMENTUM",
 }
 
 PULLBACK_SETUPS = {
@@ -27,12 +30,15 @@ PULLBACK_SETUPS = {
     "TREND_PULLBACK",
     "BREAKOUT_RETEST_ENTRY",
     "KIJUN_BOUNCE",
+    "SUPERTREND_PULLBACK",
+    "OBV_ACCUMULATION",
 }
 
 COMPRESSION_SETUPS = {
     "BB_SQUEEZE",
     "INSIDE_BAR",
     "NR7",
+    "KELTNER_SQUEEZE",
 }
 
 REVERSAL_SETUPS = {
@@ -42,19 +48,22 @@ REVERSAL_SETUPS = {
     "RSI_BOUNCE",
     "BULLISH_ENGULFING",
     "PIN_BAR",
+    "OVERSOLD_MEAN_REVERSION",
 }
 
 # Money-flow gating sets — shared by live pipeline and backtest engine
 MF_STRICT_SETUPS: frozenset[str] = frozenset({
     "BREAKOUT", "MOMENTUM_SURGE", "MACD_CROSSOVER", "KUMO_BREAKOUT", "TK_CROSS",
+    "ADX_TREND", "AROON_TREND_SHIFT", "LINREG_MOMENTUM",
 })
 MF_COMPRESSION_SETUPS: frozenset[str] = frozenset({
-    "NR7", "BB_SQUEEZE", "INSIDE_BAR", "FLAG_PENNANT",
+    "NR7", "BB_SQUEEZE", "INSIDE_BAR", "FLAG_PENNANT", "KELTNER_SQUEEZE",
 })
 MF_REVERSAL_SETUPS: frozenset[str] = frozenset({
     "RETEST", "SPRING", "HAMMER", "RSI_BOUNCE", "DOUBLE_BOTTOM",
     "BULLISH_ENGULFING", "PIN_BAR", "BREAKOUT_RETEST_ENTRY",
     "TREND_PULLBACK", "KIJUN_BOUNCE", "KUMO_TWIST_ENTRY",
+    "SUPERTREND_PULLBACK", "OBV_ACCUMULATION", "OVERSOLD_MEAN_REVERSION",
 })
 
 # Minimum confluence threshold by market regime — shared by all gating layers

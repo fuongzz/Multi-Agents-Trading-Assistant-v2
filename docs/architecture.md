@@ -1,5 +1,24 @@
 # Architecture — AI Trading Assistant
 
+## Data Layer Direction
+
+Runtime code uses a vendor-neutral internal data provider:
+
+```text
+agents/screeners/backtests
+  -> services/data_service.py
+  -> fetcher.py
+  -> data/repository.py
+  -> data/providers/vnstock_provider.py
+  -> vnstock_data Golden
+```
+
+The current provider is `vnstock_data` Golden. Agents must not import
+`vnstock`, `vnstock_data`, `FiinQuantX`, or `yfinance` directly. They consume
+stable schemas from `data_service.py`. This keeps the product extensible: a
+future proprietary data library can replace `VnstockDataProvider` behind the
+same `DataProvider` contract.
+
 ## Full Data Flow
 
 ```

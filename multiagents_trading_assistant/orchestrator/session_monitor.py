@@ -32,6 +32,9 @@ from multiagents_trading_assistant.services.portfolio_service import (
     compute_profit_trailing_sl,
     review_target_decision,
 )
+from multiagents_trading_assistant.bob.reward_tracker import RewardTracker
+
+_reward_tracker = RewardTracker()
 
 _VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 
@@ -125,6 +128,13 @@ def _check_open_positions(date: str, time_str: str) -> None:
                         strategy=strategy,
                     )
                     print(f"[session_monitor] ⚡ {sym} SL_HIT + đã đóng DB @ {current:,.0f}")
+                    _reward_tracker.record_exit(
+                        symbol=sym,
+                        entry_date=entry_date_str,
+                        exit_price=current,
+                        exit_date=date,
+                        exit_reason="SL_HIT",
+                    )
                 except Exception as e:
                     print(f"[session_monitor] Lỗi close_position {sym}: {e}")
 

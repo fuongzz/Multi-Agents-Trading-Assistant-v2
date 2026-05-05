@@ -50,6 +50,9 @@ _VINGROUP_TOTAL_WEIGHT = sum(_VINGROUP_WEIGHTS.values())  # ~11.6%
 # Ngưỡng phân kỳ 1 ngày giữa VNI và VNMidCap để coi là "méo"
 _DISTORTION_DAILY_THRESHOLD = 0.5   # 0.5% chênh lệch thay đổi trong ngày
 
+# VinGroup chỉ có tác động méo từ tháng 3/2025 (sau khi VIC/VHM tăng vốn hóa lớn)
+_VINGROUP_DISTORTION_START = "2025-03-01"
+
 
 # ──────────────────────────────────────────────
 # Data classes
@@ -85,12 +88,16 @@ class MarketContext:
 
 @dataclass
 class TradeCandidate:
-    """Một mã pass TA screener — truyền vào trade_graph."""
+    """Candidate từ screener — truyền vào trade_graph.
+
+    setup_type rỗng ở Phase 1 (broad candidate pool).
+    Bob (Phase 2) sẽ gán setup_type sau khi chạy simulated trading.
+    """
     symbol: str
-    setup_type: str        # BREAKOUT | RETEST | SPRING | MA_PULLBACK | RSI_BOUNCE
     priority_score: float
     market_context: MarketContext
     indicators: dict
+    setup_type: str = ""
     reasons: list[str] = field(default_factory=list)
 
 
@@ -174,7 +181,10 @@ def _detect_distortion(
 # Market context
 # ──────────────────────────────────────────────
 
-def get_market_context(vnindex_df: pd.DataFrame | None = None) -> MarketContext:
+def get_market_context(
+    vnindex_df: pd.DataFrame | None = None,
+    as_of_date: str | None = None,
+) -> MarketContext:
     """Phân tích trạng thái thị trường, có bổ sung phát hiện méo VinGroup.
 
     Flow:
@@ -184,9 +194,25 @@ def get_market_context(vnindex_df: pd.DataFrame | None = None) -> MarketContext:
       4. Phát hiện phân kỳ VNI vs VNMidCap → đặt reference_trend
     """
     if vnindex_df is None or vnindex_df.empty:
-        vnindex_df = get_vnindex(200)
-    if vnindex_df.empty:
+        if as_of_date:
+            # Backtest: cần fetch full history để có data tại as_of_date
+            # Caller (llm_backtest) nên pre-fetch và pass vào để tránh gọi lại nhiều lần
+            from multiagents_trading_assistant.fetcher import get_ohlcv_history
+            from datetime import date as _d, timedelta as _td
+            hist_start = (_d.fromisoformat(as_of_date) - _td(days=400)).strftime("%Y-%m-%d")
+            vnindex_df = get_ohlcv_history("VNINDEX", hist_start, as_of_date)
+        else:
+            vnindex_df = get_vnindex(200)
+    if vnindex_df is None or vnindex_df.empty:
         raise RuntimeError("Không lấy được dữ liệu VN-Index — abort trade_screener")
+
+    # Trim theo as_of_date để tránh leak future data trong backtest
+    if as_of_date:
+        date_col = "date" if "date" in vnindex_df.columns else None
+        if date_col:
+            vnindex_df = vnindex_df[vnindex_df[date_col].astype(str) <= as_of_date]
+        if vnindex_df.empty:
+            raise RuntimeError(f"VN-Index không có data tại hoặc trước {as_of_date}")
 
     # ── VNI: trend, MA, change ──
     vni_trend, vni_price, ma20, ma60, ma200, vni_change = _extract_trend(vnindex_df)
@@ -208,33 +234,58 @@ def get_market_context(vnindex_df: pd.DataFrame | None = None) -> MarketContext:
     vnmidcap_trend  = "UNKNOWN"
     vnmidcap_change = 0.0
     try:
-        vnmidcap_df = get_vnmidcap(200)
+        if as_of_date:
+            # Backtest: fetch historical range, trim to as_of_date
+            from multiagents_trading_assistant.fetcher import get_ohlcv_history as _get_hist
+            from datetime import date as _d2, timedelta as _td2
+            _mc_start = (_d2.fromisoformat(as_of_date) - _td2(days=400)).strftime("%Y-%m-%d")
+            vnmidcap_df = _get_hist("VNMIDCAP", _mc_start, as_of_date)
+        else:
+            vnmidcap_df = get_vnmidcap(200)
         if not vnmidcap_df.empty:
-            vnmidcap_trend, _, _, _, _, vnmidcap_change = _extract_trend(vnmidcap_df)
-            print(f"[market_ctx] VNMidCap: {vnmidcap_trend} ({vnmidcap_change:+.2f}%)")
+            if as_of_date and "date" in vnmidcap_df.columns:
+                vnmidcap_df = vnmidcap_df[vnmidcap_df["date"].astype(str) <= as_of_date]
+            if not vnmidcap_df.empty:
+                vnmidcap_trend, _, _, _, _, vnmidcap_change = _extract_trend(vnmidcap_df)
+                print(f"[market_ctx] VNMidCap: {vnmidcap_trend} ({vnmidcap_change:+.2f}%)")
     except Exception as e:
         print(f"[market_ctx] VNMidCap lỗi — bỏ qua: {e}")
 
     # ── VinGroup: ước tính đóng góp vào VNI ──
+    # Chỉ áp dụng từ 2025-03-01 — trước đó VinGroup không đủ tác động để méo VNI
     vingroup_contribution = 0.0
-    try:
-        ving_changes: dict[str, float] = {}
-        for sym in _VINGROUP_WEIGHTS:
-            df_sym = get_ohlcv(sym, 5)   # chỉ cần 5 nến gần nhất, dùng cache
-            if not df_sym.empty and len(df_sym) >= 2:
-                c_cur  = float(df_sym["close"].iloc[-1])
-                c_prev = float(df_sym["close"].iloc[-2])
-                ving_changes[sym] = round((c_cur - c_prev) / c_prev * 100, 2) if c_prev else 0.0
-        vingroup_contribution = _estimate_vingroup_contribution(ving_changes)
-        ving_str = " | ".join(f"{s} {v:+.1f}%" for s, v in ving_changes.items())
-        print(f"[market_ctx] VinGroup: [{ving_str}] → đóng góp VNI ≈ {vingroup_contribution:+.3f}%")
-    except Exception as e:
-        print(f"[market_ctx] VinGroup fetch lỗi — bỏ qua: {e}")
+    _check_vingroup = as_of_date is None or as_of_date >= _VINGROUP_DISTORTION_START
+    if _check_vingroup:
+        try:
+            ving_changes: dict[str, float] = {}
+            from multiagents_trading_assistant.fetcher import get_ohlcv_history as _get_hist2
+            from datetime import date as _d3, timedelta as _td3
+            for sym in _VINGROUP_WEIGHTS:
+                if as_of_date:
+                    _vs = (_d3.fromisoformat(as_of_date) - _td3(days=10)).strftime("%Y-%m-%d")
+                    df_sym = _get_hist2(sym, _vs, as_of_date)
+                    if not df_sym.empty and "date" in df_sym.columns:
+                        df_sym = df_sym[df_sym["date"].astype(str) <= as_of_date]
+                else:
+                    df_sym = get_ohlcv(sym, 5)
+                if not df_sym.empty and len(df_sym) >= 2:
+                    c_cur  = float(df_sym["close"].iloc[-1])
+                    c_prev = float(df_sym["close"].iloc[-2])
+                    ving_changes[sym] = round((c_cur - c_prev) / c_prev * 100, 2) if c_prev else 0.0
+            vingroup_contribution = _estimate_vingroup_contribution(ving_changes)
+            ving_str = " | ".join(f"{s} {v:+.1f}%" for s, v in ving_changes.items())
+            print(f"[market_ctx] VinGroup: [{ving_str}] → đóng góp VNI ≈ {vingroup_contribution:+.3f}%")
+        except Exception as e:
+            print(f"[market_ctx] VinGroup fetch lỗi — bỏ qua: {e}")
 
-    # ── Phát hiện méo ──
-    is_distorted, reference_trend, reference_index, distortion_note = _detect_distortion(
-        vni_trend, vni_change, vnmidcap_trend, vnmidcap_change, vingroup_contribution,
-    )
+    # ── Phát hiện méo ── (chỉ từ 2025-03-01 trở đi)
+    _allow_distortion = (as_of_date is None) or (as_of_date >= _VINGROUP_DISTORTION_START)
+    if _allow_distortion:
+        is_distorted, reference_trend, reference_index, distortion_note = _detect_distortion(
+            vni_trend, vni_change, vnmidcap_trend, vnmidcap_change, vingroup_contribution,
+        )
+    else:
+        is_distorted, reference_trend, reference_index, distortion_note = False, vni_trend, "VNINDEX", ""
     if is_distorted:
         print(f"[market_ctx] ⚠ DISTORTION: {distortion_note}")
     else:
@@ -506,39 +557,50 @@ def detect_golden_cross(df: pd.DataFrame, ind: dict) -> tuple[bool, list[str]]:
     return passed, reasons if passed else []
 
 
-def detect_macd_crossover(df: pd.DataFrame, ind: dict) -> tuple[bool, list[str]]:
-    """MACD line cắt lên signal line trong 3 phiên gần nhất."""
-    import pandas_ta as _ta  # local import — tránh circular nếu có
-
-    reasons: list[str] = []
-    if df.empty or len(df) < 35:
-        return False, []
+def _fallback_macd_crossover_values(df: pd.DataFrame) -> tuple[bool | None, float | None, float | None]:
+    import pandas_ta as _ta
 
     macd_df = _ta.macd(df["close"], fast=12, slow=26, signal=9)
     if macd_df is None or macd_df.empty:
-        return False, []
+        return None, None, None
 
-    cols   = macd_df.columns.tolist()
-    ml_col = next((c for c in cols if c.startswith("MACD_")),  None)
+    cols = macd_df.columns.tolist()
+    ml_col = next((c for c in cols if c.startswith("MACD_")), None)
     ms_col = next((c for c in cols if c.startswith("MACDs_")), None)
     mh_col = next((c for c in cols if c.startswith("MACDh_")), None)
     if not (ml_col and ms_col and mh_col):
-        return False, []
+        return None, None, None
 
     ml = macd_df[ml_col].dropna()
     ms = macd_df[ms_col].dropna()
     mh = macd_df[mh_col].dropna()
-    if len(ml) < 4:
-        return False, []
+    if len(ml) < 4 or len(ms) < 4 or mh.empty:
+        return None, None, None
 
     crossed = any(
         ml.iloc[i - 1] < ms.iloc[i - 1] and ml.iloc[i] >= ms.iloc[i]
         for i in range(-4, 0)
     )
+    return crossed, float(ml.iloc[-1]), float(mh.iloc[-1])
 
-    hist_val      = float(mh.iloc[-1])
+
+def detect_macd_crossover(df: pd.DataFrame, ind: dict) -> tuple[bool, list[str]]:
+    """MACD line cắt lên signal line trong 3 phiên gần nhất."""
+    reasons: list[str] = []
+    if df.empty or len(df) < 35:
+        return False, []
+
+    crossed = ind.get("macd_bullish_cross_recent")
+    macd_val = ind.get("macd")
+    hist_val = ind.get("macd_hist")
+    if crossed is None or macd_val is None or hist_val is None:
+        crossed, macd_val, hist_val = _fallback_macd_crossover_values(df)
+    if crossed is None or macd_val is None or hist_val is None:
+        return False, []
+
+    hist_val      = float(hist_val)
     hist_positive = hist_val > 0
-    above_zero    = float(ml.iloc[-1]) > 0
+    above_zero    = float(macd_val) > 0
     rsi           = ind.get("rsi")
     rsi_ok        = rsi is None or rsi < 72
 
@@ -671,31 +733,41 @@ def detect_hammer(df: pd.DataFrame, ind: dict) -> tuple[bool, list[str]]:
     return passed, reasons if passed else []
 
 
-def detect_bb_squeeze(df: pd.DataFrame, ind: dict) -> tuple[bool, list[str]]:
-    """Bollinger Band Squeeze: BB thu hẹp tối thiểu 20 phiên, giá áp BB upper."""
+def _fallback_bb_width_values(df: pd.DataFrame) -> tuple[float | None, float | None]:
     import pandas_ta as _ta
-
-    reasons: list[str] = []
-    if df.empty or len(df) < 30:
-        return False, []
 
     bb = _ta.bbands(df["close"], length=20, std=2)
     if bb is None or bb.empty:
-        return False, []
+        return None, None
 
-    cols    = bb.columns.tolist()
+    cols = bb.columns.tolist()
     bbl_col = next((c for c in cols if c.startswith("BBL_")), None)
     bbu_col = next((c for c in cols if c.startswith("BBU_")), None)
     bbm_col = next((c for c in cols if c.startswith("BBM_")), None)
     if not (bbl_col and bbu_col and bbm_col):
-        return False, []
+        return None, None
 
     width = ((bb[bbu_col] - bb[bbl_col]) / bb[bbm_col]).dropna()
     if len(width) < 20:
+        return None, None
+    return float(width.iloc[-1]), float(width.iloc[-20:].min())
+
+
+def detect_bb_squeeze(df: pd.DataFrame, ind: dict) -> tuple[bool, list[str]]:
+    """Bollinger Band Squeeze: BB thu hẹp tối thiểu 20 phiên, giá áp BB upper."""
+    reasons: list[str] = []
+    if df.empty or len(df) < 30:
         return False, []
 
-    cur_width  = float(width.iloc[-1])
-    min_20     = float(width.iloc[-20:].min())
+    cur_width = ind.get("bb_width")
+    min_20 = ind.get("bb_width_min20")
+    if cur_width is None or min_20 is None:
+        cur_width, min_20 = _fallback_bb_width_values(df)
+    if cur_width is None or min_20 is None:
+        return False, []
+
+    cur_width  = float(cur_width)
+    min_20     = float(min_20)
     is_squeeze = cur_width <= min_20 * 1.05
 
     upper = ind.get("bb_upper")
@@ -1257,6 +1329,226 @@ def detect_nr7(df: pd.DataFrame, ind: dict) -> tuple[bool, list[str]]:
     return passed, reasons if passed else []
 
 
+def detect_adx_trend(df: pd.DataFrame, ind: dict) -> tuple[bool, list[str]]:
+    """Directional trend setup: only follow strength when VN cash flow confirms."""
+    if df.empty or len(df) < 60:
+        return False, []
+    price = _f(ind.get("current_price"))
+    ema20 = _f(ind.get("ema20") or ind.get("ma20"))
+    ema50 = _f(ind.get("ema50") or ind.get("ma60"))
+    adx = _f(ind.get("adx_14"))
+    dmp = _f(ind.get("dmp_14"))
+    dmn = _f(ind.get("dmn_14"))
+    rsi = _f(ind.get("rsi"))
+    volume_ratio = _f(ind.get("volume_ratio_20")) or 1.0
+    dist_ema20 = (price - ema20) / ema20 * 100.0 if price and ema20 else None
+
+    passed = bool(
+        price and ema20 and ema50 and adx and dmp and dmn
+        and price > ema20 > ema50
+        and adx >= 20
+        and dmp > dmn * 1.08
+        and 48 <= (rsi or 55) <= 72
+        and 0.85 <= volume_ratio <= 2.5
+        and (dist_ema20 is None or dist_ema20 <= 8.0)
+    )
+    reasons = [
+        f"ADX trend: ADX {adx:.1f}, +DI {dmp:.1f} > -DI {dmn:.1f}",
+        f"Price above EMA20/EMA50, volume {_fmt(volume_ratio)}x MA20",
+    ] if passed else []
+    return passed, reasons
+
+
+def detect_supertrend_pullback(df: pd.DataFrame, ind: dict) -> tuple[bool, list[str]]:
+    """VN-friendly trend pullback: buy near dynamic support, not far above it."""
+    if df.empty or len(df) < 60:
+        return False, []
+    price = _f(ind.get("current_price"))
+    supertrend = _f(ind.get("supertrend_10_3"))
+    supertrend_dir = _f(ind.get("supertrend_dir"))
+    ema20 = _f(ind.get("ema20") or ind.get("ma20"))
+    vwma20 = _f(ind.get("vwma20"))
+    rsi = _f(ind.get("rsi"))
+    volume_ratio = _f(ind.get("volume_ratio_20")) or 1.0
+    near_dynamic_support = bool(
+        price and (
+            (ema20 and abs(price - ema20) / ema20 <= 0.035)
+            or (vwma20 and abs(price - vwma20) / vwma20 <= 0.035)
+        )
+    )
+    passed = bool(
+        price and supertrend and supertrend_dir
+        and supertrend_dir > 0
+        and price > supertrend
+        and near_dynamic_support
+        and 40 <= (rsi or 50) <= 66
+        and 0.65 <= volume_ratio <= 1.8
+    )
+    reasons = [
+        "Supertrend bullish, pullback near EMA/VWMA support",
+        f"RSI {_fmt(rsi)}, volume {_fmt(volume_ratio)}x MA20",
+    ] if passed else []
+    return passed, reasons
+
+
+def detect_obv_accumulation(df: pd.DataFrame, ind: dict) -> tuple[bool, list[str]]:
+    """Accumulation setup: OBV leads price while price holds value-weighted support."""
+    if df.empty or len(df) < 60:
+        return False, []
+    price = _f(ind.get("current_price"))
+    ema50 = _f(ind.get("ema50") or ind.get("ma60"))
+    vwma20 = _f(ind.get("vwma20"))
+    obv = _f(ind.get("obv"))
+    obv_ema20 = _f(ind.get("obv_ema20"))
+    rsi = _f(ind.get("rsi"))
+    volume_ratio = _f(ind.get("volume_ratio_20")) or 1.0
+    passed = bool(
+        price and ema50 and vwma20 and obv is not None and obv_ema20 is not None
+        and price > ema50
+        and price >= vwma20
+        and obv > obv_ema20
+        and 45 <= (rsi or 50) <= 68
+        and 0.75 <= volume_ratio <= 2.2
+    )
+    reasons = [
+        "OBV above OBV EMA20, price holds VWMA20",
+        f"Accumulation volume {_fmt(volume_ratio)}x MA20",
+    ] if passed else []
+    return passed, reasons
+
+
+def detect_keltner_squeeze_breakout(df: pd.DataFrame, ind: dict) -> tuple[bool, list[str]]:
+    """Volatility expansion setup using Keltner/Bollinger compression."""
+    if df.empty or len(df) < 80:
+        return False, []
+    price = _f(ind.get("current_price"))
+    kc_upper = _f(ind.get("kc_upper"))
+    kc_width = _f(ind.get("kc_width"))
+    bb_width = _f(ind.get("bb_width"))
+    bb_width_min20 = _f(ind.get("bb_width_min20"))
+    rsi = _f(ind.get("rsi"))
+    volume_ratio = _f(ind.get("volume_ratio_20")) or 1.0
+    compressed = bool(
+        kc_width is not None and kc_width <= 0.07
+        and bb_width is not None
+        and (bb_width_min20 is None or bb_width <= bb_width_min20 * 1.35)
+    )
+    passed = bool(
+        price and kc_upper
+        and compressed
+        and price >= kc_upper * 0.995
+        and 48 <= (rsi or 55) <= 72
+        and volume_ratio >= 1.15
+    )
+    reasons = [
+        f"Keltner squeeze breakout, KC width {kc_width:.2%}",
+        f"Volume expansion {_fmt(volume_ratio)}x MA20",
+    ] if passed else []
+    return passed, reasons
+
+
+def detect_oversold_mean_reversion(df: pd.DataFrame, ind: dict) -> tuple[bool, list[str]]:
+    """Long-only VN mean reversion with anti-downtrend gates."""
+    if df.empty or len(df) < 80:
+        return False, []
+    price = _f(ind.get("current_price"))
+    ema200 = _f(ind.get("ema200") or ind.get("ma200"))
+    bb_percent = _f(ind.get("bb_percent"))
+    willr = _f(ind.get("willr_14"))
+    stoch_k = _f(ind.get("stoch_k"))
+    adx = _f(ind.get("adx_14")) or 0.0
+    volume_ratio = _f(ind.get("volume_ratio_20")) or 1.0
+    recent_low20 = float(df["low"].tail(20).min())
+    not_breakdown = bool(price and price > recent_low20 * 1.01)
+    not_structural_downtrend = bool(price and (ema200 is None or price >= ema200 * 0.92))
+    oversold = bool(
+        (bb_percent is not None and bb_percent <= 0.20)
+        or (willr is not None and willr <= -80)
+        or (stoch_k is not None and stoch_k <= 25)
+    )
+    passed = bool(
+        oversold
+        and not_breakdown
+        and not_structural_downtrend
+        and adx < 35
+        and volume_ratio >= 0.75
+    )
+    reasons = [
+        "Oversold mean reversion, no fresh 20-day breakdown",
+        f"WILLR {_fmt(willr)}, StochK {_fmt(stoch_k)}, ADX {_fmt(adx)}",
+    ] if passed else []
+    return passed, reasons
+
+
+def detect_aroon_trend_shift(df: pd.DataFrame, ind: dict) -> tuple[bool, list[str]]:
+    """Early trend shift after base building."""
+    if df.empty or len(df) < 60:
+        return False, []
+    price = _f(ind.get("current_price"))
+    ema50 = _f(ind.get("ema50") or ind.get("ma60"))
+    aroon_up = _f(ind.get("aroon_up_14"))
+    aroon_down = _f(ind.get("aroon_down_14"))
+    aroon_osc = _f(ind.get("aroon_osc_14"))
+    rsi = _f(ind.get("rsi"))
+    volume_ratio = _f(ind.get("volume_ratio_20")) or 1.0
+    passed = bool(
+        price and ema50 and aroon_up is not None and aroon_down is not None
+        and price > ema50
+        and aroon_up >= 70
+        and aroon_down <= 35
+        and (aroon_osc is None or aroon_osc > 35)
+        and 48 <= (rsi or 55) <= 70
+        and volume_ratio >= 0.9
+    )
+    reasons = [
+        f"Aroon trend shift: up {_fmt(aroon_up, 0)}, down {_fmt(aroon_down, 0)}",
+        "Price reclaimed EMA50 with acceptable volume",
+    ] if passed else []
+    return passed, reasons
+
+
+def detect_linreg_momentum(df: pd.DataFrame, ind: dict) -> tuple[bool, list[str]]:
+    """Linear-regression slope confirms short momentum without late chase."""
+    if df.empty or len(df) < 60:
+        return False, []
+    price = _f(ind.get("current_price"))
+    ema20 = _f(ind.get("ema20") or ind.get("ma20"))
+    vwma20 = _f(ind.get("vwma20"))
+    slope = _f(ind.get("linreg_slope_14"))
+    roc = _f(ind.get("roc_9"))
+    mom = _f(ind.get("mom_10"))
+    rsi = _f(ind.get("rsi"))
+    volume_ratio = _f(ind.get("volume_ratio_20")) or 1.0
+    dist_ema20 = (price - ema20) / ema20 * 100.0 if price and ema20 else None
+    passed = bool(
+        price and ema20 and vwma20 and slope is not None and roc is not None and mom is not None
+        and price > ema20 and price > vwma20
+        and slope > 0 and roc > 0 and mom > 0
+        and 50 <= (rsi or 55) <= 70
+        and volume_ratio >= 0.9
+        and (dist_ema20 is None or dist_ema20 <= 8.0)
+    )
+    reasons = [
+        f"Linear regression slope positive, ROC {_fmt(roc)}%",
+        "Momentum confirmed while price is not overextended",
+    ] if passed else []
+    return passed, reasons
+
+
+def _f(value) -> float | None:
+    try:
+        if value is None:
+            return None
+        return float(value)
+    except Exception:
+        return None
+
+
+def _fmt(value, digits: int = 1) -> str:
+    num = _f(value)
+    return "n/a" if num is None else f"{num:.{digits}f}"
+
+
 # ──────────────────────────────────────────────
 # Priority score
 # ──────────────────────────────────────────────
@@ -1287,6 +1579,13 @@ _STRATEGY_BASE_SCORE = {
     "TK_CROSS":               76,
     "KIJUN_BOUNCE":           78,
     "KUMO_TWIST_ENTRY":       72,
+    "ADX_TREND":              79,
+    "SUPERTREND_PULLBACK":    77,
+    "OBV_ACCUMULATION":       74,
+    "KELTNER_SQUEEZE":        76,
+    "OVERSOLD_MEAN_REVERSION":66,
+    "AROON_TREND_SHIFT":      73,
+    "LINREG_MOMENTUM":        72,
 }
 
 SETUP_REGIME_REQUIREMENT = {
@@ -1304,12 +1603,25 @@ SETUP_REGIME_REQUIREMENT = {
     "TK_CROSS": ["UPTREND"],
     "KIJUN_BOUNCE": ["UPTREND"],
     "KUMO_TWIST_ENTRY": ["UPTREND", "SIDEWAY"],
+    "ADX_TREND": ["UPTREND"],
+    "SUPERTREND_PULLBACK": ["UPTREND"],
+    "OBV_ACCUMULATION": ["UPTREND", "SIDEWAY"],
+    "KELTNER_SQUEEZE": ["UPTREND", "SIDEWAY"],
+    "OVERSOLD_MEAN_REVERSION": ["SIDEWAY", "DOWNTREND"],
+    "AROON_TREND_SHIFT": ["UPTREND", "SIDEWAY"],
+    "LINREG_MOMENTUM": ["UPTREND"],
 }
 
 
 def _is_setup_allowed_in_regime(setup_type: str, ref_trend: str) -> bool:
+    ref_trend = _normalize_ref_trend(ref_trend)
     allowed = SETUP_REGIME_REQUIREMENT.get(setup_type)
     return allowed is None or ref_trend in allowed
+
+
+def _normalize_ref_trend(ref_trend: str) -> str:
+    trend = (ref_trend or "").upper()
+    return trend if trend in {"UPTREND", "SIDEWAY", "DOWNTREND"} else "SIDEWAY"
 
 
 def compute_priority_score(
@@ -1318,6 +1630,7 @@ def compute_priority_score(
     ref_trend: str = "UPTREND",
     money_flow: dict | None = None,
 ) -> float:
+    ref_trend = _normalize_ref_trend(ref_trend)
     normalized = score_setup(
         setup_type,
         ind,
@@ -1330,8 +1643,10 @@ def compute_priority_score(
     # UPTREND: momentum setups được ưu tiên, RSI_BOUNCE giảm (nhiều false signal)
     # SIDEWAY: range setups tốt hơn breakout
     if ref_trend == "UPTREND":
-        if setup_type in ("BREAKOUT", "FLAG_PENNANT", "MOMENTUM_SURGE"):
+        if setup_type in ("BREAKOUT", "FLAG_PENNANT", "MOMENTUM_SURGE", "ADX_TREND", "LINREG_MOMENTUM"):
             score += 5
+        elif setup_type in ("SUPERTREND_PULLBACK", "OBV_ACCUMULATION", "AROON_TREND_SHIFT"):
+            score += 4
         elif setup_type in ("KUMO_BREAKOUT", "TK_CROSS", "KIJUN_BOUNCE"):
             score += 6
         elif setup_type in ("TREND_PULLBACK", "BREAKOUT_RETEST_ENTRY"):
@@ -1341,9 +1656,9 @@ def compute_priority_score(
     elif ref_trend == "SIDEWAY":
         if setup_type == "BREAKOUT":
             score -= 8   # false break cao trong sideway
-        elif setup_type in ("RETEST", "SPRING", "BB_SQUEEZE", "NR7", "INSIDE_BAR"):
+        elif setup_type in ("RETEST", "SPRING", "BB_SQUEEZE", "NR7", "INSIDE_BAR", "KELTNER_SQUEEZE"):
             score += 5   # range-bound & compression setups hiệu quả hơn
-        elif setup_type in ("DOUBLE_BOTTOM", "HAMMER", "BULLISH_ENGULFING", "PIN_BAR"):
+        elif setup_type in ("DOUBLE_BOTTOM", "HAMMER", "BULLISH_ENGULFING", "PIN_BAR", "OVERSOLD_MEAN_REVERSION"):
             score += 3   # reversal signals tốt hơn tại vùng sideway support
         elif setup_type == "KUMO_TWIST_ENTRY":
             score += 2
@@ -1411,16 +1726,24 @@ def _build_screener_money_flow(
 
 def run_screener(
     symbols: list[str] | None = None,
-    max_candidates: int = 20,
+    max_candidates: int = 50,
+    as_of_date: str | None = None,
+    vnindex_df: pd.DataFrame | None = None,
+    ohlcv_map: dict[str, pd.DataFrame] | None = None,
 ) -> tuple[MarketContext, list[TradeCandidate]]:
+    """Broad candidate pool cho LLM agents.
+
+    Không detect setup, không hard-gate theo regime hay money flow.
+    Output: top N mã đủ data quality + liquidity, kèm raw indicators.
+    LLM (và Bob ở Phase 2) sẽ quyết định setup/strategy.
+    """
     if symbols is None:
-        symbols = get_liquid_symbols(min_avg_vol=500_000)
+        symbols = get_liquid_symbols(min_avg_vol=300_000)
 
-    print(f"[trade_screener] Scan {len(symbols)} mã (vol≥500k)...")
+    print(f"[trade_screener] Scan {len(symbols)} mã (vol≥300k)...")
 
-    market_ctx = get_market_context()
+    market_ctx = get_market_context(vnindex_df=vnindex_df, as_of_date=as_of_date)
 
-    # Log: VNI raw + reference (có thể khác nhau khi VinGroup méo chỉ số)
     ref_label = (
         f"ref={market_ctx.reference_index}:{market_ctx.reference_trend}"
         if market_ctx.is_index_distorted
@@ -1434,113 +1757,85 @@ def run_screener(
     if market_ctx.is_index_distorted:
         print(f"[trade_screener] ⚠ {market_ctx.distortion_note}")
 
-    if not market_ctx.should_trade:
-        # should_trade đã dựa trên reference_trend — DOWNTREND thực sự
-        print(f"[trade_screener] {market_ctx.reference_index} DOWNTREND → dừng scan")
-        return market_ctx, []
+    if ohlcv_map is not None:
+        # Pre-fetched map provided (backtest mode) — trim to as_of_date if needed
+        print(f"[trade_screener] Using pre-fetched OHLCV map ({len(ohlcv_map)} mã)...")
+        if as_of_date:
+            trimmed: dict = {}
+            for sym, df in ohlcv_map.items():
+                if df is None or df.empty:
+                    trimmed[sym] = df
+                    continue
+                if "date" in df.columns:
+                    trimmed[sym] = df[df["date"].astype(str) <= as_of_date]
+                else:
+                    trimmed[sym] = df
+            ohlcv_map = trimmed
+        # Only keep symbols requested
+        if symbols:
+            ohlcv_map = {s: ohlcv_map[s] for s in symbols if s in ohlcv_map}
+    else:
+        print(f"[trade_screener] Fetch OHLCV batch ({len(symbols)} mã)...")
+        ohlcv_map = get_ohlcv_batch(symbols, n_days=200)
 
-    print(f"[trade_screener] Fetch OHLCV batch ({len(symbols)} mã)...")
-    ohlcv_map = get_ohlcv_batch(symbols, n_days=200)
+        # Trim OHLCV theo as_of_date để tránh leak future data trong backtest
+        if as_of_date:
+            trimmed = {}
+            for sym, df in ohlcv_map.items():
+                if df is None or df.empty:
+                    trimmed[sym] = df
+                    continue
+                if "date" in df.columns:
+                    trimmed[sym] = df[df["date"].astype(str) <= as_of_date]
+                else:
+                    trimmed[sym] = df
+            ohlcv_map = trimmed
 
     candidates: list[TradeCandidate] = []
-    min_liquidity = 300_000
     skipped = 0
 
-    # Dùng reference_trend (không phải VNI raw trend) để chọn chiến lược
-    ref_trend = market_ctx.reference_trend
-
     for symbol, df in ohlcv_map.items():
-        if df is None or df.empty or len(df) < 30:
-            continue
-        if float(df["volume"].tail(20).mean()) < min_liquidity:
+        if df is None or df.empty or len(df) < 60:
             skipped += 1
             continue
+
+        avg_vol_20 = float(df["volume"].tail(20).mean())
+        if avg_vol_20 < 300_000:
+            skipped += 1
+            continue
+
         ind = compute_indicators(df)
         if not ind:
-            continue
-        try:
-            money_flow = _build_screener_money_flow(symbol, df, market_ctx)
-        except Exception as e:
-            print(f"[trade_screener] money_flow {symbol} lỗi: {e}")
-            money_flow = {}
-        if money_flow.get("regime") in {"DISTRIBUTION", "EXHAUSTION_INFLOW"}:
             skipped += 1
             continue
-        ind["money_flow_analysis"] = money_flow
+
         if len(df) >= 2:
             prev_close = float(df["close"].iloc[-2])
             cur_close = float(df["close"].iloc[-1])
-            ind["stock_day_change_pct"] = round((cur_close - prev_close) / prev_close * 100, 2) if prev_close else 0.0
+            ind["stock_day_change_pct"] = (
+                round((cur_close - prev_close) / prev_close * 100, 2) if prev_close else 0.0
+            )
+        ind["avg_volume_20d"] = round(avg_vol_20)
 
-        detected: list[tuple[str, list[str]]] = []
-        strategies = [
-            # ── Original 14 ──
-            ("BREAKOUT",               detect_breakout),
-            ("FLAG_PENNANT",           detect_flag_pennant),
-            ("BB_SQUEEZE",             detect_bb_squeeze),
-            ("RETEST",                 detect_retest),
-            ("SPRING",                 detect_spring),
-            ("GOLDEN_CROSS",           detect_golden_cross),
-            ("DOUBLE_BOTTOM",          detect_double_bottom),
-            ("MOMENTUM_SURGE",         detect_momentum_surge),
-            ("MACD_CROSSOVER",         detect_macd_crossover),
-            ("MA_PULLBACK",            detect_ma_pullback),
-            ("INSIDE_BAR",             detect_inside_bar),
-            ("NR7",                    detect_nr7),
-            ("HAMMER",                 detect_hammer),
-            ("RSI_BOUNCE",             detect_rsi_bounce),
-            # ── Price Action ──
-            ("TREND_PULLBACK",         detect_trend_pullback),
-            ("BREAKOUT_RETEST_ENTRY",  detect_breakout_retest_entry),
-            ("BULLISH_ENGULFING",      detect_bullish_engulfing),
-            ("PIN_BAR",                detect_pin_bar),
-            # ── Ichimoku ──
-            ("KUMO_BREAKOUT",          detect_kumo_breakout),
-            ("TK_CROSS",               detect_tk_cross),
-            ("KIJUN_BOUNCE",           detect_kijun_bounce),
-            ("KUMO_TWIST_ENTRY",       detect_kumo_twist_entry),
-        ]
+        # Rank by volume momentum: mã đang có vol tăng bất thường nổi lên đầu
+        vol_ratio = float(df["volume"].iloc[-1]) / avg_vol_20 if avg_vol_20 > 0 else 1.0
+        priority_score = min(round(vol_ratio * 40 + avg_vol_20 / 1_000_000 * 5, 1), 100.0)
 
-        # DOWNTREND thực: chỉ giữ reversal setups (bắt đáy ngược chiều)
-        # SIDEWAY / UPTREND: giữ toàn bộ 18 chiến lược
-        if ref_trend == "DOWNTREND":
-            strategies = [
-                ("DOUBLE_BOTTOM",     detect_double_bottom),
-                ("RSI_BOUNCE",        detect_rsi_bounce),
-                ("HAMMER",            detect_hammer),
-                ("BULLISH_ENGULFING", detect_bullish_engulfing),
-                ("PIN_BAR",           detect_pin_bar),
-            ]
-
-        for name, fn in strategies:
-            if not _is_setup_allowed_in_regime(name, ref_trend):
-                skipped += 1
-                continue
-            passed, reasons = fn(df, ind)
-            if passed:
-                detected.append((name, reasons))
-
-        for setup_type, reasons in detected:
-            score = compute_priority_score(setup_type, ind, ref_trend, money_flow)
-            mf_regime = money_flow.get("regime")
-            if mf_regime in ("BREAKOUT_FLOW", "EARLY_MONEY_IN", "MONEY_IN", "ACCUMULATION"):
-                reasons = [*reasons, f"Money flow: {mf_regime} score={money_flow.get('score')}"]
-            candidates.append(TradeCandidate(
-                symbol         = symbol,
-                setup_type     = setup_type,
-                priority_score = score,
-                market_context = market_ctx,
-                indicators     = ind,
-                reasons        = reasons,
-            ))
-            break  # chỉ lấy strategy ưu tiên cao nhất
+        candidates.append(TradeCandidate(
+            symbol=symbol,
+            priority_score=priority_score,
+            market_context=market_ctx,
+            indicators=ind,
+            setup_type="UNKNOWN",
+        ))
 
     candidates.sort(key=lambda c: c.priority_score, reverse=True)
     candidates = candidates[:max_candidates]
 
-    print(f"[trade_screener] Lọc thanh khoản: bỏ {skipped} mã")
-    print(f"[trade_screener] {len(candidates)} candidates")
-    for c in candidates:
-        print(f"  {c.symbol:6s} | {c.setup_type:12s} | score={c.priority_score:.0f}")
+    print(f"[trade_screener] Skipped (data quality): {skipped}")
+    print(f"[trade_screener] {len(candidates)} candidates → LLM")
+    for c in candidates[:10]:
+        vol_ratio = c.indicators.get("volume_ratio_20") or 0
+        print(f"  {c.symbol:6s} | vol_ratio={vol_ratio:.1f}× | score={c.priority_score:.0f}")
 
     return market_ctx, candidates
