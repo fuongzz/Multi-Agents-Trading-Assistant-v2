@@ -79,6 +79,23 @@ def run_bob_strategy_meeting() -> None:
         send_pipeline_alert("bob", e, date=_today())
 
 
+def _update_ohlcv_daily() -> None:
+    """Daily OHLCV data update — runs after market close (15:35).
+
+    Fetches new trading data and appends to ohlcv_master.parquet.
+    """
+    print(f"\n{'=' * 60}\n[runner] OHLCV DAILY UPDATE — {_today()}\n{'=' * 60}")
+    try:
+        import subprocess
+        from pathlib import Path
+
+        script_path = Path(__file__).parent.parent.parent / "scripts" / "update_ohlcv_daily.py"
+        subprocess.run([sys.executable, str(script_path)], check=False, timeout=300)
+        print("[runner] OHLCV update complete")
+    except Exception as e:
+        print(f"[runner] OHLCV update FAIL: {e}")
+
+
 # ──────────────────────────────────────────────
 # Investment pipeline
 # ──────────────────────────────────────────────
@@ -341,12 +358,18 @@ def start_scheduler() -> None:
         ),
         id="session_monitor",
     )
+    scheduler.add_job(
+        _update_ohlcv_daily,
+        CronTrigger(day_of_week="mon-fri", hour=15, minute=35, timezone=_VN_TZ),
+        id="ohlcv_daily_update",
+    )
 
     print("[runner] APScheduler started:")
     print("  - Bob (ℳₛ)     : Thu 6 20:00 VN — Strategy Development Meeting")
     print("  - Investment    : Thu 2 08:00 VN")
     print("  - Trade         : Hang ngay 08:30 VN")
     print("  - Session mon.  : Moi 5 phut (09:00-14:35) — real-time risk")
+    print("  - OHLCV update  : Moi 5 phut (15:35) — sau market close")
     print("  - Cleanup       : Chu nhat 02:00 VN")
     print("  Ctrl+C de dung.\n")
 
