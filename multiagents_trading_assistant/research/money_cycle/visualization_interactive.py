@@ -274,7 +274,8 @@ def plot_symbol_dashboard_interactive(
 def run_interactive_charts(
     data_dir: str | Path,
     output_dir: str | Path,
-    symbol: str = "VCB",
+    symbols: str | list[str] = "VCB",
+    skip_market: bool = False,
 ) -> None:
     """
     Generate all interactive HTML charts.
@@ -282,11 +283,17 @@ def run_interactive_charts(
     Args:
         data_dir: Path to money_cycle parquet files
         output_dir: Path to save HTML files
-        symbol: Symbol for symbol dashboard
+        symbols: Symbol or list of symbols for per-symbol dashboards
+        skip_market: If True, skip the market dashboard (useful when re-rendering
+            symbol dashboards repeatedly)
     """
     data_dir = Path(data_dir)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    if isinstance(symbols, str):
+        symbols = [symbols]
+    symbols = [s.upper() for s in symbols]
 
     logger.info("Loading data...")
     mc_market = pd.read_parquet(data_dir / "money_cycle_market.parquet")
@@ -296,17 +303,17 @@ def run_interactive_charts(
     from multiagents_trading_assistant.data import ohlcv_store
     ohlcv = ohlcv_store.load()
 
-    logger.info("Generating interactive charts...")
+    logger.info(f"Generating interactive charts for {len(symbols)} symbol(s)...")
 
-    # Market dashboard
-    logger.info("1. Market dashboard (interactive)...")
-    plot_market_dashboard_interactive(mc_market, output_dir / "01_market_dashboard_interactive.html")
+    if not skip_market:
+        logger.info("Market dashboard (interactive)...")
+        plot_market_dashboard_interactive(mc_market, output_dir / "01_market_dashboard_interactive.html")
 
-    # Symbol dashboard
-    logger.info(f"2. Symbol dashboard ({symbol}) (interactive)...")
-    plot_symbol_dashboard_interactive(
-        ohlcv, chdm_by_symbol, ds_by_symbol, symbol,
-        output_dir / f"02_symbol_dashboard_{symbol}_interactive.html"
-    )
+    for idx, symbol in enumerate(symbols, start=1):
+        logger.info(f"[{idx}/{len(symbols)}] Symbol dashboard ({symbol})...")
+        plot_symbol_dashboard_interactive(
+            ohlcv, chdm_by_symbol, ds_by_symbol, symbol,
+            output_dir / f"02_symbol_dashboard_{symbol}_interactive.html"
+        )
 
     logger.info(f"All interactive charts saved to {output_dir}")

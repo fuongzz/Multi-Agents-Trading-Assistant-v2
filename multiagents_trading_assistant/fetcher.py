@@ -14,7 +14,7 @@ Functions:
   Foreign flow: get_foreign_flow(symbol)
   Price board:  get_price_board(symbols)
   Macro:        get_global_macro(), get_vn_macro()
-  Symbols:      get_vn30_symbols(), get_vn100_symbols()
+  Symbols:      get_vn30_symbols(), get_vn100_symbols(), get_hnx30_symbols(), get_upcom30_symbols()
 """
 
 import importlib.metadata  # FIX: pandas-ta-openbb Python 3.11
@@ -499,6 +499,78 @@ def get_vn100_symbols() -> list[str]:
         "SBT", "SCS", "SHB", "SIP", "SJS", "SSB", "SSI", "STB", "SZC", "TCB",
         "TCH", "TPB", "VCB", "VCG", "VCI", "VGC", "VHC", "VHM", "VIB", "VIC",
         "VIX", "VJC", "VND", "VNM", "VPB", "VPI", "VPL", "VRE", "VSC", "VTP",
+    ]
+
+
+def get_hnx30_symbols() -> list[str]:
+    """
+    Lấy 30 mã lớn nhất sàn HNX (chỉ số HNX30 chính thức).
+
+    Dùng Reference.equity.by_group('HNX30') từ vnstock_data.
+    Fallback về danh sách cứng HNX30 nếu API lỗi.
+
+    Returns:
+        Danh sách 30 mã HNX (thường là HNX30 index).
+    """
+    try:
+        symbols = get_data_provider().get_symbols_by_group("HNX30")
+        if len(symbols) >= 25:
+            print(f"[fetcher] HNX30 from vnstock_data: {len(symbols)} symbols")
+            return symbols
+    except Exception as e:
+        print(f"[fetcher] HNX30 vnstock_data failed: {e} - using static list")
+
+    # Fallback — HNX30 cập nhật Q1/2025
+    return [
+        "ACE", "APS", "BVS", "CAP", "CEO",
+        "DP3", "DTD", "DVM", "DXP", "HUT",
+        "IDC", "IDV", "L14", "L18", "LAS",
+        "LHC", "MBS", "NVB", "PLC", "PSD",
+        "PTI", "PVB", "SHN", "SHS", "TIG",
+        "TNG", "VCS", "VGS", "VNR", "WIN",
+    ]
+
+
+def get_upcom30_symbols() -> list[str]:
+    """
+    Lấy 30 mã lớn nhất sàn UPCOM theo vốn hóa.
+
+    Vì UPCOM không có index chuẩn 30 mã, hàm lấy toàn bộ mã UPCOM
+    từ Reference API rồi ưu tiên các mã trong danh sách blue-chip UPCOM.
+    Fallback về danh sách cứng 30 mã lớn nhất nếu API lỗi.
+
+    Returns:
+        Danh sách 30 mã UPCOM vốn hóa lớn.
+    """
+    try:
+        symbols = get_data_provider().get_symbols_by_exchange("UPCOM")
+        # Lọc các mã hợp lệ (3-4 ký tự alpha)
+        symbols = [s for s in symbols if 2 <= len(s) <= 4 and s.replace("-", "").isalpha()]
+        if len(symbols) >= 30:
+            # Ưu tiên các mã blue-chip UPCOM đã biết, bổ sung thêm để đủ 30
+            _UPCOM_BLUECHIP = [
+                "BSR", "OIL", "ABI", "VEA", "MCH", "QNS", "VGT", "VHG",
+                "ACV", "POT", "VCR", "SBS", "HVN", "ABB", "BIC", "BMI",
+                "HKB", "MSR", "NAV", "PGI", "PTL", "SBD", "SGH", "TCR",
+                "TIG", "VGI", "VID", "VNT", "VOC", "VTJ",
+            ]
+            # Ưu tiên bluechip, bổ sung từ danh sách exchange nếu chưa đủ
+            result = [s for s in _UPCOM_BLUECHIP if s in symbols]
+            remaining = [s for s in symbols if s not in set(result)]
+            result = (result + remaining)[:30]
+            print(f"[fetcher] UPCOM30 from vnstock_data: {len(result)} symbols (total UPCOM={len(symbols)})")
+            return result
+    except Exception as e:
+        print(f"[fetcher] UPCOM30 vnstock_data failed: {e} - using static list")
+
+    # Fallback — 30 mã UPCOM vốn hóa lớn tiêu biểu
+    return [
+        "BSR", "OIL", "ABI", "VEA", "MCH",
+        "QNS", "VGT", "ACV", "POT", "HVN",
+        "ABB", "BIC", "BMI", "HKB", "MSR",
+        "NAV", "PGI", "PTL", "SBD", "SGH",
+        "TCR", "VGI", "VID", "VNT", "VOC",
+        "VTJ", "VGS", "SBS", "BCG", "PLC",
     ]
 
 
