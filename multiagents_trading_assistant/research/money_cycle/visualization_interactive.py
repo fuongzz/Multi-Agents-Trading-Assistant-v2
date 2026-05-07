@@ -135,16 +135,18 @@ def plot_market_dashboard_interactive(
     fig.add_hline(y=0.5, line_dash="dash", line_color="gray", opacity=0.3, row=4, col=1)
     fig.update_yaxes(title_text="DS (Tỷ lệ)", range=[0, 1], row=4, col=1)
 
-    fig.update_xaxes(title_text="Ngày", row=4, col=1)
+    fig.update_xaxes(title_text="Ngày", row=4, col=1, fixedrange=False)
+    fig.update_yaxes(fixedrange=False)
     fig.update_layout(
         title_text="Money Cycle Market Dashboard (Interactive)",
         height=1200,
         hovermode="x unified",
         template="plotly_white",
+        dragmode=None,
     )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.write_html(output_path)
+    fig.write_html(output_path, config={"scrollZoom": True})
     logger.info(f"Saved interactive market dashboard: {output_path}")
 
 
@@ -254,16 +256,18 @@ def plot_symbol_dashboard_interactive(
     fig.add_hline(y=0.5, line_dash="dash", line_color="gray", opacity=0.3, row=3, col=1)
     fig.update_yaxes(title_text="DS (Sell State)", range=[0, 1], row=3, col=1)
 
-    fig.update_xaxes(title_text="Ngày", row=3, col=1)
+    fig.update_xaxes(title_text="Ngày", row=3, col=1, fixedrange=False)
+    fig.update_yaxes(fixedrange=False)
     fig.update_layout(
         title_text=f"{symbol} - Money Cycle Dashboard (Interactive)",
         height=1000,
         hovermode="x unified",
         template="plotly_white",
+        dragmode=None,
     )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.write_html(output_path)
+    fig.write_html(output_path, config={"scrollZoom": True})
     logger.info(f"Saved interactive symbol dashboard: {output_path}")
 
 
