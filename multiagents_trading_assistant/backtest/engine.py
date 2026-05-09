@@ -406,6 +406,7 @@ def run_symbol(
     pending_bars: int = 3,
     cooldown_bars: int = 0,
     loss_streak_pause: int = 0,
+    pv_gate: bool = False,
 ) -> list[Trade]:
     """Walk-forward backtest cho một mã cổ phiếu.
 
@@ -541,6 +542,14 @@ def run_symbol(
                 if not mf_ok:
                     continue
                 reasons = [*reasons, *mf_reasons]
+
+            # PV gate: chặn entry khi có risk flags cứng hoặc bias "avoid"
+            if pv_gate:
+                _pv = (ind.get("price_volume") or {})
+                _pv_flags = set(_pv.get("risk_flags") or [])
+                _pv_bias  = _pv.get("entry_bias", "neutral")
+                if _pv_bias == "avoid" or _pv_flags & {"FAKE_BREAKOUT_RISK", "HEAVY_DISTRIBUTION"}:
+                    continue
 
             next_bar    = df.iloc[i + 1]
             entry_price = float(next_bar["open"])
@@ -791,6 +800,7 @@ def run_universe(
     pending_bars: int = 3,
     cooldown_bars: int = 0,
     loss_streak_pause: int = 0,
+    pv_gate: bool = False,
 ) -> dict[str, list[Trade]]:
     """Walk-forward backtest cho nhiều mã, chạy song song.
 
@@ -813,6 +823,7 @@ def run_universe(
                 pending_bars=pending_bars,
                 cooldown_bars=cooldown_bars,
                 loss_streak_pause=loss_streak_pause,
+                pv_gate=pv_gate,
             )
             return sym, t, local_stats
         except Exception as e:

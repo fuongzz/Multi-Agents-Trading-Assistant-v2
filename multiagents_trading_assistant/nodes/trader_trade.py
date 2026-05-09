@@ -168,6 +168,7 @@ def _build_prompt(state: dict) -> str:
         f"Resistance: {resistances}",
         f"Room→R gần nhất: {room_to_res}%" if room_to_res is not None else "Room→R: N/A",
         "",
+        *_format_pv_section(tech.get("price_volume") or {}),
         "=== Foreign flow ===",
         f"Room: {flow.get('room_status', '?')} | Trend: {flow.get('flow_trend', '?')} | Sizing: ×{flow.get('sizing_modifier', 1.0)}",
         f"Tích lũy: {flow.get('accumulation_signal', False)}",
@@ -301,6 +302,37 @@ def _build_prompt(state: dict) -> str:
         "Nếu đang có vị thế, tuyệt đối không trả MUA; dùng GIỮ/GIA_TĂNG/GIẢM/BÁN theo state machine.",
     ]
     return "\n".join(lines)
+
+
+def _format_pv_section(pv: dict) -> list[str]:
+    """Format price-volume intelligence data for the LLM prompt."""
+    if not pv:
+        return []
+    score      = pv.get("price_volume_score", 0)
+    bias       = pv.get("entry_bias", "neutral")
+    flags      = pv.get("risk_flags", [])
+    tags       = pv.get("setup_tags", [])
+    interp     = pv.get("interpretation", "")
+    metrics    = pv.get("metrics", {})
+    accum      = metrics.get("accumulation_count_20", "?")
+    distr      = metrics.get("distribution_count_20", "?")
+    vol_ratio  = metrics.get("volume_ratio_20", "?")
+    lines = [
+        "=== Price-Volume Intelligence (rule-based) ===",
+        f"Score: {score}/100 range (-100..+100) | Bias: {bias}",
+        f"Volume ratio (cur/MA20): {vol_ratio}× | Accum days/20: {accum} | Distr days/20: {distr}",
+        f"Interpretation: {interp}",
+    ]
+    if flags:
+        lines.append(f"⚠ Risk flags: {', '.join(flags)}")
+    if tags:
+        lines.append(f"Setup tags: {', '.join(tags)}")
+    lines.append(
+        "Lưu ý: FAKE_BREAKOUT_RISK/HEAVY_DISTRIBUTION đã bị chặn ở risk_trade. "
+        "BUYING_CLIMAX và BEARISH_VOLUME_EXPANSION → xem xét SL chặt hơn."
+    )
+    lines.append("")
+    return lines
 
 
 def _format_memory_section(ctx: dict) -> list[str]:

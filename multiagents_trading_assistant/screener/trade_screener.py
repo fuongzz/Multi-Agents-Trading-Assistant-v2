@@ -1817,9 +1817,19 @@ def run_screener(
             )
         ind["avg_volume_20d"] = round(avg_vol_20)
 
-        # Rank by volume momentum: mã đang có vol tăng bất thường nổi lên đầu
+        # Rank by volume momentum + price-volume intelligence
         vol_ratio = float(df["volume"].iloc[-1]) / avg_vol_20 if avg_vol_20 > 0 else 1.0
-        priority_score = min(round(vol_ratio * 40 + avg_vol_20 / 1_000_000 * 5, 1), 100.0)
+        pv = ind.get("price_volume") or {}
+        pv_score_raw  = int(pv.get("price_volume_score") or 0)   # -100..+100
+        pv_entry_bias = pv.get("entry_bias", "neutral")
+        pv_setup_tags = pv.get("setup_tags", [])
+        # Map PV score to a signed contribution: -20..+20 points on priority
+        pv_contribution = pv_score_raw * 0.20
+        priority_score = min(round(vol_ratio * 32 + avg_vol_20 / 1_000_000 * 5 + pv_contribution, 1), 100.0)
+        # Hard cap: "avoid" stocks cannot become top BUY candidates
+        if pv_entry_bias == "avoid":
+            priority_score = min(priority_score, 30.0)
+        ind["pv_setup_tags_screener"] = pv_setup_tags
 
         candidates.append(TradeCandidate(
             symbol=symbol,

@@ -273,6 +273,36 @@ def check(state: dict) -> dict:
         if rr < _MIN_RR:
             return _override(action, "CHỜ", f"R:R {rr:.2f} < {_MIN_RR} — không đủ rủi ro/lợi", warnings, 0.0)
 
+    # Price-Volume Intelligence hard gates (applied before max-loss sizing)
+    if action in _BUY_ACTIONS:
+        pv = (state.get("technical_analysis") or {}).get("price_volume") or {}
+        pv_flags = pv.get("risk_flags", [])
+        if pv_flags:
+            if "FAKE_BREAKOUT_RISK" in pv_flags:
+                return _override(
+                    action, "CHỜ",
+                    "PV: FAKE_BREAKOUT_RISK — giá bị từ chối ở kháng cự với volume cao",
+                    warnings, 0.0,
+                )
+            if "HEAVY_DISTRIBUTION" in pv_flags:
+                return _override(
+                    action, "CHỜ",
+                    "PV: HEAVY_DISTRIBUTION — ≥5 phiên phân phối trong 20 phiên gần nhất",
+                    warnings, 0.0,
+                )
+            if "BUYING_CLIMAX" in pv_flags:
+                # Allow if already holding and confluence is very strong
+                if not has_position or confluence < 80:
+                    return _override(
+                        action, "CHỜ",
+                        "PV: BUYING_CLIMAX — giá vượt xa MA20 với volume cực cao, rủi ro kiệt sức",
+                        warnings, 0.0,
+                    )
+                warnings.append("PV: BUYING_CLIMAX — nâng trailing SL bảo vệ lãi")
+            if "BEARISH_VOLUME_EXPANSION" in pv_flags:
+                sizing *= 0.7
+                warnings.append("PV: BEARISH_VOLUME_EXPANSION — giảm size ×0.7, SL chặt hơn")
+
     # Rule 9: Max loss ≤ 2% NAV — relative, không cần NAV tuyệt đối
     # max_loss% = position_pct × (entry - SL) / entry
     if action in _BUY_ACTIONS:

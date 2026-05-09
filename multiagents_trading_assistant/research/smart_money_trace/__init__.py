@@ -36,4 +36,19 @@ __all__ = [
     "classify_smart_money_state",
     "summarize_daily",
     "save_outputs",
+    "plot_market_dashboard_interactive",
+    "plot_symbol_dashboard_interactive",
+    "run_interactive_charts",
 ]
+
+
+def __getattr__(name: str):
+    if name in {
+        "plot_market_dashboard_interactive",
+        "plot_symbol_dashboard_interactive",
+        "run_interactive_charts",
+    }:
+        from multiagents_trading_assistant.research.smart_money_trace import visualization_interactive
+
+        return getattr(visualization_interactive, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

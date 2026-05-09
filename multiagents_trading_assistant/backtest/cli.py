@@ -86,11 +86,43 @@ def add_backtest_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--mode",
         type=str,
-        choices=["ta", "money-flow", "lifecycle", "live-pipeline", "llm-graph"],
+        choices=["ta", "money-flow", "lifecycle", "live-pipeline", "llm-graph", "pv-signals"],
         default="ta",
         help=(
             "Chế độ backtest: ta (TA setups, mặc định) | money-flow | lifecycle | "
-            "live-pipeline | llm-graph (TradingAgents-VN với LLM decisions)"
+            "live-pipeline | llm-graph (TradingAgents-VN với LLM decisions) | "
+            "pv-signals (Price-Volume Intelligence Layer standalone)"
+        ),
+    )
+    parser.add_argument(
+        "--pv-gate",
+        dest="pv_gate",
+        action="store_true",
+        help=(
+            "[ta] Bật PV gate: chặn TA entry khi PV bias='avoid' hoặc có "
+            "FAKE_BREAKOUT_RISK / HEAVY_DISTRIBUTION. Kết hợp với --mode ta."
+        ),
+    )
+    parser.add_argument(
+        "--pv-min-score",
+        dest="pv_min_score",
+        type=int,
+        default=0,
+        metavar="N",
+        help=(
+            "[pv-signals] Ngưỡng price_volume_score tối thiểu để vào lệnh "
+            "(mặc định 0 = chỉ cần entry_bias bullish). Đề xuất: 20-35."
+        ),
+    )
+    parser.add_argument(
+        "--pv-signals",
+        dest="pv_signals",
+        type=str,
+        default=None,
+        metavar="A,B,...",
+        help=(
+            "[pv-signals] Lọc PV signal: PV_BREAKOUT,PV_WASHOUT,PV_ABSORPTION,"
+            "PV_PULLBACK,PV_BULL_EXPANSION. Mặc định: tất cả 5 signal."
         ),
     )
     # llm-graph specific args
@@ -396,6 +428,13 @@ def run_backtest_cli(args: argparse.Namespace) -> None:
     cooldown_bars    = getattr(args, "cooldown_bars", 0)
     loss_streak_pause = getattr(args, "loss_streak_pause", 0)
     max_positions    = getattr(args, "max_positions", 0)
+    pv_gate          = getattr(args, "pv_gate", False)
+    pv_min_score     = getattr(args, "pv_min_score", 0)
+    pv_signals_raw   = getattr(args, "pv_signals", None)
+    pv_signals_filter = (
+        [s.strip().upper() for s in pv_signals_raw.split(",") if s.strip()]
+        if pv_signals_raw else None
+    )
     ichimoku_params  = getattr(args, "ichimoku_params", None)
     mf_params        = {"min_avg_value": int(min_value_b * 1_000_000_000)} if min_value_b is not None else None
     review_stats    = new_pipeline_review_stats() if pipeline_review else None
@@ -466,6 +505,31 @@ def run_backtest_cli(args: argparse.Namespace) -> None:
         )
         return
 
+    # ── PV-signals mode ──────────────────────────────────────────────────────
+    if mode == "pv-signals":
+        _run_pv_signals_backtest(
+            symbol=symbol,
+            universe=universe,
+            from_date=from_date,
+            to_date=to_date,
+            rr=rr,
+            max_hold=max_hold,
+            pv_min_score=pv_min_score,
+            pv_signals_filter=pv_signals_filter,
+            cooldown_bars=cooldown_bars,
+            loss_streak_pause=loss_streak_pause,
+            max_positions=max_positions,
+            no_save=no_save,
+            get_ohlcv_history=get_ohlcv_history,
+            get_vn30_symbols=get_vn30_symbols,
+            get_vn100_symbols=get_vn100_symbols,
+            get_liquid_symbols=get_liquid_symbols,
+            print_report=print_report,
+            save_report=save_report,
+            history_start=history_start,
+        )
+        return
+
     if mode == "live-pipeline":
         _run_live_pipeline_backtest_cli(
             symbol=symbol,
@@ -495,6 +559,8 @@ def run_backtest_cli(args: argparse.Namespace) -> None:
             print(f"[backtest] Không có data cho {symbol}")
             return
 
+        if pv_gate:
+            print(f"[backtest] PV gate ON — chặn entry khi PV bias=avoid / FAKE_BREAKOUT_RISK / HEAVY_DISTRIBUTION")
         trades = run_symbol(
             symbol=symbol,
             df=df,
@@ -512,6 +578,7 @@ def run_backtest_cli(args: argparse.Namespace) -> None:
             pending_bars=pending_bars,
             cooldown_bars=cooldown_bars,
             loss_streak_pause=loss_streak_pause,
+            pv_gate=pv_gate,
         )
         print_review_stats(review_stats)
         if candidate_llm_backtest:
@@ -565,6 +632,7 @@ def run_backtest_cli(args: argparse.Namespace) -> None:
             pending_bars=pending_bars,
             cooldown_bars=cooldown_bars,
             loss_streak_pause=loss_streak_pause,
+            pv_gate=pv_gate,
         )
 
         all_trades = [t for sym_trades in results.values() for t in sym_trades]
@@ -597,6 +665,120 @@ def run_backtest_cli(args: argparse.Namespace) -> None:
         print("[backtest] Cần chỉ định --symbol <MÃ> hoặc --universe <vn30|vn100|liquid>")
         print("  VD: --backtest --symbol VCB --from 2024-01-01")
         print("  VD: --backtest --universe vn30 --from 2023-01-01 --to 2024-12-31")
+
+
+def _run_pv_signals_backtest(
+    *,
+    symbol,
+    universe,
+    from_date,
+    to_date,
+    rr,
+    max_hold,
+    pv_min_score,
+    pv_signals_filter,
+    cooldown_bars,
+    loss_streak_pause,
+    max_positions,
+    no_save,
+    get_ohlcv_history,
+    get_vn30_symbols,
+    get_vn100_symbols,
+    get_liquid_symbols,
+    print_report,
+    save_report,
+    history_start,
+) -> None:
+    """Entry point cho --mode pv-signals: dùng PV Intelligence Layer làm entry trigger."""
+    from multiagents_trading_assistant.backtest.backtest_pv import (
+        run_pv_symbol,
+        run_pv_universe,
+    )
+    from multiagents_trading_assistant.backtest.engine import apply_portfolio_filter
+
+    sig_label = ",".join(pv_signals_filter) if pv_signals_filter else "ALL"
+    print(
+        f"[pv-backtest] mode=pv-signals | signals={sig_label} | "
+        f"min_score={pv_min_score} | rr={rr} | cooldown={cooldown_bars}"
+    )
+
+    if symbol:
+        print(f"[pv-backtest] Fetching {symbol} history {history_start} → {to_date}...")
+        df = get_ohlcv_history(symbol, start=history_start, end=to_date)
+        if df.empty:
+            print(f"[pv-backtest] Không có data cho {symbol}")
+            return
+
+        trades = run_pv_symbol(
+            symbol=symbol,
+            df=df,
+            signals=pv_signals_filter,
+            min_pv_score=pv_min_score,
+            from_date=from_date,
+            to_date=to_date,
+            rr_ratio=rr,
+            max_hold=max_hold,
+            cooldown_bars=cooldown_bars,
+            loss_streak_pause=loss_streak_pause,
+        )
+        print_report(trades, label=f"PV_{symbol}", from_date=from_date, to_date=to_date)
+        if not no_save:
+            save_report(trades, label=f"PV_{symbol}", from_date=from_date, to_date=to_date)
+
+    elif universe:
+        if universe == "vn30":
+            symbols = get_vn30_symbols()
+        elif universe == "vn100":
+            symbols = get_vn100_symbols()
+        else:
+            symbols = get_liquid_symbols(min_avg_vol=500_000)
+
+        print(f"[pv-backtest] Universe {universe.upper()}: {len(symbols)} mã")
+        print(f"[pv-backtest] Fetching OHLCV history batch {history_start} → {to_date}...")
+        ohlcv_map: dict = {}
+        with ThreadPoolExecutor(max_workers=8) as ex:
+            fut_map = {ex.submit(get_ohlcv_history, sym, history_start, to_date): sym for sym in symbols}
+            for fut in as_completed(fut_map):
+                sym = fut_map[fut]
+                try:
+                    ohlcv_map[sym] = fut.result()
+                except Exception as e:
+                    print(f"[pv-backtest] {sym} fetch error: {e}")
+                    ohlcv_map[sym] = __import__("pandas").DataFrame()
+
+        results = run_pv_universe(
+            ohlcv_map=ohlcv_map,
+            signals=pv_signals_filter,
+            min_pv_score=pv_min_score,
+            from_date=from_date,
+            to_date=to_date,
+            rr_ratio=rr,
+            max_hold=max_hold,
+            cooldown_bars=cooldown_bars,
+            loss_streak_pause=loss_streak_pause,
+        )
+
+        all_trades = [t for ts in results.values() for t in ts]
+        if max_positions > 0:
+            before = len(all_trades)
+            all_trades = apply_portfolio_filter(all_trades, max_positions=max_positions)
+            print(f"[pv-backtest] Portfolio filter (max={max_positions}): {before} → {len(all_trades)} trades")
+
+        print_report(
+            all_trades,
+            label=f"PV_{universe.upper()}",
+            from_date=from_date,
+            to_date=to_date,
+            show_symbol_breakdown=True,
+        )
+        if not no_save:
+            save_report(all_trades, label=f"PV_{universe.upper()}", from_date=from_date, to_date=to_date)
+
+    else:
+        print("[pv-backtest] Cần --symbol <MÃ> hoặc --universe <vn30|vn100|liquid>")
+        print("  VD: --backtest --mode pv-signals --symbol VCB --from 2024-01-01")
+        print("  VD: --backtest --mode pv-signals --universe vn30 --from 2023-01-01 --pv-min-score 25")
+        print("  VD: --backtest --mode pv-signals --universe liquid --pv-signals PV_BREAKOUT,PV_WASHOUT")
 
 
 def _run_llm_graph_backtest(

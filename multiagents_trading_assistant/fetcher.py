@@ -39,6 +39,15 @@ if hasattr(sys.stdout, "reconfigure"):
 if not hasattr(pd.DataFrame, "applymap"):
     pd.DataFrame.applymap = pd.DataFrame.map
 
+# FIX: vnstock_data nằm trong ~/.venv (home venv) không phải project venv
+# Tự động thêm vào sys.path nếu chưa import được, tránh phải chạy đúng interpreter
+try:
+    import vnstock_data  # noqa: F401
+except ModuleNotFoundError:
+    _home_sp = Path.home() / ".venv" / "Lib" / "site-packages"
+    if _home_sp.is_dir() and str(_home_sp) not in sys.path:
+        sys.path.insert(0, str(_home_sp))
+
 # ── vnstock imports ──
 
 # ── yfinance (global macro) ──

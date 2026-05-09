@@ -1,0 +1,134 @@
+{
+  "hypotheses": [
+    {
+      "name": "leader_pullback_market_regime_v3",
+      "description": "Leader pullback with explicit market-regime brake and breadth momentum guard.",
+      "universe": "VN30",
+      "tags": ["money_cycle", "smart_money_trace", "leader_pullback", "market_regime"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "in", "value": ["RISK_ON", "NEUTRAL"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 55},
+        {"column": "mkt_CHDM20", "op": ">", "value": 45},
+        {"column": "mkt_DS20", "op": "<", "value": 0.45},
+        {"column": "mkt_DS50", "op": "<", "value": 0.50},
+        {"column": "mkt_CHDM20_delta", "op": ">=", "value": -8},
+        {"column": "mkt_DS20_delta", "op": "<=", "value": 0.12},
+        {"column": "smart_money_score", "op": ">=", "value": 62},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.62},
+        {"column": "value_flow_quality_score", "op": ">=", "value": 55},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "CHDM50", "op": ">=", "value": 45},
+        {"column": "CHDM03", "op": "up"},
+        {"column": "DS20", "op": "not_up"}
+      ],
+      "rank": [
+        {"column": "smart_money_score", "ascending": false, "weight": 1.5},
+        {"column": "mkt_regime_score", "ascending": false, "weight": 1.0},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 1.0},
+        {"column": "value_flow_quality_score", "ascending": false, "weight": 1.0},
+        {"column": "CHDM50", "ascending": false, "weight": 0.5}
+      ],
+      "risk": {
+        "stop_loss": 0.08,
+        "take_profit": 0.25,
+        "max_holding_bars": 60,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "leader_pullback_market_healthy_v2",
+      "description": "Grid-selected variant: looser SMT score, stricter market DS.",
+      "universe": "VN30",
+      "tags": ["money_cycle", "smart_money_trace", "leader_pullback", "grid_selected"],
+      "filters": [
+        {"column": "mkt_CHDM20", "op": ">", "value": 45},
+        {"column": "mkt_DS20", "op": "<", "value": 0.45},
+        {"column": "mkt_DS50", "op": "<", "value": 0.50},
+        {"column": "smart_money_score", "op": ">=", "value": 62},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.62},
+        {"column": "value_flow_quality_score", "op": ">=", "value": 55},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "CHDM50", "op": ">=", "value": 45},
+        {"column": "CHDM03", "op": "up"},
+        {"column": "DS20", "op": "not_up"}
+      ],
+      "rank": [
+        {"column": "smart_money_score", "ascending": false, "weight": 1.5},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 1.0},
+        {"column": "value_flow_quality_score", "ascending": false, "weight": 1.0},
+        {"column": "CHDM50", "ascending": false, "weight": 0.5}
+      ],
+      "risk": {"stop_loss": 0.08, "take_profit": 0.25, "max_holding_bars": 60}
+    },
+    {
+      "name": "leader_pullback_market_healthy",
+      "description": "Healthy market, smart-money leader, short-cycle reset turning up.",
+      "universe": "VN30",
+      "tags": ["money_cycle", "smart_money_trace", "leader_pullback"],
+      "filters": [
+        {"column": "mkt_CHDM20", "op": ">", "value": 45},
+        {"column": "mkt_DS20", "op": "<", "value": 0.50},
+        {"column": "mkt_DS50", "op": "<", "value": 0.50},
+        {"column": "smart_money_score", "op": ">=", "value": 68},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.62},
+        {"column": "value_flow_quality_score", "op": ">=", "value": 55},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "CHDM50", "op": ">=", "value": 45},
+        {"column": "CHDM03", "op": "up"},
+        {"column": "DS20", "op": "not_up"}
+      ],
+      "rank": [
+        {"column": "smart_money_score", "ascending": false, "weight": 1.5},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 1.0},
+        {"column": "value_flow_quality_score", "ascending": false, "weight": 1.0},
+        {"column": "CHDM50", "ascending": false, "weight": 0.5}
+      ],
+      "risk": {"stop_loss": 0.08, "take_profit": 0.25, "max_holding_bars": 60}
+    },
+    {
+      "name": "smart_money_strong_market_healthy",
+      "description": "Strong SMT state with Money Cycle market confirmation.",
+      "universe": "VN30",
+      "tags": ["money_cycle", "smart_money_trace", "continuation"],
+      "filters": [
+        {"column": "mkt_CHDM20", "op": ">", "value": 50},
+        {"column": "mkt_DS20", "op": "<", "value": 0.45},
+        {"column": "smart_money_state", "op": "in", "value": ["HOT_BUT_STRONG", "RESET_IN_UPTREND"]},
+        {"column": "smart_money_score", "op": ">=", "value": 65},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.65},
+        {"column": "distribution_days_10", "op": "<=", "value": 1}
+      ],
+      "rank": [
+        {"column": "smart_money_score", "ascending": false, "weight": 1.5},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 1.0},
+        {"column": "CHDM50", "ascending": false, "weight": 0.5}
+      ],
+      "risk": {"stop_loss": 0.08, "take_profit": 0.25, "max_holding_bars": 60}
+    },
+    {
+      "name": "money_cycle_reset_smt_confirm",
+      "description": "Money Cycle short reset inside longer trend, confirmed by SMT quality.",
+      "universe": "VN30",
+      "tags": ["money_cycle", "smart_money_trace", "reset"],
+      "filters": [
+        {"column": "mkt_DS20", "op": "<", "value": 0.55},
+        {"column": "CHDM50", "op": ">=", "value": 50},
+        {"column": "CHDM03", "op": "between", "value": [20, 45]},
+        {"column": "CHDM03", "op": "up"},
+        {"column": "DS20", "op": "not_up"},
+        {"column": "smart_money_score", "op": ">=", "value": 60},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.55},
+        {"column": "distribution_days_10", "op": "<=", "value": 1}
+      ],
+      "rank": [
+        {"column": "smart_money_score", "ascending": false, "weight": 1.2},
+        {"column": "CHDM03", "ascending": true, "weight": 0.8},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 1.0}
+      ],
+      "risk": {"stop_loss": 0.08, "take_profit": 0.25, "max_holding_bars": 60}
+    }
+  ]
+}

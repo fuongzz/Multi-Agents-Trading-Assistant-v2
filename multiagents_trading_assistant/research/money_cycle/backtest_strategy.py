@@ -150,15 +150,18 @@ def backtest_washout_reversal(
 
     # Identify washout entry dates
     signals = signals.sort_values("date")
-    entry_dates = signals[signals["CHDM03"] < chdm_threshold]["date"].values
+    signal_dates = signals[signals["CHDM03"] < chdm_threshold]["date"].values
 
-    for entry_date in entry_dates:
-        entry_date = pd.Timestamp(entry_date)
+    for signal_date in signal_dates:
+        signal_date = pd.Timestamp(signal_date)
+        future_entry_dates = daily_close.index[daily_close.index > signal_date]
+        if len(future_entry_dates) == 0:
+            continue
+
+        entry_date = future_entry_dates[0]
         exit_date_target = entry_date + pd.Timedelta(days=hold_days)
 
-        # Find actual entry/exit prices (next trading day)
-        if entry_date not in daily_close.index:
-            continue
+        # Signal is known after the signal date close, so enter next trading day.
         entry_price = daily_close[entry_date]
 
         # Find exit date (first date >= entry_date_target)
@@ -181,7 +184,7 @@ def backtest_washout_reversal(
         trades.append(trade)
 
     return BacktestResult(
-        strategy=f"Washout Reversal (CHDM03 < {chdm_threshold}, hold {hold_days}d)",
+        strategy=f"Washout Reversal (CHDM03 < {chdm_threshold}, next-day entry, hold {hold_days}d)",
         trades=trades,
     )
 
@@ -193,6 +196,8 @@ def backtest_stock_selection(
     hold_days: int = 10,
     top_n_stocks: int = 10,
     chdm_threshold: float = 30.0,
+    ds_window: int = 50,
+    rebalance_days: Optional[int] = None,
 ) -> BacktestResult:
     """
     Backtest: Mua top N cổ phiếu có CHDM thấp + DS đang giảm.
@@ -212,27 +217,59 @@ def backtest_stock_selection(
 
     ohlcv = ohlcv.copy()
     ohlcv["date"] = pd.to_datetime(ohlcv["date"])
+    ohlcv["symbol"] = ohlcv["symbol"].astype(str).str.upper()
+
+    chdm_by_symbol = chdm_by_symbol.copy()
+    chdm_by_symbol["date"] = pd.to_datetime(chdm_by_symbol["date"])
+    chdm_by_symbol["symbol"] = chdm_by_symbol["symbol"].astype(str).str.upper()
+
+    ds_col = f"DS{ds_window:02d}"
+    if ds_col not in ds_by_symbol.columns:
+        raise ValueError(f"Missing required DS column: {ds_col}")
+
+    ds_by_symbol = ds_by_symbol.copy()
+    ds_by_symbol["date"] = pd.to_datetime(ds_by_symbol["date"])
+    ds_by_symbol["symbol"] = ds_by_symbol["symbol"].astype(str).str.upper()
+    ds_by_symbol = ds_by_symbol.sort_values(["symbol", "date"])
+    ds_by_symbol[f"{ds_col}_prev"] = ds_by_symbol.groupby("symbol", sort=False)[ds_col].shift(1)
 
     # Get unique dates
-    dates = sorted(ohlcv["date"].unique())
-    dates = dates[::5]  # Sample every 5 days to speed up
+    dates = [pd.Timestamp(d) for d in sorted(ohlcv["date"].unique())]
+    if rebalance_days is not None:
+        if rebalance_days <= 0:
+            raise ValueError("rebalance_days must be positive when provided")
+        selected_dates = []
+        last_date: pd.Timestamp | None = None
+        for signal_date in dates:
+            if last_date is None or (signal_date - last_date).days >= rebalance_days:
+                selected_dates.append(signal_date)
+                last_date = signal_date
+        dates = selected_dates
 
     for date in dates:
-        date = pd.Timestamp(date)
-
         # Get CHDM/DS at this date for all stocks
         chdm_on_date = chdm_by_symbol[chdm_by_symbol["date"] == date]
-        ds_on_date = ds_by_symbol[ds_by_symbol["date"] == date]
+        ds_on_date = ds_by_symbol[ds_by_symbol["date"] == date][
+            ["symbol", ds_col, f"{ds_col}_prev"]
+        ]
 
-        if len(chdm_on_date) == 0:
+        if len(chdm_on_date) == 0 or len(ds_on_date) == 0:
             continue
 
-        # Filter: CHDM < threshold
-        candidates = chdm_on_date[chdm_on_date["CHDM50"] < chdm_threshold].copy()
+        # Filter: CHDM < threshold and DS sell-state is improving.
+        candidates = chdm_on_date.merge(ds_on_date, on="symbol", how="inner")
+        ds_improving = (
+            (candidates[f"{ds_col}_prev"].notna() & (candidates[ds_col] < candidates[f"{ds_col}_prev"]))
+            | (candidates[ds_col] == 0)
+        )
+        candidates = candidates[
+            (candidates["CHDM50"] < chdm_threshold)
+            & ds_improving
+        ].copy()
         if len(candidates) == 0:
             continue
 
-        # Select top N by lowest CHDM50
+        # Select top N by lowest CHDM50 among names whose DS state is improving.
         top_stocks = candidates.nsmallest(top_n_stocks, "CHDM50")["symbol"].values
 
         # Entry at this date's close
@@ -240,13 +277,12 @@ def backtest_stock_selection(
             ohlcv_sym = ohlcv[ohlcv["symbol"] == symbol.upper()]
             dates_sym = sorted(ohlcv_sym["date"].unique())
 
-            try:
-                idx = dates_sym.index(date)
-                if idx >= len(dates_sym) - 1:
-                    continue
-                entry_date = dates_sym[idx + 1]  # Next trading day
-            except:
+            if date not in dates_sym:
                 continue
+            idx = dates_sym.index(date)
+            if idx >= len(dates_sym) - 1:
+                continue
+            entry_date = dates_sym[idx + 1]  # Next trading day
 
             entry_row = ohlcv_sym[ohlcv_sym["date"] == entry_date]
             if entry_row.empty:
@@ -281,7 +317,10 @@ def backtest_stock_selection(
             trades.append(trade)
 
     return BacktestResult(
-        strategy=f"Stock Selection (CHDM50 < {chdm_threshold}, top {top_n_stocks}, hold {hold_days}d)",
+        strategy=(
+            f"Stock Selection (CHDM50 < {chdm_threshold}, {ds_col} improving, "
+            f"top {top_n_stocks}, hold {hold_days}d)"
+        ),
         trades=trades,
     )
 
@@ -289,6 +328,8 @@ def backtest_stock_selection(
 def run_backtests(
     data_dir: str | Path,
     ohlcv_path: Optional[str | Path] = None,
+    ds_window: int = 50,
+    rebalance_days: Optional[int] = None,
 ) -> None:
     """
     Run all backtest strategies.
@@ -296,6 +337,8 @@ def run_backtests(
     Args:
         data_dir: Path to money_cycle parquet files
         ohlcv_path: Path to OHLCV data (default: from ohlcv_store)
+        ds_window: DS window used by stock-selection strategy
+        rebalance_days: Optional calendar-day spacing between signal dates
     """
     data_dir = Path(data_dir)
 
@@ -320,7 +363,11 @@ def run_backtests(
     # Strategy 2: Stock selection
     result2 = backtest_stock_selection(
         chdm_by_symbol, ds_by_symbol, ohlcv,
-        hold_days=10, top_n_stocks=10, chdm_threshold=30.0
+        hold_days=10,
+        top_n_stocks=10,
+        chdm_threshold=30.0,
+        ds_window=ds_window,
+        rebalance_days=rebalance_days,
     )
     result2.print_report()
 

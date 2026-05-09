@@ -38,6 +38,18 @@ def main():
         default=None,
         help="Path to OHLCV parquet (default: from ohlcv_store)",
     )
+    parser.add_argument(
+        "--ds-window",
+        type=int,
+        default=50,
+        help="DS window for stock selection (default: 50)",
+    )
+    parser.add_argument(
+        "--rebalance-days",
+        type=int,
+        default=None,
+        help="Optional calendar-day spacing between stock-selection signal dates",
+    )
 
     args = parser.parse_args()
 
@@ -59,7 +71,12 @@ def main():
         sys.exit(1)
 
     try:
-        run_backtests(data_dir, ohlcv_path=args.ohlcv_path)
+        run_backtests(
+            data_dir,
+            ohlcv_path=args.ohlcv_path,
+            ds_window=args.ds_window,
+            rebalance_days=args.rebalance_days,
+        )
     except Exception as e:
         logger.error(f"Error: {e}", exc_info=True)
         sys.exit(1)

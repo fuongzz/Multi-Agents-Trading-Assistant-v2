@@ -1,0 +1,32 @@
+{
+  "hypotheses": [
+    {
+      "name": "smart_money_strong_market_healthy_smart_exit",
+      "description": "Experimental smart exit variant. Use for research, not default.",
+      "universe": "VN30",
+      "tags": ["money_cycle", "smart_money_trace", "continuation", "smart_exit"],
+      "filters": [
+        {"column": "mkt_CHDM20", "op": ">", "value": 50},
+        {"column": "mkt_DS20", "op": "<", "value": 0.45},
+        {"column": "smart_money_state", "op": "in", "value": ["HOT_BUT_STRONG", "RESET_IN_UPTREND"]},
+        {"column": "smart_money_score", "op": ">=", "value": 65},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.65},
+        {"column": "distribution_days_10", "op": "<=", "value": 1}
+      ],
+      "rank": [
+        {"column": "smart_money_score", "ascending": false, "weight": 1.5},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 1.0},
+        {"column": "CHDM50", "ascending": false, "weight": 0.5}
+      ],
+      "risk": {
+        "stop_loss": 0.08,
+        "take_profit": 0.25,
+        "max_holding_bars": 60,
+        "exit_smart_money_score_below": 55,
+        "exit_distribution_days_gte": 2,
+        "exit_mkt_DS20_gte": 0.62
+      }
+    }
+  ]
+}
+

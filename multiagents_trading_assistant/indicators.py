@@ -5,6 +5,7 @@ import pandas as pd
 import pandas_ta as ta
 
 from multiagents_trading_assistant.fetcher import get_ohlcv
+from multiagents_trading_assistant.price_volume import analyze_price_volume
 
 try:
     from vnstock_ta import Indicator as VnstockTAIndicator
@@ -119,6 +120,15 @@ def compute_indicators(df: pd.DataFrame) -> dict:
 
     # ── Confluence score ──
     result["confluence_score"] = compute_confluence_score(result)
+
+    # ── Price-Volume Intelligence Layer ──
+    pv = analyze_price_volume(df)
+    result["price_volume"] = pv
+    # Flatten key scalars for quick access without dict nesting
+    result["price_volume_score"] = pv.get("price_volume_score", 0)
+    result["pv_entry_bias"]      = pv.get("entry_bias", "neutral")
+    result["pv_risk_flags"]      = pv.get("risk_flags", [])
+    result["pv_setup_tags"]      = pv.get("setup_tags", [])
 
     return result
 

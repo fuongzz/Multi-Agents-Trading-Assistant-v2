@@ -90,7 +90,8 @@ Trả JSON theo schema."""
     try:
         result = run_agent_lite(prompt=prompt, system=_SYSTEM_PROMPT)
         _attach_indicator_snapshot(result, ind)
-        print(f"[technical_agent] {symbol} — conf={result.get('confluence_score')}, q={result.get('setup_quality')}")
+        _attach_price_volume(result, ind)
+        print(f"[technical_agent] {symbol} — conf={result.get('confluence_score')}, q={result.get('setup_quality')}, pv={result.get('price_volume', {}).get('price_volume_score', 0)}")
         return result
     except Exception as e:
         print(f"[technical_agent] LLM error: {e}")
@@ -120,7 +121,7 @@ def _fallback_result(ind: dict) -> dict:
     score = ind.get("confluence_score", 0)
     quality = "TỐT" if score >= 7 else ("TRUNG_BÌNH" if score >= 4 else "YẾU")
     rsi_val = ind.get("rsi")
-    return {
+    result = {
         "rsi": rsi_val,
         "rsi_signal": ind.get("rsi_signal", "UNKNOWN"),
         "ma_trend": ind.get("ma_trend", "UNKNOWN"),
@@ -135,11 +136,27 @@ def _fallback_result(ind: dict) -> dict:
         "technical_summary": f"MA trend {ind.get('ma_trend')}, RSI {rsi_val:.1f}" if rsi_val is not None else "Fallback indicators.",
         "indicator_snapshot": _indicator_snapshot(ind),
     }
+    _attach_price_volume(result, ind)
+    return result
 
 
 def _attach_indicator_snapshot(result: dict, ind: dict) -> None:
     """Keep deterministic raw indicators for normalized setup scoring."""
     result["indicator_snapshot"] = _indicator_snapshot(ind)
+
+
+def _attach_price_volume(result: dict, ind: dict) -> None:
+    """Expose price-volume intelligence at the top level of technical_analysis."""
+    pv = ind.get("price_volume")
+    if pv:
+        result["price_volume"] = pv
+        # Also add indicator snapshot key so setup_scoring can access it
+        snap = result.get("indicator_snapshot", {})
+        snap["price_volume_score"] = pv.get("price_volume_score", 0)
+        snap["pv_entry_bias"]      = pv.get("entry_bias", "neutral")
+        snap["pv_risk_flags"]      = pv.get("risk_flags", [])
+        snap["pv_setup_tags"]      = pv.get("setup_tags", [])
+        result["indicator_snapshot"] = snap
 
 
 def _indicator_snapshot(ind: dict) -> dict:

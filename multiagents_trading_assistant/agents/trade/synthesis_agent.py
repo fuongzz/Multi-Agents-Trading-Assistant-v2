@@ -18,7 +18,9 @@ from multiagents_trading_assistant.services.llm_service import run_agent_lite
 from multiagents_trading_assistant.setup_scoring import score_setup
 
 
-_W_TECH, _W_FLOW, _W_MONEY, _W_SENT = 0.40, 0.20, 0.25, 0.15
+# Original weights scaled by 0.75 to make room for PV at 0.25.
+# Total: 0.30 + 0.15 + 0.19 + 0.11 + 0.25 = 1.00
+_W_TECH, _W_FLOW, _W_MONEY, _W_SENT, _W_PV = 0.30, 0.15, 0.19, 0.11, 0.25
 
 _SYSTEM_PROMPT = """Bạn là analyst tổng hợp tín hiệu trading VN.
 Nhiệm vụ: nhận confluence_score rule-based + 3 phân tích thành phần, viết drivers/blockers ngắn gọn tiếng Việt.
@@ -60,6 +62,23 @@ def _flow_points(flow: dict) -> float:
     elif room == "MEDIUM":
         base -= 5.0
     return max(0.0, min(100.0, base))
+
+
+def _pv_points(pv: dict) -> float:
+    """Map price_volume analysis output → 0-100 score for synthesis weighting."""
+    if not pv:
+        return 50.0
+    raw_score = float(pv.get("price_volume_score") or 0)
+    # raw_score is -100..+100; map linearly to 0..100
+    normalized = (raw_score + 100) / 2.0
+
+    entry_bias = pv.get("entry_bias", "neutral")
+    if entry_bias == "avoid":
+        normalized = min(normalized, 20.0)
+    elif entry_bias == "bearish":
+        normalized = min(normalized, 40.0)
+
+    return max(0.0, min(100.0, normalized))
 
 
 def _money_flow_points(mflow: dict) -> float:
@@ -107,16 +126,20 @@ def run(
         money_flow=money_flow_analysis or {},
         reference_trend=reference_trend,
     )
-    tech_score = float(setup_scoring.get("score") or 0.0)
-    flow_score = _flow_points(foreign_flow_analysis)
+    tech_score  = float(setup_scoring.get("score") or 0.0)
+    flow_score  = _flow_points(foreign_flow_analysis)
     money_score = _money_flow_points(money_flow_analysis or {})
-    sent_score = float(sentiment_analysis.get("sentiment_score") or 50)
+    sent_score  = float(sentiment_analysis.get("sentiment_score") or 50)
+    # PV score sourced from technical_analysis (populated by technical_agent)
+    pv_data     = technical_analysis.get("price_volume") or {}
+    pv_score    = _pv_points(pv_data)
 
     confluence = (
-        _W_TECH * tech_score
-        + _W_FLOW * flow_score
+        _W_TECH  * tech_score
+        + _W_FLOW  * flow_score
         + _W_MONEY * money_score
-        + _W_SENT * sent_score
+        + _W_SENT  * sent_score
+        + _W_PV    * pv_score
     )
     confluence = round(confluence, 1)
 
@@ -127,6 +150,8 @@ def run(
     else:
         quality = "WEAK"
 
+    pv_flags = pv_data.get("risk_flags", [])
+    pv_tags  = pv_data.get("setup_tags", [])
     prompt = f"""Setup type: {setup_type}
 Confluence score: {confluence}/100 ({quality})
 
@@ -142,6 +167,9 @@ Thành phần:
 - Sentiment ({sent_score:.0f}/100): {sentiment_analysis.get('sentiment_summary', '')}
   Positive: {sentiment_analysis.get('key_positive', [])}
   Negative: {sentiment_analysis.get('key_negative', [])}
+- Price-Volume ({pv_score:.0f}/100): bias={pv_data.get('entry_bias', 'neutral')}, score={pv_data.get('price_volume_score', 0)}
+  {pv_data.get('interpretation', '')}
+  Risk flags: {pv_flags}  Setup tags: {pv_tags}
 
 Viết drivers (điểm cộng) và blockers (điểm trừ) ngắn gọn, synthesis_summary 1-2 câu tiếng Việt.
 Trả JSON theo schema."""
@@ -166,6 +194,7 @@ Trả JSON theo schema."""
         "flow_score": round(flow_score, 1),
         "money_flow_score": round(money_score, 1),
         "sentiment_score": round(sent_score, 1),
+        "pv_score": round(pv_score, 1),
         "drivers": llm_out.get("drivers", []),
         "blockers": llm_out.get("blockers", []),
         "synthesis_summary": llm_out.get("synthesis_summary", ""),
