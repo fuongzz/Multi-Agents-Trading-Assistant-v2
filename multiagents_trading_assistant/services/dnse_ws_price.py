@@ -129,6 +129,30 @@ def get_ws_price(symbol: str, max_age_seconds: float = 30.0) -> float | None:
     return entry["price"]
 
 
+def get_ws_tick(symbol: str, max_age_seconds: float = 30.0) -> dict | None:
+    """
+    Lay snapshot tick moi nhat tu WS cache.
+
+    Returns:
+        {"symbol", "price", "volume", "ts", "age_seconds"} hoac None neu chua co/stale.
+    """
+    symbol = symbol.upper().strip()
+    with _cache_lock:
+        entry = dict(_price_cache.get(symbol) or {})
+    if not entry:
+        return None
+    age = time.time() - float(entry.get("ts", 0))
+    if age > max_age_seconds:
+        return None
+    return {
+        "symbol": symbol,
+        "price": entry.get("price"),
+        "volume": entry.get("volume", 0),
+        "ts": entry.get("ts"),
+        "age_seconds": age,
+    }
+
+
 def get_all_ws_prices() -> dict[str, float]:
     """Trả về dict tất cả giá trong cache (không lọc staleness)."""
     with _cache_lock:

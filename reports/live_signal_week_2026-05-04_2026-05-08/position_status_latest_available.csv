@@ -1,0 +1,26 @@
+family,strategy,symbol,entry_date,entry_open,latest_data_date,latest_close,stop_loss_price,take_profit_price,status,exit_date,exit_reason,mark_or_exit_price,pnl_pct,close_vs_entry_pct,low_since_entry,high_since_entry
+Adaptive Kalman Gate - Pullback Only,compression_breakout_smt_v1,VCG,2026-05-07,23.5,2026-05-11,21.8,21.855,28.67,CLOSED,2026-05-08,STOP_LOSS,21.855,-7.0,-7.234,21.75,23.7
+Adaptive Kalman Gate - Pullback Only,breakout_after_accumulation_v3,HCM,2026-05-07,28.45,2026-05-11,27.55,25.89,38.407,OPEN,,,27.55,-3.163,-3.163,27.05,28.65
+Adaptive Kalman Gate - Pullback Only,mean_reversion_uptrend_ma50_v1,BWE,2026-05-07,44.0,2026-05-11,44.0,40.48,55.0,OPEN,,,44.0,0.0,0.0,43.5,44.9
+Adaptive Kalman Gate - Pullback Only,compression_breakout_smt_v1,HSG,2026-05-07,12.85,2026-05-11,12.1,11.95,15.677,OPEN,,,12.1,-5.837,-5.837,12.0,12.85
+Adaptive Kalman Gate - Pullback Only,breakout_after_accumulation_v3,GEX,2026-05-07,30.15,2026-05-11,34.1,27.436,40.703,OPEN,,,34.1,13.101,13.101,30.15,35.5
+Adaptive Kalman Gate - Pullback Only,compression_breakout_smt_v1,MWG,2026-05-07,86.2,2026-05-11,83.5,80.166,105.164,OPEN,,,83.5,-3.132,-3.132,83.5,87.4
+Adaptive Kalman Gate - Pullback Only,mean_reversion_uptrend_ma50_v1,PDR,2026-05-07,16.6,2026-05-11,16.35,15.272,20.75,OPEN,,,16.35,-1.506,-1.506,16.1,17.1
+Adaptive Kalman Gate - Pullback Only,mean_reversion_uptrend_ma50_v1,HDB,2026-05-07,26.65,2026-05-11,26.9,24.518,33.312,OPEN,,,26.9,0.938,0.938,26.65,27.8
+Adaptive Kalman Gate - Pullback Only,mean_reversion_uptrend_ma50_v1,GMD,2026-05-07,79.3,2026-05-11,79.7,72.956,99.125,OPEN,,,79.7,0.504,0.504,78.5,81.0
+Adaptive Kalman Gate - Pullback Only,mean_reversion_uptrend_ma50_v1,PAN,2026-05-07,32.55,2026-05-11,32.8,29.946,40.688,OPEN,,,32.8,0.768,0.768,32.15,33.7
+Adaptive Kalman Gate - Pullback Only,mean_reversion_uptrend_ma50_v1,PHR,2026-05-07,64.2,2026-05-11,62.7,59.064,80.25,OPEN,,,62.7,-2.336,-2.336,62.6,65.9
+Adaptive Kalman Gate - Pullback Only,mean_reversion_uptrend_ma50_v1,CTG,2026-05-07,35.65,2026-05-11,35.6,32.798,44.562,OPEN,,,35.6,-0.14,-0.14,35.5,36.7
+No Kalman - MVP Router,compression_breakout_smt_v1,VCG,2026-05-07,23.5,2026-05-11,21.8,21.855,28.67,CLOSED,2026-05-08,STOP_LOSS,21.855,-7.0,-7.234,21.75,23.7
+No Kalman - MVP Router,breakout_after_accumulation_v3,HCM,2026-05-07,28.45,2026-05-11,27.55,25.89,38.407,OPEN,,,27.55,-3.163,-3.163,27.05,28.65
+No Kalman - MVP Router,mean_reversion_uptrend_ma50_v1,BWE,2026-05-07,44.0,2026-05-11,44.0,40.48,55.0,OPEN,,,44.0,0.0,0.0,43.5,44.9
+No Kalman - MVP Router,breakout_after_accumulation_v3,GEX,2026-05-07,30.15,2026-05-11,34.1,27.436,40.703,OPEN,,,34.1,13.101,13.101,30.15,35.5
+No Kalman - MVP Router,compression_breakout_smt_v1,HSG,2026-05-07,12.85,2026-05-11,12.1,11.95,15.677,OPEN,,,12.1,-5.837,-5.837,12.0,12.85
+No Kalman - MVP Router,mean_reversion_uptrend_ma50_v1,PDR,2026-05-07,16.6,2026-05-11,16.35,15.272,20.75,OPEN,,,16.35,-1.506,-1.506,16.1,17.1
+No Kalman - MVP Router,compression_breakout_smt_v1,MWG,2026-05-07,86.2,2026-05-11,83.5,80.166,105.164,OPEN,,,83.5,-3.132,-3.132,83.5,87.4
+No Kalman - MVP Router,mean_reversion_uptrend_ma50_v1,GMD,2026-05-07,79.3,2026-05-11,79.7,72.956,99.125,OPEN,,,79.7,0.504,0.504,78.5,81.0
+No Kalman - MVP Router,mean_reversion_uptrend_ma50_v1,HDB,2026-05-07,26.65,2026-05-11,26.9,24.518,33.312,OPEN,,,26.9,0.938,0.938,26.65,27.8
+No Kalman - MVP Router,mean_reversion_uptrend_ma50_v1,PAN,2026-05-07,32.55,2026-05-11,32.8,29.946,40.688,OPEN,,,32.8,0.768,0.768,32.15,33.7
+No Kalman - MVP Router,mean_reversion_uptrend_ma50_v1,PHR,2026-05-07,64.2,2026-05-11,62.7,59.064,80.25,OPEN,,,62.7,-2.336,-2.336,62.6,65.9
+No Kalman - MVP Router,mean_reversion_uptrend_ma50_v1,CTG,2026-05-07,35.65,2026-05-11,35.6,32.798,44.562,OPEN,,,35.6,-0.14,-0.14,35.5,36.7
+No Kalman - MVP Router,mean_reversion_uptrend_ma50_v1,VIX,2026-05-07,17.9,2026-05-11,19.35,16.468,22.375,OPEN,,,19.35,8.101,8.101,17.6,19.85

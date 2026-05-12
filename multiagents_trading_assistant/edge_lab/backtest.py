@@ -42,6 +42,8 @@ class Position:
     shares: int
     entry_value: float
     risk: dict
+    entry_atr: float = np.nan
+    highest_price: float = np.nan
     holding_bars: int = 0
 
 
@@ -103,6 +105,172 @@ def run_portfolio(
     end: str | pd.Timestamp,
     config: PortfolioConfig | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
+    return _run_portfolio(features, price_map, hypotheses, start, end, config=config)
+
+
+def run_regime_switching_portfolio(
+    features: pd.DataFrame,
+    price_map: dict[str, pd.DataFrame],
+    hypotheses: list[Hypothesis],
+    start: str | pd.Timestamp,
+    end: str | pd.Timestamp,
+    config: PortfolioConfig | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Run one portfolio that switches active strategies by market regime."""
+    hypothesis_map = {item.name: item for item in hypotheses}
+
+    def selector(date: pd.Timestamp, day: pd.DataFrame) -> tuple[list[Hypothesis], str]:
+        selected_names, regime_label = _regime_strategy_names(day)
+        selected = [hypothesis_map[name] for name in selected_names if name in hypothesis_map]
+        return selected, regime_label
+
+    return _run_portfolio(features, price_map, hypotheses, start, end, config=config, strategy_selector=selector)
+
+
+def run_symbol_strategy_router_portfolio(
+    features: pd.DataFrame,
+    price_map: dict[str, pd.DataFrame],
+    hypotheses: list[Hypothesis],
+    start: str | pd.Timestamp,
+    end: str | pd.Timestamp,
+    config: PortfolioConfig | None = None,
+    train_months: int = 12,
+    test_months: int = 3,
+    min_train_trades: int = 4,
+    min_profit_factor: float = 1.15,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Walk-forward router that assigns one strategy per symbol.
+
+    Each fold trains on the prior window, chooses the best strategy for each
+    symbol, then trades the next test window with those symbol-strategy pairs.
+    """
+    cfg = config or PortfolioConfig()
+    start_ts = pd.Timestamp(start)
+    end_ts = pd.Timestamp(end)
+    folds = _walk_forward_folds(start_ts, end_ts, train_months, test_months)
+    selected_rows: list[dict] = []
+    route: dict[pd.Timestamp, dict[str, str]] = {}
+
+    for fold_idx, (train_start, train_end, test_start, test_end) in enumerate(folds, start=1):
+        train_features = features[(features["date"] >= train_start) & (features["date"] <= train_end)]
+        selected = _select_symbol_strategies(
+            train_features,
+            price_map,
+            hypotheses,
+            train_start,
+            train_end,
+            cfg,
+            min_train_trades,
+            min_profit_factor,
+        )
+        route[test_start] = dict(zip(selected["symbol"], selected["selected_hypothesis"])) if not selected.empty else {}
+        if not selected.empty:
+            selected = selected.copy()
+            selected["fold"] = fold_idx
+            selected["train_start"] = train_start
+            selected["train_end"] = train_end
+            selected["test_start"] = test_start
+            selected["test_end"] = test_end
+            selected_rows.extend(selected.to_dict("records"))
+
+    def signal_filter(hypothesis: Hypothesis, signal: dict, date: pd.Timestamp) -> bool:
+        fold_start = _active_fold_start(route, date)
+        if fold_start is None:
+            return False
+        symbol_route = route.get(fold_start, {})
+        return symbol_route.get(str(signal.get("symbol"))) == hypothesis.name
+
+    test_start = folds[0][2] if folds else start_ts
+    trades, equity = _run_portfolio(
+        features,
+        price_map,
+        hypotheses,
+        test_start,
+        end_ts,
+        config=cfg,
+        signal_filter=signal_filter,
+    )
+    return trades, equity, pd.DataFrame(selected_rows)
+
+
+def run_symbol_strategy_router_v2_portfolio(
+    features: pd.DataFrame,
+    price_map: dict[str, pd.DataFrame],
+    hypotheses: list[Hypothesis],
+    start: str | pd.Timestamp,
+    end: str | pd.Timestamp,
+    config: PortfolioConfig | None = None,
+    train_months: int = 12,
+    test_months: int = 3,
+    validation_months: int = 3,
+    min_train_trades: int = 4,
+    min_validation_trades: int = 1,
+    min_profit_factor: float = 1.20,
+    min_avg_trade_pct: float = 0.50,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Conservative symbol-strategy router with recent validation scoring."""
+    cfg = config or PortfolioConfig()
+    start_ts = pd.Timestamp(start)
+    end_ts = pd.Timestamp(end)
+    folds = _walk_forward_folds(start_ts, end_ts, train_months, test_months)
+    selected_rows: list[dict] = []
+    route: dict[pd.Timestamp, dict[str, str]] = {}
+
+    for fold_idx, (train_start, train_end, test_start, test_end) in enumerate(folds, start=1):
+        validation_start = max(train_start, train_end - pd.DateOffset(months=validation_months) + pd.Timedelta(days=1))
+        selected = _select_symbol_strategies_v2(
+            features,
+            price_map,
+            hypotheses,
+            train_start,
+            train_end,
+            validation_start,
+            cfg,
+            min_train_trades,
+            min_validation_trades,
+            min_profit_factor,
+            min_avg_trade_pct,
+        )
+        route[test_start] = dict(zip(selected["symbol"], selected["selected_hypothesis"])) if not selected.empty else {}
+        if not selected.empty:
+            selected = selected.copy()
+            selected["fold"] = fold_idx
+            selected["train_start"] = train_start
+            selected["train_end"] = train_end
+            selected["validation_start"] = validation_start
+            selected["test_start"] = test_start
+            selected["test_end"] = test_end
+            selected_rows.extend(selected.to_dict("records"))
+
+    def signal_filter(hypothesis: Hypothesis, signal: dict, date: pd.Timestamp) -> bool:
+        fold_start = _active_fold_start(route, date)
+        if fold_start is None:
+            return False
+        return route.get(fold_start, {}).get(str(signal.get("symbol"))) == hypothesis.name
+
+    test_start = folds[0][2] if folds else start_ts
+    trades, equity = _run_portfolio(
+        features,
+        price_map,
+        hypotheses,
+        test_start,
+        end_ts,
+        config=cfg,
+        signal_filter=signal_filter,
+    )
+    return trades, equity, pd.DataFrame(selected_rows)
+
+
+def _run_portfolio(
+    features: pd.DataFrame,
+    price_map: dict[str, pd.DataFrame],
+    hypotheses: list[Hypothesis],
+    start: str | pd.Timestamp,
+    end: str | pd.Timestamp,
+    config: PortfolioConfig | None = None,
+    strategy_selector=None,
+    signal_filter=None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     cfg = config or PortfolioConfig()
     start_ts = pd.Timestamp(start)
     end_ts = pd.Timestamp(end)
@@ -126,6 +294,7 @@ def run_portfolio(
             position = positions[symbol]
             position.holding_bars += 1
             row = price_map[symbol].iloc[idx]
+            position.highest_price = max(position.highest_price, float(row["high"]))
             prior_features = _latest_features_before(feature_history, symbol, date)
             reason = _exit_reason(row, prior_features, position, cfg)
             if reason:
@@ -137,6 +306,7 @@ def run_portfolio(
         if todays_orders:
             candidates = pd.DataFrame(todays_orders).sort_values("_edge_rank", ascending=False)
             candidates = candidates[~candidates["symbol"].isin(positions)]
+            candidates = candidates.drop_duplicates("symbol", keep="first")
             open_slots = max(0, cfg.max_positions - len(positions))
             candidates = candidates.head(min(cfg.top_n, open_slots))
             if not candidates.empty:
@@ -155,10 +325,18 @@ def run_portfolio(
                         positions[symbol] = position
 
         day = features[features["date"] == date]
-        for hypothesis in hypotheses:
+        regime_label = ""
+        active_hypotheses = hypotheses
+        if strategy_selector is not None:
+            active_hypotheses, regime_label = strategy_selector(date, day)
+        for hypothesis in active_hypotheses:
+            if not _can_emit_signal(hypothesis, date, calendar):
+                continue
             signals = rank_candidates(day[evaluate_filters(day, hypothesis)], hypothesis)
             for signal in signals.head(cfg.top_n).to_dict("records"):
                 symbol = signal["symbol"]
+                if signal_filter is not None and not signal_filter(hypothesis, signal, date):
+                    continue
                 idx = date_index.get(symbol, {}).get(date)
                 if idx is None or idx + 1 >= len(price_map[symbol]):
                     continue
@@ -177,6 +355,8 @@ def run_portfolio(
                 "cash": cash,
                 "positions": len(positions),
                 "gross_exposure": _mark_to_market(positions, price_map, date) / equity if equity else 0.0,
+                "regime": regime_label,
+                "active_strategies": ",".join(item.name for item in active_hypotheses),
             }
         )
 
@@ -195,6 +375,214 @@ def run_portfolio(
             equity_rows[-1]["gross_exposure"] = 0.0
 
     return pd.DataFrame(trades), pd.DataFrame(equity_rows)
+
+
+def _walk_forward_folds(
+    start: pd.Timestamp,
+    end: pd.Timestamp,
+    train_months: int,
+    test_months: int,
+) -> list[tuple[pd.Timestamp, pd.Timestamp, pd.Timestamp, pd.Timestamp]]:
+    folds = []
+    train_start = start.normalize()
+    while True:
+        train_end = train_start + pd.DateOffset(months=train_months) - pd.Timedelta(days=1)
+        test_start = train_end + pd.Timedelta(days=1)
+        if test_start > end:
+            break
+        test_end = min(test_start + pd.DateOffset(months=test_months) - pd.Timedelta(days=1), end)
+        folds.append((train_start, train_end, test_start, test_end))
+        train_start = train_start + pd.DateOffset(months=test_months)
+    return folds
+
+
+def _select_symbol_strategies(
+    features: pd.DataFrame,
+    price_map: dict[str, pd.DataFrame],
+    hypotheses: list[Hypothesis],
+    start: pd.Timestamp,
+    end: pd.Timestamp,
+    cfg: PortfolioConfig,
+    min_trades: int,
+    min_profit_factor: float,
+) -> pd.DataFrame:
+    rows = []
+    for hypothesis in hypotheses:
+        trades, _ = run_portfolio(features, price_map, [hypothesis], start, end, config=cfg)
+        if trades.empty:
+            continue
+        for symbol, group in trades.groupby("symbol", sort=False):
+            pnl = group["pnl_pct"].astype(float)
+            wins = pnl[pnl > 0]
+            losses = pnl[pnl < 0]
+            profit_factor = wins.sum() / abs(losses.sum()) if abs(losses.sum()) > 0 else np.inf
+            rows.append(
+                {
+                    "symbol": symbol,
+                    "selected_hypothesis": hypothesis.name,
+                    "train_trades": int(len(group)),
+                    "train_win_rate": float((pnl > 0).mean()),
+                    "train_avg_trade_pct": float(pnl.mean()),
+                    "train_total_pnl_pct": float(pnl.sum()),
+                    "train_profit_factor": float(profit_factor),
+                }
+            )
+    if not rows:
+        return pd.DataFrame()
+    candidates = pd.DataFrame(rows)
+    candidates = candidates[
+        (candidates["train_trades"] >= min_trades)
+        & (candidates["train_profit_factor"] >= min_profit_factor)
+    ].copy()
+    if candidates.empty:
+        return candidates
+    candidates["router_score"] = (
+        0.45 * candidates["train_profit_factor"].clip(0, 5)
+        + 0.35 * candidates["train_avg_trade_pct"].clip(-10, 20) / 5
+        + 0.20 * candidates["train_win_rate"] * 2
+    )
+    return (
+        candidates.sort_values(["symbol", "router_score", "train_trades"], ascending=[True, False, False])
+        .drop_duplicates("symbol", keep="first")
+        .reset_index(drop=True)
+    )
+
+
+def _select_symbol_strategies_v2(
+    features: pd.DataFrame,
+    price_map: dict[str, pd.DataFrame],
+    hypotheses: list[Hypothesis],
+    train_start: pd.Timestamp,
+    train_end: pd.Timestamp,
+    validation_start: pd.Timestamp,
+    cfg: PortfolioConfig,
+    min_train_trades: int,
+    min_validation_trades: int,
+    min_profit_factor: float,
+    min_avg_trade_pct: float,
+) -> pd.DataFrame:
+    rows = []
+    for hypothesis in hypotheses:
+        trades, _ = run_portfolio(features, price_map, [hypothesis], train_start, train_end, config=cfg)
+        if trades.empty:
+            continue
+        for symbol, group in trades.groupby("symbol", sort=False):
+            train_stats = _group_trade_stats(group)
+            validation = group[pd.to_datetime(group["entry_date"]) >= validation_start]
+            validation_stats = _group_trade_stats(validation)
+            rows.append(
+                {
+                    "symbol": symbol,
+                    "selected_hypothesis": hypothesis.name,
+                    **{f"train_{k}": v for k, v in train_stats.items()},
+                    **{f"validation_{k}": v for k, v in validation_stats.items()},
+                }
+            )
+    if not rows:
+        return pd.DataFrame()
+    candidates = pd.DataFrame(rows)
+    candidates = candidates[
+        (candidates["train_trades"] >= min_train_trades)
+        & (candidates["validation_trades"] >= min_validation_trades)
+        & (candidates["train_profit_factor"] >= min_profit_factor)
+        & (candidates["train_avg_trade_pct"] >= min_avg_trade_pct)
+        & (candidates["validation_avg_trade_pct"] > 0)
+        & (candidates["train_worst_trade_pct"] > -18.0)
+    ].copy()
+    if candidates.empty:
+        return candidates
+
+    trade_count_score = (candidates["train_trades"].clip(0, 10) / 10.0)
+    pf_score = candidates["train_profit_factor"].replace(np.inf, 5.0).clip(0, 5) / 5.0
+    avg_score = candidates["train_avg_trade_pct"].clip(-5, 15) / 15.0
+    val_score = candidates["validation_avg_trade_pct"].clip(-5, 15) / 15.0
+    win_score = candidates["train_win_rate"].clip(0, 1)
+    drawdown_penalty = (candidates["train_worst_trade_pct"].abs().clip(0, 20) / 20.0)
+    instability_penalty = (candidates["train_avg_trade_pct"] - candidates["validation_avg_trade_pct"]).clip(lower=0) / 15.0
+
+    candidates["router_score"] = (
+        0.24 * pf_score
+        + 0.22 * avg_score
+        + 0.24 * val_score
+        + 0.16 * win_score
+        + 0.14 * trade_count_score
+        - 0.10 * drawdown_penalty
+        - 0.10 * instability_penalty
+    )
+    return (
+        candidates.sort_values(["symbol", "router_score", "train_trades"], ascending=[True, False, False])
+        .drop_duplicates("symbol", keep="first")
+        .reset_index(drop=True)
+    )
+
+
+def _group_trade_stats(group: pd.DataFrame) -> dict:
+    if group.empty:
+        return {
+            "trades": 0,
+            "win_rate": 0.0,
+            "avg_trade_pct": 0.0,
+            "median_trade_pct": 0.0,
+            "profit_factor": 0.0,
+            "worst_trade_pct": 0.0,
+        }
+    pnl = group["pnl_pct"].astype(float)
+    wins = pnl[pnl > 0]
+    losses = pnl[pnl < 0]
+    profit_factor = wins.sum() / abs(losses.sum()) if abs(losses.sum()) > 0 else np.inf
+    return {
+        "trades": int(len(group)),
+        "win_rate": float((pnl > 0).mean()),
+        "avg_trade_pct": float(pnl.mean()),
+        "median_trade_pct": float(pnl.median()),
+        "profit_factor": float(profit_factor),
+        "worst_trade_pct": float(pnl.min()),
+    }
+
+
+def _active_fold_start(route: dict[pd.Timestamp, dict[str, str]], date: pd.Timestamp) -> pd.Timestamp | None:
+    starts = [fold_start for fold_start in route if fold_start <= date]
+    return max(starts) if starts else None
+
+
+def _regime_strategy_names(day: pd.DataFrame) -> tuple[list[str], str]:
+    if day.empty:
+        return [], "NO_DATA"
+    row = day.iloc[0]
+    state = str(row.get("mkt_regime_state", "NEUTRAL"))
+    score = _safe_float(row.get("mkt_regime_score", np.nan))
+    chdm_delta = _safe_float(row.get("mkt_CHDM20_delta", 0.0))
+    ds_delta = _safe_float(row.get("mkt_DS20_delta", 0.0))
+    ds20 = _safe_float(row.get("mkt_DS20", np.nan))
+
+    early_recovery = (
+        np.isfinite(score)
+        and score >= 45
+        and chdm_delta >= 5
+        and ds_delta <= 0.05
+        and (not np.isfinite(ds20) or ds20 <= 0.55)
+    )
+    if state == "RISK_ON":
+        if early_recovery:
+            return ["breakout_after_accumulation_v3", "leader_pullback_market_healthy_v2"], "RISK_ON_RECOVERY"
+        return ["leader_pullback_market_healthy_v2", "breakout_after_accumulation_v3"], "RISK_ON"
+    if early_recovery:
+        return ["breakout_after_accumulation_v3", "accumulation_breakout_smt_v2"], "EARLY_RECOVERY"
+    if state == "NEUTRAL":
+        return ["composite_edge_score_v2", "mean_reversion_uptrend_ma50_v1"], "NEUTRAL"
+    return [], "RISK_OFF"
+
+
+def _can_emit_signal(hypothesis: Hypothesis, date: pd.Timestamp, calendar: list) -> bool:
+    every_n_bars = hypothesis.risk.get("entry_every_n_bars")
+    if every_n_bars is None:
+        return True
+    every_n_bars = max(1, int(every_n_bars))
+    try:
+        idx = calendar.index(np.datetime64(date))
+    except ValueError:
+        idx = next((i for i, item in enumerate(calendar) if pd.Timestamp(item) == date), 0)
+    return idx % every_n_bars == 0
 
 
 def _date_index(price_map: dict[str, pd.DataFrame]) -> dict[str, dict[pd.Timestamp, int]]:
@@ -256,6 +644,8 @@ def _buy(date, row, candidate, budget, cash, cfg):
         shares=shares,
         entry_value=gross,
         risk=dict(candidate.get("_risk") or {}),
+        entry_atr=_safe_float(candidate.get("atr14", np.nan)),
+        highest_price=fill_price,
     )
     return cash - total_cost, position
 
@@ -292,6 +682,9 @@ def _exit_reason(row, prior_features, position, cfg) -> str | None:
     max_holding = int(position.risk.get("max_holding_bars", cfg.max_holding_bars))
     if low <= position.entry_price * (1.0 - stop_loss):
         return "STOP_LOSS"
+    atr_reason = _atr_exit_reason(low, position)
+    if atr_reason:
+        return atr_reason
     if high >= position.entry_price * (1.0 + take_profit):
         return "TAKE_PROFIT"
     if prior_features is not None:
@@ -300,6 +693,27 @@ def _exit_reason(row, prior_features, position, cfg) -> str | None:
             return reason
     if position.holding_bars >= max_holding:
         return "MAX_HOLDING"
+    return None
+
+
+def _atr_exit_reason(low: float, position: Position) -> str | None:
+    atr = _safe_float(position.entry_atr)
+    if not np.isfinite(atr) or atr <= 0:
+        return None
+
+    initial_mult = position.risk.get("initial_atr_stop_mult")
+    if initial_mult is not None and low <= position.entry_price - float(initial_mult) * atr:
+        return "ATR_STOP"
+
+    trailing_mult = position.risk.get("trailing_atr_mult")
+    if trailing_mult is None:
+        return None
+
+    activation = float(position.risk.get("trailing_profit_activation", 0.0))
+    if position.highest_price < position.entry_price * (1.0 + activation):
+        return None
+    if low <= position.highest_price - float(trailing_mult) * atr:
+        return "TRAILING_ATR_STOP"
     return None
 
 
@@ -334,6 +748,14 @@ def _feature_exit_reason(features: pd.Series, risk: dict) -> str | None:
 def _value(row: pd.Series, column: str) -> float:
     value = row.get(column, np.nan)
     return float(value) if pd.notna(value) else np.nan
+
+
+def _safe_float(value) -> float:
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return np.nan
+    return result if np.isfinite(result) else np.nan
 
 
 def _mark_to_market(positions, price_map, date) -> float:

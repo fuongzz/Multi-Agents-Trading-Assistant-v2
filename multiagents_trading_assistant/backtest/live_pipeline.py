@@ -15,6 +15,7 @@ import pandas as pd
 import pandas_ta as ta
 
 from multiagents_trading_assistant.backtest.engine import _compute_initial_sl, _prep_ta_money_flow_features
+from multiagents_trading_assistant.edge_lab.live_signal import get_edge_strategy_signals
 from multiagents_trading_assistant.fetcher import (
     get_ohlcv_history,
     get_vn30_symbols,
@@ -109,6 +110,33 @@ LIVE_STRATEGIES = [
 ]
 
 
+LEGACY_SETUP_BLOCKLIST = {
+    # Empirical quality gate from VN100 live-pipeline walk-forward 2025-01-01..2026-05-10.
+    # These broad legacy detectors should be re-enabled only after setup-level retests
+    # show positive expectancy under live execution rules.
+    "AROON_TREND_SHIFT",
+    "ADX_TREND",
+    "BB_SQUEEZE",
+    "BREAKOUT",
+    "BREAKOUT_RETEST_ENTRY",
+    "BULLISH_ENGULFING",
+    "DOUBLE_BOTTOM",
+    "FLAG_PENNANT",
+    "GOLDEN_CROSS",
+    "HAMMER",
+    "INSIDE_BAR",
+    "LINREG_MOMENTUM",
+    "MACD_CROSSOVER",
+    "MOMENTUM_SURGE",
+    "NR7",
+    "OVERSOLD_MEAN_REVERSION",
+    "RETEST",
+    "RSI_BOUNCE",
+    "SPRING",
+    "SUPERTREND_PULLBACK",
+}
+
+
 @dataclass(frozen=True)
 class LivePipelineBacktestConfig:
     initial_capital: float = 100_000_000.0
@@ -139,6 +167,7 @@ class LivePipelineBacktestConfig:
     llm_gate_min_score: float = 68.0
     # Proxy LLM: tỉ lệ tối đa candidate được giữ lại sau gate (60-80% bị loại)
     llm_gate_keep_ratio: float = 0.30
+    edge_strategy_name: str | None = None
 
 
 @dataclass
@@ -154,6 +183,14 @@ class LivePosition:
     shares: int
     priority_score: float
     reasons: list[str]
+    edge_strategy_name: str = ""
+    edge_strategy_passed: bool = False
+    edge_score: float | None = None
+    edge_rank: float | None = None
+    edge_rank_score: float | None = None
+    edge_risk: dict | None = None
+    entry_atr: float | None = None
+    highest_price: float | None = None
     holding_bars: int = 0
 
     @property
@@ -271,15 +308,20 @@ def run_live_pipeline_backtest(
     for symbol in list(positions):
         row = _row_at(data[symbol], final_date)
         if row is None:
+            row = _last_row_on_or_before(data[symbol], final_date)
+        if row is None:
             continue
         cash, trade = _close_position(final_date, float(row["close"]), "END_OF_DATA", positions[symbol], cash, cfg)
         trades.append(trade)
         del positions[symbol]
     if equity_rows:
-        equity_rows[-1]["equity"] = cash
+        equity_rows[-1]["equity"] = cash + _mark_to_market(positions, data, final_date)
         equity_rows[-1]["cash"] = cash
-        equity_rows[-1]["positions"] = 0
-        equity_rows[-1]["gross_exposure"] = 0.0
+        equity_rows[-1]["positions"] = len(positions)
+        equity_rows[-1]["gross_exposure"] = (
+            _position_value(positions, data, final_date) / equity_rows[-1]["equity"]
+            if equity_rows[-1]["equity"] else 0.0
+        )
 
     if cfg.backtest_mode == "broad_pool":
         # No execution — return candidate flow analytics only
@@ -379,8 +421,19 @@ def _scan_live_candidates(
         }
         strategies = [(name, fn) for name, fn in strategies if name in allowed_names]
 
+    edge_signals: dict[str, dict] = {}
+    if cfg.edge_strategy_name:
+        edge_signals = get_edge_strategy_signals(
+            list(data.keys()),
+            as_of_date=date.strftime("%Y-%m-%d"),
+            strategy_name=cfg.edge_strategy_name,
+        )
+
     candidates = []
     for symbol, df in data.items():
+        edge_signal = edge_signals.get(symbol, {})
+        if cfg.edge_strategy_name and not edge_signal.get("passed"):
+            continue
         window = (
             df.loc[:date].tail(cfg.lookback)
             if isinstance(df.index, pd.DatetimeIndex)
@@ -404,8 +457,36 @@ def _scan_live_candidates(
             continue
 
         ind["money_flow_analysis"] = money_flow
+        if cfg.edge_strategy_name:
+            ind["edge_strategy_analysis"] = edge_signal
+            score = _edge_priority_score(edge_signal)
+            candidates.append(
+                {
+                    "symbol": symbol,
+                    "setup_type": str(edge_signal.get("setup_type") or "EDGE"),
+                    "signal_date": date,
+                    "priority_score": min(100.0, score),
+                    "indicators": ind,
+                    "reasons": [
+                        f"Edge strategy passed: {cfg.edge_strategy_name}",
+                        f"edge_score={edge_signal.get('edge_score')}",
+                    ],
+                    "risk_flags": [],
+                    "money_flow_regime": mf_regime,
+                    "market_trend": ref_trend,
+                    "edge_strategy_name": edge_signal.get("strategy_name") or cfg.edge_strategy_name,
+                    "edge_strategy_passed": True,
+                    "edge_score": edge_signal.get("edge_score"),
+                    "edge_rank": edge_signal.get("edge_rank"),
+                    "edge_rank_score": edge_signal.get("edge_rank_score"),
+                    "edge_risk": dict(edge_signal.get("risk") or {}),
+                }
+            )
+            continue
 
         for setup_type, detector in strategies:
+            if setup_type in LEGACY_SETUP_BLOCKLIST:
+                continue
             if not _is_setup_allowed_in_regime(setup_type, ref_trend):
                 if not broad:
                     continue
@@ -521,11 +602,22 @@ def _fill_entries(
         if cost > cash:
             continue
         ind = order["indicators"]
-        stop_loss = _compute_initial_sl(entry, ind)
+        edge_risk = dict(order.get("edge_risk") or {})
+        stop_loss = _edge_initial_sl(entry, ind, edge_risk) if edge_risk else _compute_initial_sl(entry, ind)
         if stop_loss <= 0 or stop_loss >= entry:
             continue
-        take_profit = entry + cfg.rr_ratio * (entry - stop_loss)
+        take_profit = _edge_take_profit(entry, stop_loss, edge_risk, cfg)
         cash -= cost
+        raw_edge_score = order.get("edge_score")
+        edge_score = float(raw_edge_score) if raw_edge_score is not None and pd.notna(raw_edge_score) else None
+        raw_edge_rank = order.get("edge_rank")
+        edge_rank = float(raw_edge_rank) if raw_edge_rank is not None and pd.notna(raw_edge_rank) else None
+        raw_edge_rank_score = order.get("edge_rank_score")
+        edge_rank_score = (
+            float(raw_edge_rank_score)
+            if raw_edge_rank_score is not None and pd.notna(raw_edge_rank_score)
+            else None
+        )
         positions[order["symbol"]] = LivePosition(
             symbol=order["symbol"],
             setup_type=order["setup_type"],
@@ -538,11 +630,22 @@ def _fill_entries(
             shares=shares,
             priority_score=float(order["priority_score"]),
             reasons=list(order["reasons"]),
+            edge_strategy_name=str(order.get("edge_strategy_name") or ""),
+            edge_strategy_passed=bool(order.get("edge_strategy_passed", False)),
+            edge_score=edge_score,
+            edge_rank=edge_rank,
+            edge_rank_score=edge_rank_score,
+            edge_risk=edge_risk or None,
+            entry_atr=_safe_float(ind.get("atr")),
+            highest_price=entry,
         )
     return cash
 
 
 def _exit_decision(row: pd.Series, position: LivePosition, cfg: LivePipelineBacktestConfig) -> tuple[str | None, float]:
+    if position.edge_risk:
+        return _edge_exit_decision(row, position, cfg)
+
     low = float(row["low"])
     high = float(row["high"])
     close = float(row["close"])
@@ -553,6 +656,70 @@ def _exit_decision(row: pd.Series, position: LivePosition, cfg: LivePipelineBack
         return "TP", max(open_, position.take_profit) * (1.0 - cfg.slippage_rate)
     if position.holding_bars >= cfg.max_hold_bars:
         return "MAX_HOLD", close * (1.0 - cfg.slippage_rate)
+    return None, close
+
+
+def _edge_initial_sl(entry: float, ind: dict, risk: dict) -> float:
+    atr = _safe_float(ind.get("atr"))
+    initial_mult = risk.get("initial_atr_stop_mult")
+    stops = []
+    stop_pct = _safe_float(risk.get("stop_loss"))
+    if stop_pct and stop_pct > 0:
+        stops.append(entry * (1.0 - stop_pct))
+    if atr and atr > 0 and initial_mult is not None:
+        stops.append(entry - float(initial_mult) * atr)
+    if not stops:
+        return _compute_initial_sl(entry, ind)
+    return round(max(stops), 0)
+
+
+def _edge_take_profit(
+    entry: float,
+    stop_loss: float,
+    risk: dict,
+    cfg: LivePipelineBacktestConfig,
+) -> float:
+    tp_pct = _safe_float(risk.get("take_profit"))
+    if tp_pct and tp_pct > 0:
+        return entry * (1.0 + tp_pct)
+    return entry + cfg.rr_ratio * (entry - stop_loss)
+
+
+def _edge_exit_decision(row: pd.Series, position: LivePosition, cfg: LivePipelineBacktestConfig) -> tuple[str | None, float]:
+    low = float(row["low"])
+    high = float(row["high"])
+    close = float(row["close"])
+    open_ = float(row["open"])
+    risk = position.edge_risk or {}
+    entry = position.entry_price
+    position.highest_price = max(float(position.highest_price or entry), high)
+
+    stop_pct = _safe_float(risk.get("stop_loss"))
+    if stop_pct and low <= entry * (1.0 - stop_pct):
+        return "EDGE_STOP_LOSS", open_ * (1.0 - cfg.slippage_rate)
+
+    atr = _safe_float(position.entry_atr)
+    if atr and atr > 0:
+        initial_mult = risk.get("initial_atr_stop_mult")
+        if initial_mult is not None and low <= entry - float(initial_mult) * atr:
+            return "EDGE_ATR_STOP", open_ * (1.0 - cfg.slippage_rate)
+
+        trailing_mult = risk.get("trailing_atr_mult")
+        activation = _safe_float(risk.get("trailing_profit_activation")) or 0.0
+        if (
+            trailing_mult is not None
+            and float(position.highest_price or entry) >= entry * (1.0 + activation)
+            and low <= float(position.highest_price or entry) - float(trailing_mult) * atr
+        ):
+            return "EDGE_TRAILING_ATR_STOP", open_ * (1.0 - cfg.slippage_rate)
+
+    take_profit_pct = _safe_float(risk.get("take_profit"))
+    if take_profit_pct and high >= entry * (1.0 + take_profit_pct):
+        return "EDGE_TAKE_PROFIT", open_ * (1.0 - cfg.slippage_rate)
+
+    max_holding = int(risk.get("max_holding_bars") or cfg.max_hold_bars)
+    if position.holding_bars >= max_holding:
+        return "EDGE_MAX_HOLD", close * (1.0 - cfg.slippage_rate)
     return None, close
 
 
@@ -585,8 +752,34 @@ def _close_position(
         "holding_bars": position.holding_bars,
         "exit_reason": reason,
         "priority_score": position.priority_score,
+        "edge_strategy_name": position.edge_strategy_name,
+        "edge_strategy_passed": position.edge_strategy_passed,
+        "edge_score": position.edge_score,
+        "edge_rank": position.edge_rank,
+        "edge_rank_score": position.edge_rank_score,
+        "edge_risk": position.edge_risk,
         "reasons": " | ".join(position.reasons),
     }
+
+
+def _safe_float(value) -> float | None:
+    try:
+        if value is None or pd.isna(value):
+            return None
+        return float(value)
+    except Exception:
+        return None
+
+
+def _edge_priority_score(edge_signal: dict) -> float:
+    rank_score = _safe_float(edge_signal.get("edge_rank_score"))
+    if rank_score is not None:
+        return rank_score
+    rank = _safe_float(edge_signal.get("edge_rank"))
+    if rank is not None:
+        return max(0.0, 10_000.0 - rank)
+    score = _safe_float(edge_signal.get("edge_score"))
+    return score if score is not None else 0.0
 
 
 def _market_context_at(index_data: pd.DataFrame, date: pd.Timestamp, lookback: int) -> MarketContext:
@@ -863,6 +1056,11 @@ def _row_at(df: pd.DataFrame, date: pd.Timestamp) -> pd.Series | None:
         return row
     rows = df.loc[df["date"] == date]
     return None if rows.empty else rows.iloc[0]
+
+
+def _last_row_on_or_before(df: pd.DataFrame, date: pd.Timestamp) -> pd.Series | None:
+    rows = df.loc[df["date"] <= date]
+    return None if rows.empty else rows.iloc[-1]
 
 
 def _next_calendar_date(calendar: list[pd.Timestamp], idx: int) -> pd.Timestamp | None:

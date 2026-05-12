@@ -358,6 +358,14 @@ def add_backtest_args(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
+        "--edge-strategy",
+        dest="edge_strategy_name",
+        type=str,
+        default=None,
+        metavar="NAME",
+        help="[live-pipeline] Chỉ trade candidate pass edge strategy này, ví dụ breakout_after_accumulation_v3.",
+    )
+    parser.add_argument(
         "--label",
         dest="label",
         type=str,
@@ -546,6 +554,7 @@ def run_backtest_cli(args: argparse.Namespace) -> None:
             require_uptrend=getattr(args, "require_uptrend", False),
             setups=getattr(args, "setups", None),
             backtest_mode=getattr(args, "backtest_mode", "raw_screener"),
+            edge_strategy_name=getattr(args, "edge_strategy_name", None),
             custom_label=getattr(args, "label", None),
             no_save=no_save,
         )
@@ -854,6 +863,7 @@ def _run_live_pipeline_backtest_cli(
     require_uptrend: bool = False,
     setups: str | None = None,
     backtest_mode: str = "raw_screener",
+    edge_strategy_name: str | None = None,
     custom_label: str | None = None,
     no_save: bool = False,
 ) -> None:
@@ -912,6 +922,8 @@ def _run_live_pipeline_backtest_cli(
         mode_tag += "_uptrend"
     if setup_whitelist:
         mode_tag += "_whitelist"
+    if edge_strategy_name:
+        mode_tag += f"_{edge_strategy_name}"
     report_label = custom_label or f"{label}_{mode_tag}_{from_date}_{to_date}"
 
     vnindex = get_ohlcv_history("VNINDEX", warmup_start, to_date)
@@ -928,6 +940,7 @@ def _run_live_pipeline_backtest_cli(
         require_uptrend=require_uptrend,
         setup_whitelist=setup_whitelist,
         backtest_mode=backtest_mode,
+        edge_strategy_name=edge_strategy_name,
     )
     result = run_live_pipeline_backtest(data, vnindex, config=cfg)
     print()
@@ -936,6 +949,8 @@ def _run_live_pipeline_backtest_cli(
     print(f"  Label         : {report_label}")
     if setup_whitelist:
         print(f"  Setups        : {', '.join(sorted(setup_whitelist))}")
+    if edge_strategy_name:
+        print(f"  Edge strategy : {edge_strategy_name}")
     if require_uptrend:
         print(f"  Market gate   : UPTREND only")
 

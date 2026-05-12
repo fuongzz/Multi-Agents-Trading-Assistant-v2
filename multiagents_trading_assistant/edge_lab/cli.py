@@ -7,7 +7,12 @@ from pathlib import Path
 
 import pandas as pd
 
-from multiagents_trading_assistant.edge_lab.backtest import PortfolioConfig, run_portfolio, run_signal_quality
+from multiagents_trading_assistant.edge_lab.backtest import (
+    PortfolioConfig,
+    run_portfolio,
+    run_regime_switching_portfolio,
+    run_signal_quality,
+)
 from multiagents_trading_assistant.edge_lab.features import build_feature_table
 from multiagents_trading_assistant.edge_lab.hypothesis import load_hypotheses
 from multiagents_trading_assistant.edge_lab.metrics import benchmark_metrics
@@ -84,6 +89,18 @@ def main() -> None:
     combined_trades["portfolio_run"] = "combined"
     combined_equity["portfolio_run"] = "combined"
     portfolio_runs.append(("combined", combined_trades, combined_equity))
+
+    regime_trades, regime_equity = run_regime_switching_portfolio(
+        features,
+        price_map,
+        hypotheses,
+        args.from_date,
+        args.to_date,
+        config=portfolio_cfg,
+    )
+    regime_trades["portfolio_run"] = "regime_switching"
+    regime_equity["portfolio_run"] = "regime_switching"
+    portfolio_runs.append(("regime_switching", regime_trades, regime_equity))
 
     portfolio_trades = pd.concat([item[1] for item in portfolio_runs], ignore_index=True)
     equity = pd.concat([item[2] for item in portfolio_runs], ignore_index=True)

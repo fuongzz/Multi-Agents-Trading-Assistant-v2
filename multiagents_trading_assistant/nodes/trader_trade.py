@@ -124,6 +124,7 @@ def _build_prompt(state: dict) -> str:
     synth = state.get("synthesis", {})
     macro = state.get("macro_context", {})
     mkt = state.get("market_context", {})
+    edge = mkt.get("edge_strategy_analysis") or {}
 
     # market_context.current_price is the market index level from the screener.
     # For symbol-level entry/SL guidance, use the stock price from technical_analysis.
@@ -140,6 +141,8 @@ def _build_prompt(state: dict) -> str:
     lines = [
         f"Quyết định Trade ngắn hạn cho {symbol} ngày {date}.",
         f"Setup: {setup}",
+        f"Backtested strategy: {edge.get('strategy_name', 'breakout_after_accumulation_v3')} | passed={edge.get('passed', False)} | feature_date={edge.get('feature_date', 'N/A')} | edge_score={edge.get('edge_score', 'N/A')}",
+        f"Edge details: SMT={edge.get('smart_money_score', 'N/A')} delta={edge.get('smart_money_score_delta', 'N/A')} | RS20={edge.get('rs_percentile_20', 'N/A')} | value_ratio_20={edge.get('value_ratio_20', 'N/A')} | failed={edge.get('filters_failed', [])[:3]}",
         f"Giá hiện tại: {_fmt(current_price)} VNĐ",
         f"Sàn: {mkt.get('exchange', 'HOSE')}",
         "",

@@ -27,6 +27,7 @@ from multiagents_trading_assistant.orchestrator.session_monitor import run_sessi
 from multiagents_trading_assistant.bob.simulator import run_strategy_development_meeting
 from multiagents_trading_assistant.memory.strategy_memory import StrategyMemory
 from multiagents_trading_assistant.bob.reward_tracker import RewardTracker
+from multiagents_trading_assistant.edge_lab.live_signal import DEFAULT_LIVE_EDGE_FAMILY, get_edge_strategy_signals
 
 _reward_tracker = RewardTracker()
 
@@ -145,6 +146,7 @@ def _run_investment_pipeline_inner(
 import os as _os
 
 _GRAPH_MODE = _os.environ.get("MATA_GRAPH_MODE", "fast").lower()
+_EDGE_STRATEGY_ONLY = _os.environ.get("MATA_EDGE_STRATEGY_ONLY", DEFAULT_LIVE_EDGE_FAMILY).strip()
 
 
 def run_trade_pipeline(
@@ -182,6 +184,8 @@ def _run_trade_pipeline_deep(
         candidates_sym = [symbol.upper()]
     else:
         _market_ctx, candidates = trade_screener()
+        if _EDGE_STRATEGY_ONLY:
+            candidates = _filter_edge_strategy_candidates(candidates, _EDGE_STRATEGY_ONLY)
         if not _market_ctx.should_trade:
             print(f"[runner:deep] should_trade=False — skip")
             output_service.send_to_channel(
@@ -278,9 +282,21 @@ def _run_trade_pipeline_inner(
     active_strategies = _load_active_strategies()
 
     if symbol:
-        candidates_sym = [(symbol, "UNKNOWN", {"_portfolio_checked": False, "active_strategies": active_strategies})]
+        edge = _edge_context_for_symbol(symbol, date)
+        if _EDGE_STRATEGY_ONLY and not edge.get("passed"):
+            print(f"[runner] {symbol.upper()} skipped: {_EDGE_STRATEGY_ONLY} not passed")
+            _print_trade_summary([], date)
+            return []
+        setup = "BREAKOUT" if edge.get("passed") else "UNKNOWN"
+        candidates_sym = [(symbol, setup, {
+            "_portfolio_checked": False,
+            "active_strategies": active_strategies,
+            "edge_strategy_analysis": edge,
+        })]
     else:
         _market_ctx, candidates = trade_screener()
+        if _EDGE_STRATEGY_ONLY:
+            candidates = _filter_edge_strategy_candidates(candidates, _EDGE_STRATEGY_ONLY)
         candidates_sym = []
         for c in candidates:
             ctx = asdict(c.market_context)
@@ -288,6 +304,7 @@ def _run_trade_pipeline_inner(
             ctx["stock_day_change_pct"] = c.indicators.get("stock_day_change_pct", 0.0)
             ctx["screener_money_flow"] = c.indicators.get("money_flow_analysis", {})
             ctx["avg_vol_20d"] = c.indicators.get("volume_ma20")
+            ctx["edge_strategy_analysis"] = c.indicators.get("edge_strategy_analysis", {})
             ctx["active_strategies"] = active_strategies
             candidates_sym.append((c.symbol, c.setup_type, ctx))
 
@@ -316,6 +333,41 @@ def _run_trade_pipeline_inner(
 # ──────────────────────────────────────────────
 # Scheduler
 # ──────────────────────────────────────────────
+
+def _filter_edge_strategy_candidates(candidates: list, strategy_name: str) -> list:
+    allowed = {item.strip() for item in strategy_name.split(",") if item.strip()}
+    filtered = []
+    for candidate in candidates:
+        indicators = getattr(candidate, "indicators", {}) or {}
+        edge = indicators.get("edge_strategy_analysis", {}) or {}
+        candidate_strategy = str(edge.get("strategy_name") or "")
+        candidate_family = str(edge.get("strategy_family") or "")
+        if edge.get("passed") and (
+            candidate_strategy in allowed
+            or candidate_family == strategy_name
+            or (not allowed and candidate_strategy == strategy_name)
+        ):
+            filtered.append(candidate)
+    print(f"[runner] Edge-only {strategy_name}: {len(filtered)}/{len(candidates)} candidates kept")
+    return filtered
+
+
+def _edge_context_for_symbol(symbol: str, date: str) -> dict:
+    try:
+        return get_edge_strategy_signals(
+            [symbol],
+            as_of_date=date,
+            strategy_name=DEFAULT_LIVE_EDGE_FAMILY,
+        ).get(symbol.upper(), {})
+    except Exception as e:
+        print(f"[runner] edge strategy signal fail ({symbol}): {e}")
+        return {
+            "strategy_name": DEFAULT_LIVE_EDGE_FAMILY,
+            "passed": False,
+            "available": False,
+            "error": str(e),
+        }
+
 
 def start_scheduler() -> None:
     """Khởi APScheduler: invest Thứ 2 08:00, trade hàng ngày 08:30."""

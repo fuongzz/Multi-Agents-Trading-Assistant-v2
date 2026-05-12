@@ -133,6 +133,8 @@ def run(
     # PV score sourced from technical_analysis (populated by technical_agent)
     pv_data     = technical_analysis.get("price_volume") or {}
     pv_score    = _pv_points(pv_data)
+    edge_data   = (market_context or {}).get("edge_strategy_analysis") or {}
+    edge_bonus  = 5.0 if edge_data.get("passed") else 0.0
 
     confluence = (
         _W_TECH  * tech_score
@@ -140,8 +142,9 @@ def run(
         + _W_MONEY * money_score
         + _W_SENT  * sent_score
         + _W_PV    * pv_score
+        + edge_bonus
     )
-    confluence = round(confluence, 1)
+    confluence = round(min(100.0, confluence), 1)
 
     if confluence >= 70:
         quality = "STRONG"
@@ -170,6 +173,8 @@ Thành phần:
 - Price-Volume ({pv_score:.0f}/100): bias={pv_data.get('entry_bias', 'neutral')}, score={pv_data.get('price_volume_score', 0)}
   {pv_data.get('interpretation', '')}
   Risk flags: {pv_flags}  Setup tags: {pv_tags}
+- Backtested Edge: strategy={edge_data.get('strategy_name', 'N/A')}, passed={edge_data.get('passed', False)}, edge_score={edge_data.get('edge_score', 'N/A')}, bonus={edge_bonus:.0f}
+  Failed filters: {edge_data.get('filters_failed', [])[:3]}
 
 Viết drivers (điểm cộng) và blockers (điểm trừ) ngắn gọn, synthesis_summary 1-2 câu tiếng Việt.
 Trả JSON theo schema."""
@@ -195,6 +200,9 @@ Trả JSON theo schema."""
         "money_flow_score": round(money_score, 1),
         "sentiment_score": round(sent_score, 1),
         "pv_score": round(pv_score, 1),
+        "edge_strategy_bonus": round(edge_bonus, 1),
+        "edge_strategy_passed": bool(edge_data.get("passed")),
+        "edge_strategy_name": edge_data.get("strategy_name"),
         "drivers": llm_out.get("drivers", []),
         "blockers": llm_out.get("blockers", []),
         "synthesis_summary": llm_out.get("synthesis_summary", ""),

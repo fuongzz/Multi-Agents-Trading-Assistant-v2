@@ -31,6 +31,7 @@ from multiagents_trading_assistant.agents.trade.money_flow_agent import (
     add_money_flow_features,
     classify_money_flow,
 )
+from multiagents_trading_assistant.edge_lab.live_signal import DEFAULT_LIVE_EDGE_FAMILY, get_edge_strategy_signals
 from multiagents_trading_assistant.setup_scoring import score_setup
 
 
@@ -328,12 +329,16 @@ def detect_breakout(df: pd.DataFrame, ind: dict) -> tuple[bool, list[str]]:
     v_now  = float(volume.iloc[-1])
     v_ma20 = float(volume.rolling(20).mean().iloc[-1])
     rsi    = ind.get("rsi")
+    ma20   = ind.get("ma20")
+    ma60   = ind.get("ma60")
 
     is_breakout    = cur > prev_h
     is_vol_surge   = v_now > v_ma20 * 1.5
     candle_body    = abs(cur - op) / op * 100
     is_big_candle  = candle_body > 2.0
     not_overbought = rsi is None or rsi < 75
+    trend_ok       = ma20 is None or ma60 is None or cur > float(ma20) >= float(ma60)
+    not_extended   = ma20 is None or float(ma20) <= 0 or (cur - float(ma20)) / float(ma20) <= 0.12
 
     if is_breakout:
         reasons.append(f"Giá {cur:.0f} vượt đỉnh 20 phiên ({prev_h:.0f})")
@@ -341,8 +346,12 @@ def detect_breakout(df: pd.DataFrame, ind: dict) -> tuple[bool, list[str]]:
         reasons.append(f"Volume {v_now/v_ma20:.1f}× TB20")
     if is_big_candle:
         reasons.append(f"Thân nến {candle_body:.1f}%")
+    if trend_ok:
+        reasons.append("Trend xác nhận: giá trên MA20/MA60")
+    if not_extended:
+        reasons.append("Không chase quá xa MA20")
 
-    passed = is_breakout and is_vol_surge and is_big_candle and not_overbought
+    passed = is_breakout and is_vol_surge and is_big_candle and not_overbought and trend_ok and not_extended
     return passed, reasons if passed else []
 
 
@@ -603,13 +612,22 @@ def detect_macd_crossover(df: pd.DataFrame, ind: dict) -> tuple[bool, list[str]]
     above_zero    = float(macd_val) > 0
     rsi           = ind.get("rsi")
     rsi_ok        = rsi is None or rsi < 72
+    price         = ind.get("current_price")
+    ma20          = ind.get("ma20")
+    ma60          = ind.get("ma60")
+    trend_ok      = (
+        price is None or ma20 is None or ma60 is None
+        or (float(price) > float(ma20) >= float(ma60))
+    )
 
     if crossed:
         reasons.append(f"MACD crossover bullish (hist={hist_val:.2f})")
     if above_zero:
         reasons.append("Cross xảy ra trên zero line — signal mạnh hơn")
+    if trend_ok:
+        reasons.append("Trend xác nhận: giá trên MA20/MA60")
 
-    passed = crossed and hist_positive and rsi_ok
+    passed = crossed and hist_positive and above_zero and rsi_ok and trend_ok
     return passed, reasons if passed else []
 
 
@@ -635,13 +653,28 @@ def detect_momentum_surge(df: pd.DataFrame, ind: dict) -> tuple[bool, list[str]]
     gain_3d = (float(close.iloc[-1]) - float(close.iloc[-4])) / float(close.iloc[-4]) * 100
     rsi     = ind.get("rsi")
     not_overbought = rsi is None or rsi < 72
+    ma20 = ind.get("ma20")
+    cur = float(close.iloc[-1])
+    dist_ma20 = (cur - float(ma20)) / float(ma20) * 100 if ma20 and float(ma20) > 0 else None
+    not_extended = dist_ma20 is None or dist_ma20 <= 8.0
+    volume_ratio = ind.get("volume_ratio_20")
+    volume_confirm = volume_ratio is None or float(volume_ratio) >= 1.15
 
     if up3:
         reasons.append(f"3 phiên tăng liên tiếp (+{gain_3d:.1f}% tổng)")
     if vol_acc:
         reasons.append("Volume tăng theo đà giá")
+    if not_extended:
+        reasons.append("Không chase quá xa MA20")
+    if volume_confirm:
+        reasons.append("Volume trên nền TB20")
 
-    passed = up3 and vol_acc and not_overbought and gain_3d > 2.0
+    passed = (
+        up3 and vol_acc and not_overbought
+        and 2.0 < gain_3d <= 8.0
+        and not_extended
+        and volume_confirm
+    )
     return passed, reasons if passed else []
 
 
@@ -676,7 +709,15 @@ def detect_double_bottom(df: pd.DataFrame, ind: dict) -> tuple[bool, list[str]]:
 
     cur       = float(df["close"].iloc[-1])
     breakout  = cur > neckline
-    not_extended = cur < neckline * 1.08  # chưa quá xa
+    not_extended = cur < neckline * 1.05  # chưa quá xa
+    vol_ma20 = float(df["volume"].rolling(20).mean().iloc[-1])
+    vol_now = float(df["volume"].iloc[-1])
+    volume_confirm = vol_ma20 > 0 and vol_now >= vol_ma20 * 1.2
+    ma20 = ind.get("ma20")
+    ma60 = ind.get("ma60")
+    trend_repair = ma20 is None or ma60 is None or cur > float(ma20) or float(ma20) >= float(ma60)
+    rsi = ind.get("rsi")
+    not_overbought = rsi is None or rsi < 70
 
     if similar:
         reasons.append(f"Hai đáy {b1:.0f} và {b2:.0f} (chênh {abs(b2 - b1) / b1 * 100:.1f}%)")
@@ -684,8 +725,12 @@ def detect_double_bottom(df: pd.DataFrame, ind: dict) -> tuple[bool, list[str]]:
         reasons.append(f"Vượt neckline {neckline:.0f}")
     if not_extended:
         reasons.append("Chưa quá xa neckline — vào hàng còn hợp lý")
+    if volume_confirm:
+        reasons.append(f"Volume {vol_now / vol_ma20:.1f}× TB20 xác nhận neckline")
+    if trend_repair:
+        reasons.append("Cấu trúc giá đã cải thiện quanh MA20/MA60")
 
-    passed = similar and breakout and not_extended
+    passed = similar and breakout and not_extended and volume_confirm and trend_repair and not_overbought
     return passed, reasons if passed else []
 
 
@@ -774,17 +819,26 @@ def detect_bb_squeeze(df: pd.DataFrame, ind: dict) -> tuple[bool, list[str]]:
     lower = ind.get("bb_lower")
     cur   = float(df["close"].iloc[-1])
     above_mid = upper is not None and lower is not None and cur > (upper + lower) / 2
+    near_upper = upper is not None and cur >= float(upper) * 0.985
 
     vol_rising = float(df["volume"].iloc[-1]) > float(df["volume"].iloc[-2])
+    vol_ma20 = float(df["volume"].rolling(20).mean().iloc[-1])
+    vol_confirm = vol_ma20 > 0 and float(df["volume"].iloc[-1]) >= vol_ma20 * 1.1
+    rsi = ind.get("rsi")
+    rsi_ok = rsi is None or 45 <= float(rsi) <= 70
 
     if is_squeeze:
         reasons.append(f"BB squeeze: width {cur_width:.3f} ≈ min 20 phiên ({min_20:.3f})")
     if above_mid:
         reasons.append("Giá trên BB mid — bias bullish")
+    if near_upper:
+        reasons.append("Giá áp sát BB upper — squeeze có hướng bung lên")
     if vol_rising:
         reasons.append("Volume bắt đầu tăng — tín hiệu sắp bung")
+    if vol_confirm:
+        reasons.append("Volume xác nhận trên TB20")
 
-    passed = is_squeeze and above_mid
+    passed = is_squeeze and above_mid and near_upper and vol_rising and vol_confirm and rsi_ok
     return passed, reasons if passed else []
 
 
@@ -1793,6 +1847,17 @@ def run_screener(
 
     candidates: list[TradeCandidate] = []
     skipped = 0
+    edge_signals: dict[str, dict] = {}
+    try:
+        edge_signals = get_edge_strategy_signals(
+            list(ohlcv_map.keys()),
+            as_of_date=as_of_date,
+            strategy_name=DEFAULT_LIVE_EDGE_FAMILY,
+        )
+        passed_count = sum(1 for item in edge_signals.values() if item.get("passed"))
+        print(f"[trade_screener] Edge {DEFAULT_LIVE_EDGE_FAMILY}: {passed_count} pass")
+    except Exception as e:
+        print(f"[trade_screener] Edge strategy evaluation skipped: {e}")
 
     for symbol, df in ohlcv_map.items():
         if df is None or df.empty or len(df) < 60:
@@ -1826,6 +1891,14 @@ def run_screener(
         # Map PV score to a signed contribution: -20..+20 points on priority
         pv_contribution = pv_score_raw * 0.20
         priority_score = min(round(vol_ratio * 32 + avg_vol_20 / 1_000_000 * 5 + pv_contribution, 1), 100.0)
+        edge_signal = edge_signals.get(symbol.upper(), {})
+        ind["edge_strategy_analysis"] = edge_signal
+        setup_type = "UNKNOWN"
+        reasons: list[str] = []
+        if edge_signal.get("passed"):
+            setup_type = str(edge_signal.get("setup_type") or "EDGE")
+            priority_score = min(round(priority_score + 35.0, 1), 100.0)
+            reasons.append(f"{edge_signal.get('strategy_name')} passed")
         # Hard cap: "avoid" stocks cannot become top BUY candidates
         if pv_entry_bias == "avoid":
             priority_score = min(priority_score, 30.0)
@@ -1836,7 +1909,8 @@ def run_screener(
             priority_score=priority_score,
             market_context=market_ctx,
             indicators=ind,
-            setup_type="UNKNOWN",
+            setup_type=setup_type,
+            reasons=reasons,
         ))
 
     candidates.sort(key=lambda c: c.priority_score, reverse=True)
