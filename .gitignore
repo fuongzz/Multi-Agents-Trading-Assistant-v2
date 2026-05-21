@@ -87,3 +87,16 @@ tmp_*.txt
 *.bak3
 *.bak4
 .claude/scheduled_tasks.lock
+
+# ── Trash (local archive, không public) ──
+_trash/
+
+# ── Build artifacts ──
+ai_trading_assistant.egg-info/
+*.egg-info/
+
+# ── Notebooks (exploratory, không production) ──
+notebooks/
+
+# ── Local venv with non-standard name ──
+UsersNC.venv/
