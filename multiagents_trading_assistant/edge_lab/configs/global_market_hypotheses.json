@@ -1,0 +1,304 @@
+{
+  "_meta": {
+    "description": "Chiến lược giao dịch nổi tiếng từ thị trường Mỹ và các thị trường lớn, được map sang feature set hiện có (MA20/MA50, smart money, money cycle, RS, regime) để backtest trên engine edge_lab. Universe mặc định VN30 — đổi sang VN100/HOSE_LIQUID khi muốn mở rộng. Tham số risk đã hiệu chỉnh cho biên độ ±7% của HOSE; nếu chạy lại trên SP500/ETF thì nới SL/TP và max_holding_bars.",
+    "sources": [
+      "Mark Minervini — Trade Like a Stock Market Wizard (SEPA / Trend Template)",
+      "William O'Neil — How to Make Money in Stocks (CAN SLIM, base breakout)",
+      "Nicolas Darvas — How I Made $2,000,000 in the Stock Market (Darvas Box)",
+      "Stan Weinstein — Secrets for Profiting in Bull & Bear Markets (Stage Analysis)",
+      "Gary Antonacci — Dual Momentum Investing",
+      "Jegadeesh & Titman 1993 / George & Hwang 2004 — 52-Week High Momentum",
+      "Richard Dennis / Turtle Traders — Donchian Channel Breakout",
+      "Larry Connors — Short Term Trading Strategies That Work (RSI2 mean reversion)",
+      "Meb Faber — A Quantitative Approach to Tactical Asset Allocation (GTAA trend filter)",
+      "Richard Wyckoff — Spring / Accumulation phase"
+    ],
+    "created": "2026-05-16"
+  },
+  "hypotheses": [
+    {
+      "name": "minervini_trend_template_v1",
+      "description": "Minervini SEPA / Trend Template: stock in Stage 2 uptrend — above MA20 & MA50, MA20 above MA50, both rising, within striking distance of 52w high (proxied by 20d high breakout candidate), top-quartile relative strength, low distribution.",
+      "universe": "VN30",
+      "tags": ["minervini", "sepa", "stage2", "trend_template", "us_classic"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "ma20_slope_5", "op": ">=", "value": 0},
+        {"column": "ma50_slope_10", "op": ">=", "value": 0},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.70},
+        {"column": "distance_ma20", "op": "between", "value": [-0.02, 0.08]},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "smart_money_score", "op": ">=", "value": 55}
+      ],
+      "rank": [
+        {"column": "rs_percentile_20", "ascending": false, "weight": 1.8},
+        {"column": "ma20_slope_5", "ascending": false, "weight": 1.0},
+        {"column": "smart_money_score", "ascending": false, "weight": 0.8},
+        {"column": "edge_score", "ascending": false, "weight": 0.6}
+      ],
+      "risk": {
+        "stop_loss": 0.08,
+        "take_profit": 0.30,
+        "max_holding_bars": 60,
+        "initial_atr_stop_mult": 2.5,
+        "trailing_atr_mult": 3.0,
+        "trailing_profit_activation": 0.10,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "oneil_canslim_base_breakout_v1",
+      "description": "O'Neil CAN SLIM-style base breakout: cup/handle proxy via accumulation_days then 20d breakout with ≥1.4× volume surge, market in uptrend, top-RS leader, institutional sponsorship via smart money score.",
+      "universe": "VN30",
+      "tags": ["oneil", "canslim", "base_breakout", "us_classic"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "in", "value": ["RISK_ON", "NEUTRAL"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 55},
+        {"column": "breakout_20", "op": "==", "value": true},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.40},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.70},
+        {"column": "accumulation_days_10", "op": ">=", "value": 2},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "smart_money_score", "op": ">=", "value": 60},
+        {"column": "CHDM50", "op": ">=", "value": 45}
+      ],
+      "rank": [
+        {"column": "value_ratio_20", "ascending": false, "weight": 1.5},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 1.2},
+        {"column": "smart_money_score", "ascending": false, "weight": 1.0},
+        {"column": "accumulation_days_10", "ascending": false, "weight": 0.6}
+      ],
+      "risk": {
+        "stop_loss": 0.07,
+        "take_profit": 0.25,
+        "max_holding_bars": 40,
+        "initial_atr_stop_mult": 2.0,
+        "trailing_atr_mult": 2.8,
+        "trailing_profit_activation": 0.08,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "darvas_box_breakout_v1",
+      "description": "Darvas Box: stock builds a tight box (DS20 low = consolidation), breaks out of 20d high on volume, market trending. Box quality proxied by DS20 ≤ 0.45 (low distribution = clean base).",
+      "universe": "VN30",
+      "tags": ["darvas", "box_breakout", "us_classic"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "breakout_20", "op": "==", "value": true},
+        {"column": "DS20", "op": "<=", "value": 0.45},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.25},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.55},
+        {"column": "distribution_days_10", "op": "<=", "value": 2}
+      ],
+      "rank": [
+        {"column": "value_ratio_20", "ascending": false, "weight": 1.4},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 1.0},
+        {"column": "DS20", "ascending": true, "weight": 0.8}
+      ],
+      "risk": {
+        "stop_loss": 0.07,
+        "take_profit": 0.22,
+        "max_holding_bars": 35,
+        "initial_atr_stop_mult": 2.0,
+        "trailing_atr_mult": 2.5,
+        "trailing_profit_activation": 0.08,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "weinstein_stage2_breakout_v1",
+      "description": "Stan Weinstein Stage 2: price crosses above flat/rising 30-week MA (proxied by MA50 daily) with volume expansion, exits Stage 1 base. Filter: must be above MA50, MA50 turning up, healthy market breadth.",
+      "universe": "VN30",
+      "tags": ["weinstein", "stage_analysis", "stage2_breakout", "us_classic"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_CHDM20", "op": ">", "value": 45},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "ma50_slope_10", "op": ">=", "value": 0},
+        {"column": "distance_ma50", "op": "between", "value": [0.0, 0.06]},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.20},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.55},
+        {"column": "distribution_days_10", "op": "<=", "value": 1}
+      ],
+      "rank": [
+        {"column": "ma50_slope_10", "ascending": false, "weight": 1.5},
+        {"column": "value_ratio_20", "ascending": false, "weight": 1.0},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 1.0}
+      ],
+      "risk": {
+        "stop_loss": 0.08,
+        "take_profit": 0.35,
+        "max_holding_bars": 80,
+        "initial_atr_stop_mult": 2.5,
+        "trailing_atr_mult": 3.2,
+        "trailing_profit_activation": 0.12,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "antonacci_dual_momentum_v1",
+      "description": "Gary Antonacci Dual Momentum: relative momentum (top RS in universe) + absolute momentum (above long-term MA = market not in RISK_OFF). Monthly rotation, hold top-N until next rebalance.",
+      "universe": "VN30",
+      "tags": ["antonacci", "dual_momentum", "rotation", "monthly", "us_classic"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.70},
+        {"column": "distribution_days_10", "op": "<=", "value": 2}
+      ],
+      "rank": [
+        {"column": "rs_percentile_20", "ascending": false, "weight": 2.0},
+        {"column": "edge_score", "ascending": false, "weight": 1.0},
+        {"column": "smart_money_score", "ascending": false, "weight": 0.6}
+      ],
+      "risk": {
+        "stop_loss": 0.12,
+        "take_profit": 0.40,
+        "max_holding_bars": 20,
+        "entry_every_n_bars": 20,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "fiftytwo_week_high_momentum_v1",
+      "description": "Jegadeesh-Titman / George-Hwang 52-week-high anomaly: stocks near 52w high outperform. Proxy via breakout_20 (touching new highs) + top RS percentile. Quarterly rebalance equivalent: hold ~60 bars.",
+      "universe": "VN30",
+      "tags": ["academic", "52_week_high", "momentum", "us_classic"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "breakout_20", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.75},
+        {"column": "distribution_days_10", "op": "<=", "value": 2}
+      ],
+      "rank": [
+        {"column": "rs_percentile_20", "ascending": false, "weight": 2.0},
+        {"column": "value_ratio_20", "ascending": false, "weight": 0.8}
+      ],
+      "risk": {
+        "stop_loss": 0.10,
+        "take_profit": 0.30,
+        "max_holding_bars": 60,
+        "initial_atr_stop_mult": 2.8,
+        "trailing_atr_mult": 3.0,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "turtle_donchian_20d_breakout_v1",
+      "description": "Richard Dennis Turtle System 1: enter on 20-day Donchian channel breakout. Pure trend-following — no RS or fundamental filter; only regime guard + position-level ATR risk. Long-only adaptation for HOSE.",
+      "universe": "VN30",
+      "tags": ["turtle", "donchian", "trend_following", "breakout", "us_classic"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "breakout_20", "op": "==", "value": true},
+        {"column": "data_quality_ok", "op": "==", "value": true}
+      ],
+      "rank": [
+        {"column": "value_ratio_20", "ascending": false, "weight": 1.0},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.8}
+      ],
+      "risk": {
+        "stop_loss": 0.10,
+        "take_profit": 0.40,
+        "max_holding_bars": 60,
+        "initial_atr_stop_mult": 2.0,
+        "trailing_atr_mult": 2.0,
+        "trailing_profit_activation": 0.06,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "connors_rsi2_mean_reversion_v1",
+      "description": "Larry Connors short-term mean reversion: stock in long-term uptrend (above MA50) but pulls back sharply below MA20 (proxy for RSI2 oversold). Buy the dip in uptrend, exit on reversion to MA20.",
+      "universe": "VN30",
+      "tags": ["connors", "rsi2", "mean_reversion", "short_term", "us_classic"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "ma50_slope_10", "op": ">=", "value": 0},
+        {"column": "distance_ma20", "op": "between", "value": [-0.08, -0.02]},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.50},
+        {"column": "distribution_days_10", "op": "<=", "value": 2},
+        {"column": "DS20", "op": "not_up"}
+      ],
+      "rank": [
+        {"column": "distance_ma20", "ascending": true, "weight": 1.5},
+        {"column": "pullback_quality_score", "ascending": false, "weight": 1.0},
+        {"column": "smart_money_score", "ascending": false, "weight": 0.6}
+      ],
+      "risk": {
+        "stop_loss": 0.05,
+        "take_profit": 0.08,
+        "max_holding_bars": 8,
+        "initial_atr_stop_mult": 1.5,
+        "use_regime_exposure": false
+      }
+    },
+    {
+      "name": "faber_gtaa_trend_filter_v1",
+      "description": "Meb Faber GTAA: only hold stocks above their 10-month MA (proxied by MA200 daily ≈ above_ma50 + above_ma20 + sustained slope). Monthly rebalance; cash when filter fails.",
+      "universe": "VN30",
+      "tags": ["faber", "gtaa", "trend_filter", "monthly", "us_classic"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "ma50_slope_10", "op": ">=", "value": 0},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.55},
+        {"column": "distribution_days_10", "op": "<=", "value": 2}
+      ],
+      "rank": [
+        {"column": "ma50_slope_10", "ascending": false, "weight": 1.5},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 1.0},
+        {"column": "edge_score", "ascending": false, "weight": 0.8}
+      ],
+      "risk": {
+        "stop_loss": 0.10,
+        "take_profit": 0.25,
+        "max_holding_bars": 20,
+        "entry_every_n_bars": 20,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "wyckoff_spring_accumulation_v1",
+      "description": "Wyckoff Spring: shake-out below box low followed by reclaim. Proxy: deep distance_ma20 dip, accumulation_days rising, smart money turning up (delta ≥ 0), volume confirming on reclaim.",
+      "universe": "VN30",
+      "tags": ["wyckoff", "spring", "accumulation", "reversal", "us_classic"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "distance_ma20", "op": "between", "value": [-0.06, 0.0]},
+        {"column": "accumulation_days_10", "op": ">=", "value": 2},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "smart_money_score_no_sector_delta", "op": ">=", "value": 0},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.10},
+        {"column": "DS20", "op": "not_up"},
+        {"column": "CHDM03", "op": "up"}
+      ],
+      "rank": [
+        {"column": "smart_money_score_no_sector_delta", "ascending": false, "weight": 1.5},
+        {"column": "accumulation_days_10", "ascending": false, "weight": 1.0},
+        {"column": "value_ratio_20", "ascending": false, "weight": 0.8},
+        {"column": "pullback_quality_score", "ascending": false, "weight": 0.6}
+      ],
+      "risk": {
+        "stop_loss": 0.06,
+        "take_profit": 0.20,
+        "max_holding_bars": 25,
+        "initial_atr_stop_mult": 1.8,
+        "trailing_atr_mult": 2.5,
+        "trailing_profit_activation": 0.07,
+        "use_regime_exposure": true
+      }
+    }
+  ]
+}

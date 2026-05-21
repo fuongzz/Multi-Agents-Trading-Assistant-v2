@@ -103,10 +103,13 @@ def test_derived_columns_add_edge_score_and_breakout():
         {
             "date": pd.date_range("2024-01-01", periods=25),
             "symbol": ["AAA"] * 25,
+            "industry": ["BANK"] * 25,
             "open": range(10, 35),
             "high": highs,
             "low": range(9, 34),
             "close": closes,
+            "vni_ret_20d": [0.05] * 25,
+            "vni_ret_60d": [0.10] * 25,
             "ma20": [20.0] * 25,
             "ma50": [18.0] * 25,
             "mkt_CHDM20": [55.0] * 25,
@@ -126,6 +129,7 @@ def test_derived_columns_add_edge_score_and_breakout():
     _add_derived_columns(frame)
 
     assert "edge_score" in frame.columns
+    assert {"excess_ret_20d", "excess_ret_60d", "sector_leadership_score"}.issubset(frame.columns)
     assert frame["edge_score"].iloc[-1] > 60
     assert bool(frame["breakout_20"].iloc[-1])
     assert {"kalman_close", "kalman_trend_5d", "kalman_residual_pct"}.issubset(frame.columns)

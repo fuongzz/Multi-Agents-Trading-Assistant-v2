@@ -43,6 +43,10 @@ from multiagents_trading_assistant.backtest.llm_cache import (
 )
 from multiagents_trading_assistant.backtest.plan_scorer import SCORE_THRESHOLD, evaluate_plan
 from multiagents_trading_assistant.backtest.validator import validate_trade_plan
+from multiagents_trading_assistant.agentic import (
+    build_strategy_signal_from_candidate,
+)
+from multiagents_trading_assistant.agentic.evidence_builder import EvidenceBuilder
 from multiagents_trading_assistant.tradingagents_vn.schema import TradePlan
 
 
@@ -180,13 +184,15 @@ def _simulate_trade_walk(
         high = bar["high"]
         close = bar["close"]
 
-        # SL hit (giả định fill ở SL price)
+        # SL hit — fill at min(open, sl) to handle gap-down opens realistically
         if low <= sl:
-            return d, sl, "SL", bars_held
+            open_bar = float(bar.get("open", sl))
+            return d, min(open_bar, sl), "SL", bars_held
 
-        # TP hit
+        # TP hit — fill at max(open, tp) to handle gap-up opens realistically
         if high >= tp:
-            return d, tp, "TP", bars_held
+            open_bar = float(bar.get("open", tp))
+            return d, max(open_bar, tp), "TP", bars_held
 
         # Timeout
         if bars_held >= max_hold:
@@ -376,9 +382,22 @@ def run_llm_backtest(config: LLMBacktestConfig) -> list[LLMTrade]:
             if plan is None:
                 # Gọi LLM
                 try:
+                    strategy_signal = build_strategy_signal_from_candidate(
+                        candidate,
+                        signal_date,
+                        source="core3" if (candidate.indicators or {}).get("edge_strategy_analysis", {}).get("passed") else "broad_screener",
+                        require_edge_passed=False,
+                    )
+                    evidence_packet = EvidenceBuilder(
+                        signal_date, backtest_mode=True
+                    ).build(candidate, signal=strategy_signal)
                     plan = graph.propagate(
-                        sym, signal_date, as_of_date=signal_date,
+                        sym,
+                        signal_date,
+                        as_of_date=signal_date,
                         setup_type=candidate.setup_type,
+                        strategy_signal=strategy_signal.model_dump() if strategy_signal else None,
+                        evidence_packet=evidence_packet.model_dump(),
                     )
                 except Exception as e:
                     if config.verbose:

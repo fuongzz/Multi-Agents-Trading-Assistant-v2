@@ -1,0 +1,136 @@
+{
+  "_meta": {
+    "description": "Research hypotheses for Vietnam oil/gas thematic rotation. These are intentionally shadow/research filters until validated against the shared-pool MVP.",
+    "universe_symbols": ["BSR", "OIL", "PLX", "PVB", "PVC", "PVD", "PVS", "GAS", "PVT"]
+  },
+  "hypotheses": [
+    {
+      "name": "oil_gas_smart_money_recovery_v1",
+      "description": "Oil/gas recovery rotation: smart money, value expansion, and relative strength while the broader market may still be fragile.",
+      "universe": "VN100",
+      "tags": ["oil_gas", "theme_rotation", "smart_money", "recovery"],
+      "filters": [
+        {"column": "symbol", "op": "in", "value": ["BSR", "OIL", "PLX", "PVB", "PVC", "PVD", "PVS", "GAS", "PVT"]},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.55},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.2},
+        {"column": "smart_money_score", "op": ">=", "value": 58},
+        {"column": "DS20", "op": "<=", "value": 0.35},
+        {"column": "distribution_days_10", "op": "<=", "value": 2},
+        {"column": "edge_score", "op": ">=", "value": 65}
+      ],
+      "rank": [
+        {"column": "edge_score", "ascending": false, "weight": 1.5},
+        {"column": "smart_money_score", "ascending": false, "weight": 1.2},
+        {"column": "value_ratio_20", "ascending": false, "weight": 1.0},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 1.0},
+        {"column": "DS20", "ascending": true, "weight": 0.5}
+      ],
+      "risk": {
+        "stop_loss": 0.08,
+        "take_profit": 0.22,
+        "max_holding_bars": 25,
+        "initial_atr_stop_mult": 2.0,
+        "trailing_atr_mult": 2.5,
+        "trailing_profit_activation": 0.07
+      }
+    },
+    {
+      "name": "oil_gas_breakout_rotation_v1",
+      "description": "Oil/gas breakout rotation after visible money-flow expansion.",
+      "universe": "VN100",
+      "tags": ["oil_gas", "theme_rotation", "breakout", "volume_expansion"],
+      "filters": [
+        {"column": "symbol", "op": "in", "value": ["BSR", "OIL", "PLX", "PVB", "PVC", "PVD", "PVS", "GAS", "PVT"]},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "breakout_20", "op": "==", "value": true},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.65},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.4},
+        {"column": "smart_money_score", "op": ">=", "value": 55},
+        {"column": "DS20", "op": "<=", "value": 0.4},
+        {"column": "distribution_days_10", "op": "<=", "value": 2}
+      ],
+      "rank": [
+        {"column": "edge_score", "ascending": false, "weight": 1.4},
+        {"column": "value_ratio_20", "ascending": false, "weight": 1.2},
+        {"column": "smart_money_score", "ascending": false, "weight": 1.0},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 1.0},
+        {"column": "CHDM50", "ascending": false, "weight": 0.4}
+      ],
+      "risk": {
+        "stop_loss": 0.07,
+        "take_profit": 0.25,
+        "max_holding_bars": 30,
+        "initial_atr_stop_mult": 2.0,
+        "trailing_atr_mult": 2.4,
+        "trailing_profit_activation": 0.08
+      }
+    },
+    {
+      "name": "oil_gas_quality_recovery_v2",
+      "description": "Narrower oil/gas recovery sleeve: only liquid/active leaders with stronger RS, smart money, and lower distribution.",
+      "universe": "VN100",
+      "tags": ["oil_gas", "theme_rotation", "quality_recovery", "smart_money"],
+      "filters": [
+        {"column": "symbol", "op": "in", "value": ["BSR", "GAS", "PVD", "PVT"]},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.65},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.3},
+        {"column": "smart_money_score", "op": ">=", "value": 60},
+        {"column": "DS20", "op": "<=", "value": 0.25},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "edge_score", "op": ">=", "value": 70}
+      ],
+      "rank": [
+        {"column": "edge_score", "ascending": false, "weight": 1.5},
+        {"column": "smart_money_score", "ascending": false, "weight": 1.2},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 1.0},
+        {"column": "value_ratio_20", "ascending": false, "weight": 0.8},
+        {"column": "DS20", "ascending": true, "weight": 0.6}
+      ],
+      "risk": {
+        "stop_loss": 0.075,
+        "take_profit": 0.22,
+        "max_holding_bars": 22,
+        "initial_atr_stop_mult": 2.0,
+        "trailing_atr_mult": 2.3,
+        "trailing_profit_activation": 0.07
+      }
+    },
+    {
+      "name": "oil_gas_leader_breakout_v2",
+      "description": "Narrow oil/gas leader breakout: price confirms a 20-day breakout with strong sector-relative flow.",
+      "universe": "VN100",
+      "tags": ["oil_gas", "theme_rotation", "leader_breakout", "volume_expansion"],
+      "filters": [
+        {"column": "symbol", "op": "in", "value": ["BSR", "GAS", "PVD", "PVT"]},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "breakout_20", "op": "==", "value": true},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.7},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.5},
+        {"column": "smart_money_score", "op": ">=", "value": 58},
+        {"column": "DS20", "op": "<=", "value": 0.3},
+        {"column": "distribution_days_10", "op": "<=", "value": 1}
+      ],
+      "rank": [
+        {"column": "edge_score", "ascending": false, "weight": 1.4},
+        {"column": "value_ratio_20", "ascending": false, "weight": 1.1},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 1.0},
+        {"column": "smart_money_score", "ascending": false, "weight": 1.0},
+        {"column": "CHDM50", "ascending": false, "weight": 0.4}
+      ],
+      "risk": {
+        "stop_loss": 0.07,
+        "take_profit": 0.25,
+        "max_holding_bars": 25,
+        "initial_atr_stop_mult": 2.0,
+        "trailing_atr_mult": 2.4,
+        "trailing_profit_activation": 0.08
+      }
+    }
+  ]
+}

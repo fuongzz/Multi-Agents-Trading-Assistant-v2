@@ -65,3 +65,25 @@ desktop.ini
 .coverage
 htmlcov/
 .pytest_cache/
+
+# ── Backtest & report output (generated, không commit) ──
+backtest_results/
+reports/
+
+# ── Runtime data ──
+data/realtime_money_flow/
+data/realtime_money_flow_test/
+data/runtime/
+data/samples/
+data/research/macro_regime/
+data/research/sector_rotation/
+data/research/vnstock_gold_flow/
+data/research/vnstock_gold_inventory/
+
+# ── Temp / misc ──
+tmp_*.txt
+*.bak
+*.bak2
+*.bak3
+*.bak4
+.claude/scheduled_tasks.lock

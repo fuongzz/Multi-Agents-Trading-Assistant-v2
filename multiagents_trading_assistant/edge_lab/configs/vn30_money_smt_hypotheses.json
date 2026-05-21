@@ -8,14 +8,15 @@
       "filters": [
         {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
         {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "data_quality_ok", "op": "==", "value": true},
         {"column": "breakout_20", "op": "==", "value": true},
         {"column": "above_ma20", "op": "==", "value": true},
         {"column": "above_ma50", "op": "==", "value": true},
         {"column": "ma20_slope_5", "op": ">=", "value": 0},
         {"column": "ma50_slope_10", "op": ">=", "value": -0.02},
         {"column": "value_ratio_20", "op": ">=", "value": 1.10},
-        {"column": "smart_money_score", "op": ">=", "value": 58},
-        {"column": "smart_money_score_delta", "op": ">=", "value": 0},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 58},
+        {"column": "smart_money_score_no_sector_delta", "op": ">=", "value": 0},
         {"column": "rs_percentile_20", "op": ">=", "value": 0.58},
         {"column": "accumulation_days_10", "op": ">=", "value": 1},
         {"column": "distribution_days_10", "op": "<=", "value": 1},
@@ -23,9 +24,9 @@
         {"column": "DS20", "op": "<=", "value": 0.55}
       ],
       "rank": [
-        {"column": "edge_score", "ascending": false, "weight": 1.5},
+        {"column": "edge_score_no_sector", "ascending": false, "weight": 1.5},
         {"column": "value_ratio_20", "ascending": false, "weight": 1.0},
-        {"column": "smart_money_score_delta", "ascending": false, "weight": 0.8},
+        {"column": "smart_money_score_no_sector_delta", "ascending": false, "weight": 0.8},
         {"column": "rs_percentile_20", "ascending": false, "weight": 0.8}
       ],
       "risk": {
@@ -79,18 +80,19 @@
       "filters": [
         {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
         {"column": "mkt_regime_score", "op": ">=", "value": 45},
+        {"column": "data_quality_ok", "op": "==", "value": true},
         {"column": "distance_ma50", "op": "between", "value": [-0.06, 0.04]},
         {"column": "ma50_slope_10", "op": ">=", "value": -0.03},
-        {"column": "smart_money_score", "op": ">=", "value": 56},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 56},
         {"column": "rs_percentile_20", "op": ">=", "value": 0.55},
         {"column": "distribution_days_10", "op": "<=", "value": 1},
         {"column": "CHDM50", "op": ">=", "value": 42},
         {"column": "DS20", "op": "not_up"}
       ],
       "rank": [
-        {"column": "edge_score", "ascending": false, "weight": 1.2},
+        {"column": "edge_score_no_sector", "ascending": false, "weight": 1.2},
         {"column": "pullback_quality_score", "ascending": false, "weight": 1.0},
-        {"column": "smart_money_score", "ascending": false, "weight": 0.8},
+        {"column": "smart_money_score_no_sector", "ascending": false, "weight": 0.8},
         {"column": "distance_ma50", "ascending": true, "weight": 0.4}
       ],
       "risk": {
@@ -468,12 +470,13 @@
       "filters": [
         {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
         {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "data_quality_ok", "op": "==", "value": true},
         {"column": "tight_range_20", "op": "==", "value": true},
         {"column": "close_location", "op": ">=", "value": 0.55},
         {"column": "above_ma20", "op": "==", "value": true},
         {"column": "above_ma50", "op": "==", "value": true},
         {"column": "distance_ma20", "op": "between", "value": [-0.03, 0.06]},
-        {"column": "smart_money_score", "op": ">=", "value": 60},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 60},
         {"column": "rs_percentile_20", "op": ">=", "value": 0.58},
         {"column": "value_ratio_20", "op": ">=", "value": 0.95},
         {"column": "distribution_days_10", "op": "<=", "value": 1},
@@ -481,11 +484,11 @@
         {"column": "DS20", "op": "<=", "value": 0.55}
       ],
       "rank": [
-        {"column": "edge_score", "ascending": false, "weight": 1.3},
+        {"column": "edge_score_no_sector", "ascending": false, "weight": 1.3},
         {"column": "range_pct", "ascending": true, "weight": 1.0},
         {"column": "close_location", "ascending": false, "weight": 0.6},
         {"column": "rs_percentile_20", "ascending": false, "weight": 0.8},
-        {"column": "smart_money_score", "ascending": false, "weight": 0.8}
+        {"column": "smart_money_score_no_sector", "ascending": false, "weight": 0.8}
       ],
       "risk": {
         "stop_loss": 0.07,
@@ -835,6 +838,1285 @@
         "trailing_atr_mult": 2.6,
         "trailing_profit_activation": 0.08,
         "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "breakout_55_smt_v1",
+      "description": "55-day high breakout with SMT leader quality and strong value expansion. Higher conviction than 20-day breakout; expects larger moves from longer base.",
+      "universe": "VN100",
+      "tags": ["breakout", "55day", "smart_money_trace", "money_cycle", "high_conviction"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "breakout_55", "op": "==", "value": true},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "ma50_slope_10", "op": ">=", "value": -0.01},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.15},
+        {"column": "smart_money_score", "op": ">=", "value": 62},
+        {"column": "smart_money_score_delta", "op": ">=", "value": 0},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.62},
+        {"column": "accumulation_days_10", "op": ">=", "value": 1},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "CHDM50", "op": ">=", "value": 48},
+        {"column": "DS20", "op": "<=", "value": 0.50}
+      ],
+      "rank": [
+        {"column": "edge_score", "ascending": false, "weight": 1.5},
+        {"column": "value_ratio_20", "ascending": false, "weight": 1.2},
+        {"column": "smart_money_score_delta", "ascending": false, "weight": 1.0},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.8}
+      ],
+      "risk": {
+        "stop_loss": 0.09,
+        "take_profit": 0.40,
+        "max_holding_bars": 60,
+        "initial_atr_stop_mult": 2.5,
+        "trailing_atr_mult": 3.0,
+        "trailing_profit_activation": 0.12,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "cmf_expansion_smt_v1",
+      "description": "Chaikin Money Flow positive expansion with improving SMT delta. Captures early institutional accumulation phase before price breakout - exploits an entirely unused feature dimension.",
+      "universe": "VN100",
+      "tags": ["cmf", "money_flow", "accumulation", "smart_money_trace", "money_cycle"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "cmf20", "op": ">=", "value": 0.05},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "distance_ma20", "op": "between", "value": [-0.04, 0.08]},
+        {"column": "smart_money_score", "op": ">=", "value": 60},
+        {"column": "smart_money_score_delta", "op": ">=", "value": 0},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.58},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.05},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "CHDM50", "op": ">=", "value": 42},
+        {"column": "DS20", "op": "<=", "value": 0.55}
+      ],
+      "rank": [
+        {"column": "cmf20", "ascending": false, "weight": 1.2},
+        {"column": "smart_money_score_delta", "ascending": false, "weight": 1.0},
+        {"column": "edge_score", "ascending": false, "weight": 1.0},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.8},
+        {"column": "value_ratio_20", "ascending": false, "weight": 0.6}
+      ],
+      "risk": {
+        "stop_loss": 0.07,
+        "take_profit": 0.22,
+        "max_holding_bars": 30,
+        "initial_atr_stop_mult": 2.0,
+        "trailing_atr_mult": 2.6,
+        "trailing_profit_activation": 0.08,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "reclaim_ma20_quality_v1",
+      "description": "MA20 reclaim after a confirmed intraday pullback below it. Faster mean reversion than MA50 pullback; exploits the reclaim_ma20_after_pullback feature that currently goes unused.",
+      "universe": "VN100",
+      "tags": ["mean_reversion", "ma20", "reclaim", "smart_money_trace", "money_cycle"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "mkt_CHDM20", "op": ">", "value": 42},
+        {"column": "mkt_DS20", "op": "<=", "value": 0.50},
+        {"column": "reclaim_ma20_after_pullback", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "ma50_slope_10", "op": ">=", "value": -0.02},
+        {"column": "close_location", "op": ">=", "value": 0.65},
+        {"column": "smart_money_score", "op": ">=", "value": 58},
+        {"column": "smart_money_score_delta", "op": ">=", "value": 0},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.55},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "DS20", "op": "not_up"}
+      ],
+      "rank": [
+        {"column": "pullback_quality_score", "ascending": false, "weight": 1.2},
+        {"column": "edge_score", "ascending": false, "weight": 1.0},
+        {"column": "close_location", "ascending": false, "weight": 0.8},
+        {"column": "smart_money_score_delta", "ascending": false, "weight": 0.8},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.6}
+      ],
+      "risk": {
+        "stop_loss": 0.07,
+        "take_profit": 0.22,
+        "max_holding_bars": 28,
+        "initial_atr_stop_mult": 2.0,
+        "trailing_atr_mult": 2.5,
+        "trailing_profit_activation": 0.08,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "pullback_deep_quality_v1",
+      "description": "Deep pullback (>6%) inside a healthy trend where SMT shows institutions are holding. Promotes pullback_quality_score and pullback_depth_20 from ranking signal to primary filter.",
+      "universe": "VN100",
+      "tags": ["mean_reversion", "deep_pullback", "smart_money_trace", "money_cycle", "quality_gate"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 48},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "pullback_quality_score", "op": ">=", "value": 65},
+        {"column": "pullback_depth_20", "op": ">=", "value": 0.06},
+        {"column": "distance_ma50", "op": "between", "value": [-0.10, 0.02]},
+        {"column": "close_location", "op": ">=", "value": 0.60},
+        {"column": "smart_money_score", "op": ">=", "value": 56},
+        {"column": "smart_money_score_delta", "op": ">=", "value": 0},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.52},
+        {"column": "distribution_days_10", "op": "<=", "value": 2},
+        {"column": "CHDM50", "op": ">=", "value": 40},
+        {"column": "DS20", "op": "not_up"}
+      ],
+      "rank": [
+        {"column": "pullback_quality_score", "ascending": false, "weight": 1.4},
+        {"column": "edge_score", "ascending": false, "weight": 1.0},
+        {"column": "smart_money_score_delta", "ascending": false, "weight": 0.8},
+        {"column": "pullback_depth_20", "ascending": false, "weight": 0.6},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.6}
+      ],
+      "risk": {
+        "stop_loss": 0.09,
+        "take_profit": 0.28,
+        "max_holding_bars": 45,
+        "initial_atr_stop_mult": 2.3,
+        "trailing_atr_mult": 2.8,
+        "trailing_profit_activation": 0.10,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "volume_surge_breakout_smt_v1",
+      "description": "Climactic volume surge (>2x average) with strong close in uptrend and SMT confirmation. Captures institutional accumulation acceleration - a different entry trigger from pure price pattern strategies.",
+      "universe": "VN100",
+      "tags": ["volume", "surge", "breakout", "smart_money_trace", "money_cycle", "climactic"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "mkt_CHDM20", "op": ">", "value": 45},
+        {"column": "volume_ratio_20", "op": ">=", "value": 2.0},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "close_location", "op": ">=", "value": 0.70},
+        {"column": "distance_ma20", "op": "between", "value": [-0.02, 0.10]},
+        {"column": "smart_money_score", "op": ">=", "value": 58},
+        {"column": "smart_money_score_delta", "op": ">=", "value": 0},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.55},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "DS20", "op": "<=", "value": 0.55}
+      ],
+      "rank": [
+        {"column": "volume_ratio_20", "ascending": false, "weight": 1.3},
+        {"column": "edge_score", "ascending": false, "weight": 1.0},
+        {"column": "smart_money_score_delta", "ascending": false, "weight": 0.9},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.8},
+        {"column": "close_location", "ascending": false, "weight": 0.6}
+      ],
+      "risk": {
+        "stop_loss": 0.08,
+        "take_profit": 0.30,
+        "max_holding_bars": 35,
+        "initial_atr_stop_mult": 2.2,
+        "trailing_atr_mult": 2.8,
+        "trailing_profit_activation": 0.10,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "breakout_55_smt_v2",
+      "description": "55-day breakout with value-flow quality, controlled extension, and strong close. Filters out late chase breakouts from the v1 signal.",
+      "universe": "VN100",
+      "tags": ["breakout", "55day", "smart_money_trace", "money_cycle", "value_flow", "high_conviction"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "mkt_DS20", "op": "<=", "value": 0.50},
+        {"column": "breakout_55", "op": "==", "value": true},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "distance_ma20", "op": "between", "value": [-0.01, 0.12]},
+        {"column": "close_location", "op": ">=", "value": 0.60},
+        {"column": "ma50_slope_10", "op": ">=", "value": -0.01},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.15},
+        {"column": "value_flow_quality_score", "op": ">=", "value": 58},
+        {"column": "smart_money_score", "op": ">=", "value": 62},
+        {"column": "smart_money_score_delta", "op": ">=", "value": 0},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.62},
+        {"column": "accumulation_days_10", "op": ">=", "value": 1},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "CHDM50", "op": ">=", "value": 48},
+        {"column": "DS20", "op": "<=", "value": 0.50}
+      ],
+      "rank": [
+        {"column": "edge_score", "ascending": false, "weight": 1.4},
+        {"column": "value_flow_quality_score", "ascending": false, "weight": 1.1},
+        {"column": "value_ratio_20", "ascending": false, "weight": 1.0},
+        {"column": "smart_money_score_delta", "ascending": false, "weight": 0.9},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.8},
+        {"column": "distance_ma20", "ascending": true, "weight": 0.4}
+      ],
+      "risk": {
+        "stop_loss": 0.08,
+        "take_profit": 0.35,
+        "max_holding_bars": 50,
+        "initial_atr_stop_mult": 2.4,
+        "trailing_atr_mult": 2.9,
+        "trailing_profit_activation": 0.11,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "cmf_expansion_smt_v2",
+      "description": "CMF positive expansion with close-location, value-flow, and RSI quality gates to avoid weak accumulation reads.",
+      "universe": "VN100",
+      "tags": ["cmf", "money_flow", "accumulation", "smart_money_trace", "money_cycle", "value_flow"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "cmf20", "op": ">=", "value": 0.05},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "distance_ma20", "op": "between", "value": [-0.04, 0.08]},
+        {"column": "close_location", "op": ">=", "value": 0.55},
+        {"column": "rsi14", "op": "between", "value": [45, 68]},
+        {"column": "value_flow_quality_score", "op": ">=", "value": 55},
+        {"column": "smart_money_score", "op": ">=", "value": 60},
+        {"column": "smart_money_score_delta", "op": ">=", "value": 0},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.58},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.05},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "CHDM50", "op": ">=", "value": 42},
+        {"column": "DS20", "op": "<=", "value": 0.55}
+      ],
+      "rank": [
+        {"column": "cmf20", "ascending": false, "weight": 1.1},
+        {"column": "value_flow_quality_score", "ascending": false, "weight": 1.0},
+        {"column": "smart_money_score_delta", "ascending": false, "weight": 0.9},
+        {"column": "edge_score", "ascending": false, "weight": 0.9},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.8},
+        {"column": "value_ratio_20", "ascending": false, "weight": 0.5}
+      ],
+      "risk": {
+        "stop_loss": 0.07,
+        "take_profit": 0.22,
+        "max_holding_bars": 28,
+        "initial_atr_stop_mult": 2.0,
+        "trailing_atr_mult": 2.6,
+        "trailing_profit_activation": 0.08,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "reclaim_ma20_quality_v2",
+      "description": "MA20 reclaim after a real but controlled pullback, gated by value-flow quality and positive SMT delta.",
+      "universe": "VN100",
+      "tags": ["mean_reversion", "ma20", "reclaim", "smart_money_trace", "money_cycle", "value_flow"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "mkt_CHDM20", "op": ">", "value": 42},
+        {"column": "mkt_DS20", "op": "<=", "value": 0.50},
+        {"column": "reclaim_ma20_after_pullback", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "pullback_depth_20", "op": "between", "value": [-0.10, -0.025]},
+        {"column": "value_flow_quality_score", "op": ">=", "value": 55},
+        {"column": "ma50_slope_10", "op": ">=", "value": -0.02},
+        {"column": "close_location", "op": ">=", "value": 0.65},
+        {"column": "smart_money_score", "op": ">=", "value": 58},
+        {"column": "smart_money_score_delta", "op": ">=", "value": 0},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.55},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "DS20", "op": "not_up"}
+      ],
+      "rank": [
+        {"column": "pullback_quality_score", "ascending": false, "weight": 1.2},
+        {"column": "value_flow_quality_score", "ascending": false, "weight": 1.0},
+        {"column": "edge_score", "ascending": false, "weight": 0.9},
+        {"column": "close_location", "ascending": false, "weight": 0.7},
+        {"column": "smart_money_score_delta", "ascending": false, "weight": 0.8},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.6}
+      ],
+      "risk": {
+        "stop_loss": 0.07,
+        "take_profit": 0.20,
+        "max_holding_bars": 24,
+        "initial_atr_stop_mult": 2.0,
+        "trailing_atr_mult": 2.4,
+        "trailing_profit_activation": 0.08,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "pullback_deep_quality_v2",
+      "description": "Deep pullback using the actual negative pullback_depth_20 scale, with relaxed trend gate and value-flow confirmation.",
+      "universe": "VN100",
+      "tags": ["mean_reversion", "deep_pullback", "smart_money_trace", "money_cycle", "quality_gate", "value_flow"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 48},
+        {"column": "ma50_slope_10", "op": ">=", "value": -0.025},
+        {"column": "pullback_quality_score", "op": ">=", "value": 58},
+        {"column": "pullback_depth_20", "op": "between", "value": [-0.12, -0.04]},
+        {"column": "distance_ma50", "op": "between", "value": [-0.12, 0.05]},
+        {"column": "close_location", "op": ">=", "value": 0.55},
+        {"column": "value_flow_quality_score", "op": ">=", "value": 52},
+        {"column": "smart_money_score", "op": ">=", "value": 56},
+        {"column": "smart_money_score_delta", "op": ">=", "value": -1},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.50},
+        {"column": "distribution_days_10", "op": "<=", "value": 2},
+        {"column": "CHDM50", "op": ">=", "value": 40},
+        {"column": "DS20", "op": "not_up"}
+      ],
+      "rank": [
+        {"column": "pullback_quality_score", "ascending": false, "weight": 1.3},
+        {"column": "value_flow_quality_score", "ascending": false, "weight": 1.0},
+        {"column": "edge_score", "ascending": false, "weight": 0.9},
+        {"column": "smart_money_score_delta", "ascending": false, "weight": 0.7},
+        {"column": "pullback_depth_20", "ascending": true, "weight": 0.5},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.6}
+      ],
+      "risk": {
+        "stop_loss": 0.08,
+        "take_profit": 0.24,
+        "max_holding_bars": 35,
+        "initial_atr_stop_mult": 2.2,
+        "trailing_atr_mult": 2.7,
+        "trailing_profit_activation": 0.09,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "volume_surge_breakout_smt_v2",
+      "description": "Volume surge accepted only as a confirmed 20-day breakout with CMF and value-flow support, reducing exit-volume false positives.",
+      "universe": "VN100",
+      "tags": ["volume", "surge", "breakout", "smart_money_trace", "money_cycle", "climactic", "value_flow"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "mkt_CHDM20", "op": ">", "value": 45},
+        {"column": "breakout_20", "op": "==", "value": true},
+        {"column": "volume_ratio_20", "op": ">=", "value": 2.0},
+        {"column": "value_flow_quality_score", "op": ">=", "value": 60},
+        {"column": "cmf20", "op": ">=", "value": 0.03},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "close_location", "op": ">=", "value": 0.80},
+        {"column": "distance_ma20", "op": "between", "value": [-0.02, 0.10]},
+        {"column": "rsi14", "op": "<=", "value": 72},
+        {"column": "smart_money_score", "op": ">=", "value": 58},
+        {"column": "smart_money_score_delta", "op": ">=", "value": 0},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.55},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "DS20", "op": "<=", "value": 0.55}
+      ],
+      "rank": [
+        {"column": "volume_ratio_20", "ascending": false, "weight": 1.1},
+        {"column": "value_flow_quality_score", "ascending": false, "weight": 1.0},
+        {"column": "edge_score", "ascending": false, "weight": 0.9},
+        {"column": "smart_money_score_delta", "ascending": false, "weight": 0.8},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.8},
+        {"column": "close_location", "ascending": false, "weight": 0.6}
+      ],
+      "risk": {
+        "stop_loss": 0.08,
+        "take_profit": 0.26,
+        "max_holding_bars": 28,
+        "initial_atr_stop_mult": 2.1,
+        "trailing_atr_mult": 2.6,
+        "trailing_profit_activation": 0.09,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "spring_washout_smt_v1",
+      "description": "20-day spring/washout reversal with strong close, improving SMT, and controlled distribution. Targets shakeout entries not covered by core breakout/pullback MVP.",
+      "universe": "VN100",
+      "tags": ["spring", "washout", "reversal", "smart_money_trace", "money_cycle", "value_flow"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 48},
+        {"column": "mkt_DS20", "op": "<=", "value": 0.55},
+        {"column": "spring_20", "op": "==", "value": true},
+        {"column": "close_location", "op": ">=", "value": 0.68},
+        {"column": "pullback_depth_20", "op": "between", "value": [-0.14, -0.03]},
+        {"column": "value_flow_quality_score", "op": ">=", "value": 52},
+        {"column": "smart_money_score", "op": ">=", "value": 55},
+        {"column": "smart_money_score_delta", "op": ">=", "value": -1},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.45},
+        {"column": "distribution_days_10", "op": "<=", "value": 2},
+        {"column": "DS20", "op": "not_up"},
+        {"column": "rsi14", "op": "between", "value": [35, 62]}
+      ],
+      "rank": [
+        {"column": "close_location", "ascending": false, "weight": 1.1},
+        {"column": "pullback_quality_score", "ascending": false, "weight": 1.0},
+        {"column": "value_flow_quality_score", "ascending": false, "weight": 0.9},
+        {"column": "smart_money_score_delta", "ascending": false, "weight": 0.8},
+        {"column": "edge_score", "ascending": false, "weight": 0.8},
+        {"column": "DS20", "ascending": true, "weight": 0.5}
+      ],
+      "risk": {
+        "setup_type": "REVERSAL",
+        "stop_loss": 0.07,
+        "take_profit": 0.22,
+        "max_holding_bars": 24,
+        "initial_atr_stop_mult": 2.0,
+        "trailing_atr_mult": 2.4,
+        "trailing_profit_activation": 0.08,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "volume_surge_breakout_smt_v5",
+      "description": "Volume surge breakout v2 filters with looser profit capture: lets satellite winners run longer while keeping the same entry gate.",
+      "universe": "VN100",
+      "tags": ["volume", "surge", "breakout", "smart_money_trace", "money_cycle", "climactic", "value_flow"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "mkt_CHDM20", "op": ">", "value": 45},
+        {"column": "breakout_20", "op": "==", "value": true},
+        {"column": "volume_ratio_20", "op": ">=", "value": 2.0},
+        {"column": "value_flow_quality_score", "op": ">=", "value": 60},
+        {"column": "cmf20", "op": ">=", "value": 0.03},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "close_location", "op": ">=", "value": 0.80},
+        {"column": "distance_ma20", "op": "between", "value": [-0.02, 0.10]},
+        {"column": "rsi14", "op": "<=", "value": 72},
+        {"column": "smart_money_score", "op": ">=", "value": 58},
+        {"column": "smart_money_score_delta", "op": ">=", "value": 0},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.55},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "DS20", "op": "<=", "value": 0.55}
+      ],
+      "rank": [
+        {"column": "volume_ratio_20", "ascending": false, "weight": 1.1},
+        {"column": "value_flow_quality_score", "ascending": false, "weight": 1.0},
+        {"column": "edge_score", "ascending": false, "weight": 0.9},
+        {"column": "smart_money_score_delta", "ascending": false, "weight": 0.8},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.8},
+        {"column": "close_location", "ascending": false, "weight": 0.6}
+      ],
+      "risk": {
+        "stop_loss": 0.08,
+        "take_profit": 0.32,
+        "max_holding_bars": 38,
+        "initial_atr_stop_mult": 2.2,
+        "trailing_atr_mult": 2.9,
+        "trailing_profit_activation": 0.10,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "volume_surge_breakout_smt_v6",
+      "description": "Volume surge breakout v2 filters with tighter loss control and modestly higher target for satellite use.",
+      "universe": "VN100",
+      "tags": ["volume", "surge", "breakout", "smart_money_trace", "money_cycle", "climactic", "value_flow"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "mkt_CHDM20", "op": ">", "value": 45},
+        {"column": "breakout_20", "op": "==", "value": true},
+        {"column": "volume_ratio_20", "op": ">=", "value": 2.0},
+        {"column": "value_flow_quality_score", "op": ">=", "value": 60},
+        {"column": "cmf20", "op": ">=", "value": 0.03},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "close_location", "op": ">=", "value": 0.80},
+        {"column": "distance_ma20", "op": "between", "value": [-0.02, 0.10]},
+        {"column": "rsi14", "op": "<=", "value": 72},
+        {"column": "smart_money_score", "op": ">=", "value": 58},
+        {"column": "smart_money_score_delta", "op": ">=", "value": 0},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.55},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "DS20", "op": "<=", "value": 0.55}
+      ],
+      "rank": [
+        {"column": "volume_ratio_20", "ascending": false, "weight": 1.1},
+        {"column": "value_flow_quality_score", "ascending": false, "weight": 1.0},
+        {"column": "edge_score", "ascending": false, "weight": 0.9},
+        {"column": "smart_money_score_delta", "ascending": false, "weight": 0.8},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.8},
+        {"column": "close_location", "ascending": false, "weight": 0.6}
+      ],
+      "risk": {
+        "stop_loss": 0.075,
+        "take_profit": 0.28,
+        "max_holding_bars": 32,
+        "initial_atr_stop_mult": 2.0,
+        "trailing_atr_mult": 2.5,
+        "trailing_profit_activation": 0.08,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "volume_surge_breakout_smt_v3",
+      "description": "Volume surge breakout tuned for satellite slot: strong momentum close with capped CMF to avoid overheated one-day exit spikes.",
+      "universe": "VN100",
+      "tags": ["volume", "surge", "breakout", "smart_money_trace", "money_cycle", "climactic", "value_flow"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "mkt_CHDM20", "op": ">", "value": 45},
+        {"column": "mkt_DS20", "op": "<=", "value": 0.45},
+        {"column": "breakout_20", "op": "==", "value": true},
+        {"column": "volume_ratio_20", "op": ">=", "value": 2.0},
+        {"column": "value_ratio_20", "op": ">=", "value": 2.0},
+        {"column": "value_flow_quality_score", "op": ">=", "value": 85},
+        {"column": "cmf20", "op": "between", "value": [0.03, 0.25]},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "close_location", "op": ">=", "value": 0.85},
+        {"column": "distance_ma20", "op": "between", "value": [0.03, 0.10]},
+        {"column": "rsi14", "op": "between", "value": [66, 72]},
+        {"column": "smart_money_score", "op": ">=", "value": 58},
+        {"column": "smart_money_score_delta", "op": ">=", "value": 0},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.60},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "DS20", "op": "<=", "value": 0.55}
+      ],
+      "rank": [
+        {"column": "value_ratio_20", "ascending": false, "weight": 1.1},
+        {"column": "volume_ratio_20", "ascending": false, "weight": 1.0},
+        {"column": "value_flow_quality_score", "ascending": false, "weight": 0.9},
+        {"column": "smart_money_score_delta", "ascending": false, "weight": 0.8},
+        {"column": "close_location", "ascending": false, "weight": 0.7},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.6}
+      ],
+      "risk": {
+        "stop_loss": 0.08,
+        "take_profit": 0.28,
+        "max_holding_bars": 32,
+        "initial_atr_stop_mult": 2.1,
+        "trailing_atr_mult": 2.7,
+        "trailing_profit_activation": 0.09,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "volume_surge_breakout_smt_v4",
+      "description": "Moderate volume-surge satellite variant: keeps the CMF cap but relaxes RSI and close-location for more coverage.",
+      "universe": "VN100",
+      "tags": ["volume", "surge", "breakout", "smart_money_trace", "money_cycle", "climactic", "value_flow"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "mkt_CHDM20", "op": ">", "value": 45},
+        {"column": "mkt_DS20", "op": "<=", "value": 0.48},
+        {"column": "breakout_20", "op": "==", "value": true},
+        {"column": "volume_ratio_20", "op": ">=", "value": 2.0},
+        {"column": "value_ratio_20", "op": ">=", "value": 2.0},
+        {"column": "value_flow_quality_score", "op": ">=", "value": 85},
+        {"column": "cmf20", "op": "between", "value": [0.03, 0.28]},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "close_location", "op": ">=", "value": 0.80},
+        {"column": "distance_ma20", "op": "between", "value": [0.03, 0.10]},
+        {"column": "rsi14", "op": "between", "value": [64, 72]},
+        {"column": "smart_money_score", "op": ">=", "value": 58},
+        {"column": "smart_money_score_delta", "op": ">=", "value": 0},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.58},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "DS20", "op": "<=", "value": 0.55}
+      ],
+      "rank": [
+        {"column": "value_ratio_20", "ascending": false, "weight": 1.1},
+        {"column": "volume_ratio_20", "ascending": false, "weight": 1.0},
+        {"column": "value_flow_quality_score", "ascending": false, "weight": 0.9},
+        {"column": "smart_money_score_delta", "ascending": false, "weight": 0.8},
+        {"column": "close_location", "ascending": false, "weight": 0.7},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.6}
+      ],
+      "risk": {
+        "stop_loss": 0.08,
+        "take_profit": 0.28,
+        "max_holding_bars": 32,
+        "initial_atr_stop_mult": 2.1,
+        "trailing_atr_mult": 2.7,
+        "trailing_profit_activation": 0.09,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "dry_retest_breakout_smt_v1",
+      "description": "Post-breakout dry-volume retest near prior 20-day level with SMT and value-flow support. A safer continuation entry than same-day breakout.",
+      "universe": "VN100",
+      "tags": ["retest", "breakout", "dry_volume", "smart_money_trace", "money_cycle", "value_flow"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "mkt_CHDM20", "op": ">", "value": 42},
+        {"column": "mkt_DS20", "op": "<=", "value": 0.50},
+        {"column": "retest_breakout_level", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "ma50_slope_10", "op": ">=", "value": -0.015},
+        {"column": "volume_ratio_20", "op": "<=", "value": 0.95},
+        {"column": "distance_ma20", "op": "between", "value": [-0.05, 0.06]},
+        {"column": "close_location", "op": ">=", "value": 0.50},
+        {"column": "value_flow_quality_score", "op": ">=", "value": 55},
+        {"column": "smart_money_score", "op": ">=", "value": 58},
+        {"column": "smart_money_score_delta", "op": ">=", "value": -1},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.52},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "DS20", "op": "<=", "value": 0.55}
+      ],
+      "rank": [
+        {"column": "pullback_quality_score", "ascending": false, "weight": 1.1},
+        {"column": "value_flow_quality_score", "ascending": false, "weight": 1.0},
+        {"column": "edge_score", "ascending": false, "weight": 0.9},
+        {"column": "volume_ratio_20", "ascending": true, "weight": 0.7},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.7},
+        {"column": "smart_money_score_delta", "ascending": false, "weight": 0.6}
+      ],
+      "risk": {
+        "setup_type": "RETEST",
+        "stop_loss": 0.07,
+        "take_profit": 0.24,
+        "max_holding_bars": 32,
+        "initial_atr_stop_mult": 2.1,
+        "trailing_atr_mult": 2.6,
+        "trailing_profit_activation": 0.09,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "kalman_ma50_pullback_v1",
+      "description": "MA50 pullback with adaptive Kalman quality gate, using robust trend/residual filters to avoid noisy pullback entries.",
+      "universe": "VN100",
+      "tags": ["mean_reversion", "ma50", "kalman", "smart_money_trace", "money_cycle", "value_flow"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 48},
+        {"column": "mkt_DS20", "op": "<=", "value": 0.55},
+        {"column": "distance_ma50", "op": "between", "value": [-0.06, 0.04]},
+        {"column": "ma50_slope_10", "op": ">=", "value": -0.025},
+        {"column": "kalman_confidence", "op": ">=", "value": 0.30},
+        {"column": "kalman_shock_score", "op": "<=", "value": 3.5},
+        {"column": "kalman_adaptive_trend_5d", "op": ">=", "value": -0.002},
+        {"column": "kalman_adaptive_residual_pct", "op": "between", "value": [-0.08, 0.05]},
+        {"column": "value_flow_quality_score", "op": ">=", "value": 52},
+        {"column": "smart_money_score", "op": ">=", "value": 56},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.52},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "CHDM50", "op": ">=", "value": 40},
+        {"column": "DS20", "op": "not_up"}
+      ],
+      "rank": [
+        {"column": "pullback_quality_score", "ascending": false, "weight": 1.1},
+        {"column": "kalman_confidence", "ascending": false, "weight": 0.9},
+        {"column": "edge_score", "ascending": false, "weight": 0.9},
+        {"column": "value_flow_quality_score", "ascending": false, "weight": 0.8},
+        {"column": "kalman_shock_score", "ascending": true, "weight": 0.6},
+        {"column": "distance_ma50", "ascending": true, "weight": 0.4}
+      ],
+      "risk": {
+        "stop_loss": 0.08,
+        "take_profit": 0.24,
+        "max_holding_bars": 34,
+        "initial_atr_stop_mult": 2.2,
+        "trailing_atr_mult": 2.7,
+        "trailing_profit_activation": 0.09,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "nr7_value_breakout_smt_v1",
+      "description": "NR7/tight-range volatility contraction followed by quality 20-day breakout with value-flow and SMT confirmation.",
+      "universe": "VN100",
+      "tags": ["nr7", "compression", "breakout", "smart_money_trace", "money_cycle", "value_flow"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "mkt_CHDM20", "op": ">", "value": 45},
+        {"column": "breakout_20_quality", "op": "==", "value": true},
+        {"column": "tight_range_20", "op": "==", "value": true},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "close_location", "op": ">=", "value": 0.65},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.20},
+        {"column": "value_flow_quality_score", "op": ">=", "value": 58},
+        {"column": "smart_money_score", "op": ">=", "value": 60},
+        {"column": "smart_money_score_delta", "op": ">=", "value": 0},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.58},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "DS20", "op": "<=", "value": 0.55}
+      ],
+      "rank": [
+        {"column": "edge_score", "ascending": false, "weight": 1.2},
+        {"column": "value_flow_quality_score", "ascending": false, "weight": 1.0},
+        {"column": "value_ratio_20", "ascending": false, "weight": 0.9},
+        {"column": "range_pct", "ascending": true, "weight": 0.7},
+        {"column": "smart_money_score_delta", "ascending": false, "weight": 0.7},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.7}
+      ],
+      "risk": {
+        "stop_loss": 0.075,
+        "take_profit": 0.28,
+        "max_holding_bars": 34,
+        "initial_atr_stop_mult": 2.1,
+        "trailing_atr_mult": 2.7,
+        "trailing_profit_activation": 0.09,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "benchmark_leader_breakout_v1",
+      "description": "Benchmark-aware leader breakout. Requires stock and sector outperformance versus VNINDEX before allocating breakout capital.",
+      "universe": "VN100",
+      "tags": ["breakout", "benchmark_relative", "sector_leadership", "smart_money_trace", "money_cycle"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "in", "value": ["RISK_ON", "NEUTRAL"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 52},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "vni_above_ma20", "op": "==", "value": true},
+        {"column": "breakout_20", "op": "==", "value": true},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "ma20_slope_5", "op": ">=", "value": 0},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.12},
+        {"column": "smart_money_score", "op": ">=", "value": 58},
+        {"column": "smart_money_score_delta", "op": ">=", "value": 0},
+        {"column": "excess_ret_20d_pctile", "op": ">=", "value": 0.62},
+        {"column": "excess_ret_60d_pctile", "op": ">=", "value": 0.55},
+        {"column": "sector_rs_rank_20d", "op": ">=", "value": 0.55},
+        {"column": "sector_breadth_ma20", "op": ">=", "value": 0.45},
+        {"column": "sector_leadership_score", "op": ">=", "value": 52},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "DS20", "op": "<=", "value": 0.55}
+      ],
+      "rank": [
+        {"column": "excess_ret_20d_pctile", "ascending": false, "weight": 1.4},
+        {"column": "sector_leadership_score", "ascending": false, "weight": 1.2},
+        {"column": "edge_score", "ascending": false, "weight": 1.0},
+        {"column": "value_ratio_20", "ascending": false, "weight": 0.9},
+        {"column": "smart_money_score_delta", "ascending": false, "weight": 0.7},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.6}
+      ],
+      "risk": {
+        "stop_loss": 0.085,
+        "take_profit": 0.32,
+        "max_holding_bars": 42,
+        "initial_atr_stop_mult": 2.3,
+        "trailing_atr_mult": 2.8,
+        "trailing_profit_activation": 0.10,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "sector_leader_pullback_v1",
+      "description": "Shallow pullback in a sector leader that is still outperforming VNINDEX. Targets bull-market capture without chasing fresh breakouts.",
+      "universe": "VN100",
+      "tags": ["mean_reversion", "benchmark_relative", "sector_leadership", "ma20", "smart_money_trace"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "in", "value": ["RISK_ON", "NEUTRAL"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "vni_above_ma20", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "distance_ma20", "op": "between", "value": [-0.045, 0.035]},
+        {"column": "ma50_slope_10", "op": ">=", "value": -0.015},
+        {"column": "pullback_quality_score", "op": ">=", "value": 55},
+        {"column": "smart_money_score", "op": ">=", "value": 56},
+        {"column": "smart_money_score_delta", "op": ">=", "value": -1},
+        {"column": "excess_ret_20d_pctile", "op": ">=", "value": 0.58},
+        {"column": "sector_rs_rank_20d", "op": ">=", "value": 0.58},
+        {"column": "sector_breadth_ma20", "op": ">=", "value": 0.48},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "DS20", "op": "not_up"}
+      ],
+      "rank": [
+        {"column": "sector_leadership_score", "ascending": false, "weight": 1.3},
+        {"column": "pullback_quality_score", "ascending": false, "weight": 1.1},
+        {"column": "excess_ret_20d_pctile", "ascending": false, "weight": 1.0},
+        {"column": "edge_score", "ascending": false, "weight": 0.9},
+        {"column": "distance_ma20", "ascending": true, "weight": 0.4}
+      ],
+      "risk": {
+        "stop_loss": 0.07,
+        "take_profit": 0.24,
+        "max_holding_bars": 32,
+        "initial_atr_stop_mult": 2.0,
+        "trailing_atr_mult": 2.5,
+        "trailing_profit_activation": 0.08,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "stoch_oversold_smt_v1",
+      "description": "Stochastic cross from oversold (<30) with SMT support and regime confirmation. Mean-reversion entry in uptrending names.",
+      "universe": "VN100",
+      "tags": ["mean_reversion", "oversold", "stochastic", "smart_money_trace"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 48},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "stoch_oversold_cross", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "ma50_slope_10", "op": ">=", "value": -0.02},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 54},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "DS20", "op": "<=", "value": 0.60},
+        {"column": "CHDM50", "op": ">=", "value": 40}
+      ],
+      "rank": [
+        {"column": "smart_money_score_no_sector", "ascending": false, "weight": 1.2},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 1.0},
+        {"column": "pullback_quality_score", "ascending": false, "weight": 0.9},
+        {"column": "CHDM50", "ascending": false, "weight": 0.6}
+      ],
+      "risk": {
+        "stop_loss": 0.07,
+        "take_profit": 0.20,
+        "max_holding_bars": 28,
+        "initial_atr_stop_mult": 2.0,
+        "trailing_atr_mult": 2.5,
+        "trailing_profit_activation": 0.08,
+        "use_regime_exposure": true,
+        "setup_type": "STOCH_OVERSOLD_BOUNCE"
+      }
+    },
+    {
+      "name": "psar_trend_rider_v1",
+      "description": "Parabolic SAR just flipped bullish with price above MA50 and healthy SMT. Trend-following entry at trend initiation.",
+      "universe": "VN100",
+      "tags": ["trend", "continuation", "psar", "smart_money_trace"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "psar_flip_bull", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "distance_ma20", "op": "between", "value": [-0.02, 0.10]},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 55},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.52},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "DS20", "op": "<=", "value": 0.58}
+      ],
+      "rank": [
+        {"column": "edge_score_no_sector", "ascending": false, "weight": 1.2},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 1.0},
+        {"column": "smart_money_score_no_sector", "ascending": false, "weight": 0.9}
+      ],
+      "risk": {
+        "stop_loss": 0.08,
+        "take_profit": 0.26,
+        "max_holding_bars": 40,
+        "initial_atr_stop_mult": 2.2,
+        "trailing_atr_mult": 2.8,
+        "trailing_profit_activation": 0.10,
+        "use_regime_exposure": true,
+        "setup_type": "PSAR_FLIP"
+      }
+    },
+    {
+      "name": "morning_star_reversal_v1",
+      "description": "Morning star 3-candle reversal pattern at MA support with SMT not deteriorating. Short-term reversal in quality names.",
+      "universe": "VN100",
+      "tags": ["reversal", "candlestick", "morning_star", "smart_money_trace"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 45},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "morning_star", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "distance_ma20", "op": "between", "value": [-0.06, 0.04]},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 52},
+        {"column": "smart_money_score_no_sector_delta", "op": ">=", "value": -2},
+        {"column": "distribution_days_10", "op": "<=", "value": 2},
+        {"column": "DS20", "op": "not_up"}
+      ],
+      "rank": [
+        {"column": "pullback_quality_score", "ascending": false, "weight": 1.3},
+        {"column": "smart_money_score_no_sector", "ascending": false, "weight": 1.0},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.8}
+      ],
+      "risk": {
+        "stop_loss": 0.07,
+        "take_profit": 0.20,
+        "max_holding_bars": 25,
+        "initial_atr_stop_mult": 2.0,
+        "trailing_atr_mult": 2.5,
+        "trailing_profit_activation": 0.08,
+        "use_regime_exposure": true,
+        "setup_type": "MORNING_STAR"
+      }
+    },
+    {
+      "name": "three_white_soldiers_v1",
+      "description": "Three white soldiers continuation: 3 consecutive strong bullish candles with value expansion and SMT momentum.",
+      "universe": "VN100",
+      "tags": ["continuation", "candlestick", "three_white_soldiers", "smart_money_trace"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 52},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "three_white_soldiers", "op": "==", "value": true},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "distance_ma20", "op": "between", "value": [0.0, 0.12]},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.10},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 56},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "DS20", "op": "<=", "value": 0.55}
+      ],
+      "rank": [
+        {"column": "value_ratio_20", "ascending": false, "weight": 1.2},
+        {"column": "smart_money_score_no_sector", "ascending": false, "weight": 1.0},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.9},
+        {"column": "edge_score_no_sector", "ascending": false, "weight": 0.8}
+      ],
+      "risk": {
+        "stop_loss": 0.08,
+        "take_profit": 0.28,
+        "max_holding_bars": 35,
+        "initial_atr_stop_mult": 2.2,
+        "trailing_atr_mult": 2.8,
+        "trailing_profit_activation": 0.10,
+        "use_regime_exposure": true,
+        "setup_type": "THREE_WHITE_SOLDIERS"
+      }
+    },
+    {
+      "name": "cci_momentum_v1",
+      "description": "CCI crosses above +100 (trend breakout signal) while price above MA20/MA50 with SMT confirmation.",
+      "universe": "VN100",
+      "tags": ["momentum", "breakout", "cci", "smart_money_trace"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "cci_momentum", "op": "==", "value": true},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "distance_ma20", "op": "between", "value": [0.0, 0.10]},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 56},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.05},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "CHDM50", "op": ">=", "value": 42}
+      ],
+      "rank": [
+        {"column": "edge_score_no_sector", "ascending": false, "weight": 1.2},
+        {"column": "value_ratio_20", "ascending": false, "weight": 1.0},
+        {"column": "smart_money_score_no_sector", "ascending": false, "weight": 0.9}
+      ],
+      "risk": {
+        "stop_loss": 0.08,
+        "take_profit": 0.26,
+        "max_holding_bars": 38,
+        "initial_atr_stop_mult": 2.2,
+        "trailing_atr_mult": 2.8,
+        "trailing_profit_activation": 0.10,
+        "use_regime_exposure": true,
+        "setup_type": "CCI_MOMENTUM"
+      }
+    },
+    {
+      "name": "vol_climax_reversal_v1",
+      "description": "Volume exhaustion climax (>2.5x avg) with bullish reversal candle (lower wick, high close location). Capitulation bottom.",
+      "universe": "VN100",
+      "tags": ["reversal", "volume", "climax", "smart_money_trace"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "vol_climax_reversal", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "distance_ma20", "op": "between", "value": [-0.10, 0.05]},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 50},
+        {"column": "smart_money_score_no_sector_delta", "op": ">=", "value": -3},
+        {"column": "distribution_days_10", "op": "<=", "value": 2},
+        {"column": "DS20", "op": "<=", "value": 0.65}
+      ],
+      "rank": [
+        {"column": "smart_money_score_no_sector", "ascending": false, "weight": 1.2},
+        {"column": "pullback_quality_score", "ascending": false, "weight": 1.0},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.8},
+        {"column": "CHDM50", "ascending": false, "weight": 0.6}
+      ],
+      "risk": {
+        "stop_loss": 0.07,
+        "take_profit": 0.20,
+        "max_holding_bars": 25,
+        "initial_atr_stop_mult": 2.0,
+        "trailing_atr_mult": 2.5,
+        "trailing_profit_activation": 0.08,
+        "use_regime_exposure": true,
+        "setup_type": "VOL_CLIMAX_REVERSAL"
+      }
+    },
+    {
+      "name": "triple_ma_pullback_v1",
+      "description": "Strong uptrend (MA20>MA50>MA200) with controlled pullback to MA20 zone. High-quality trend continuation in best names.",
+      "universe": "VN100",
+      "tags": ["trend", "pullback", "triple_ma", "smart_money_trace"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "triple_ma_pullback", "op": "==", "value": true},
+        {"column": "ma50_slope_10", "op": ">=", "value": 0.0},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 58},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.55},
+        {"column": "value_ratio_20", "op": ">=", "value": 0.90},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "DS20", "op": "<=", "value": 0.55},
+        {"column": "CHDM50", "op": ">=", "value": 45}
+      ],
+      "rank": [
+        {"column": "edge_score_no_sector", "ascending": false, "weight": 1.3},
+        {"column": "smart_money_score_no_sector", "ascending": false, "weight": 1.0},
+        {"column": "pullback_quality_score", "ascending": false, "weight": 1.0},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.8}
+      ],
+      "risk": {
+        "stop_loss": 0.08,
+        "take_profit": 0.28,
+        "max_holding_bars": 45,
+        "initial_atr_stop_mult": 2.3,
+        "trailing_atr_mult": 3.0,
+        "trailing_profit_activation": 0.12,
+        "use_regime_exposure": true,
+        "setup_type": "TRIPLE_MA_PULLBACK"
+      }
+    },
+    {
+      "name": "volatility_squeeze_break_v1",
+      "description": "ATR compression (squeeze) followed by volatility expansion with price above MA20. Signals impending directional move.",
+      "universe": "VN100",
+      "tags": ["volatility", "breakout", "compression", "smart_money_trace"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "volatility_squeeze_break", "op": "==", "value": true},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 56},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.05},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "DS20", "op": "<=", "value": 0.55}
+      ],
+      "rank": [
+        {"column": "atr_ratio", "ascending": false, "weight": 1.2},
+        {"column": "value_ratio_20", "ascending": false, "weight": 1.0},
+        {"column": "smart_money_score_no_sector", "ascending": false, "weight": 0.9},
+        {"column": "edge_score_no_sector", "ascending": false, "weight": 0.8}
+      ],
+      "risk": {
+        "stop_loss": 0.08,
+        "take_profit": 0.28,
+        "max_holding_bars": 35,
+        "initial_atr_stop_mult": 2.2,
+        "trailing_atr_mult": 2.8,
+        "trailing_profit_activation": 0.10,
+        "use_regime_exposure": true,
+        "setup_type": "VOLATILITY_SQUEEZE_BREAK"
+      }
+    },
+    {
+      "name": "kalman_trend_momentum_v1",
+      "description": "Kalman-filtered strong uptrend (slope >= 1.5%/5d) with price near fair value and high filter confidence.",
+      "universe": "VN100",
+      "tags": ["trend", "momentum", "kalman", "smart_money_trace"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 52},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "kalman_strong_uptrend", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 56},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.55},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.00},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "DS20", "op": "<=", "value": 0.55},
+        {"column": "CHDM50", "op": ">=", "value": 42}
+      ],
+      "rank": [
+        {"column": "kalman_trend_5d", "ascending": false, "weight": 1.3},
+        {"column": "kalman_confidence", "ascending": false, "weight": 1.0},
+        {"column": "smart_money_score_no_sector", "ascending": false, "weight": 0.9},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.8}
+      ],
+      "risk": {
+        "stop_loss": 0.08,
+        "take_profit": 0.28,
+        "max_holding_bars": 40,
+        "initial_atr_stop_mult": 2.2,
+        "trailing_atr_mult": 2.8,
+        "trailing_profit_activation": 0.10,
+        "use_regime_exposure": true,
+        "setup_type": "KALMAN_TREND"
+      }
+    },
+    {
+      "name": "neutral_range_bounce_v1",
+      "description": "NEUTRAL regime: oversold RSI + near MA50 support + SMT not deteriorating. Works in sideways/range market.",
+      "universe": "VN100",
+      "tags": ["mean_reversion", "neutral_regime", "oversold", "range", "smart_money_trace"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "in", "value": ["NEUTRAL", "RISK_ON"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 42},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "distance_ma50", "op": "between", "value": [-0.05, 0.03]},
+        {"column": "rsi14", "op": "between", "value": [32, 52]},
+        {"column": "rsi_recovering", "op": "==", "value": true},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 52},
+        {"column": "smart_money_score_no_sector_delta", "op": ">=", "value": -3},
+        {"column": "distribution_days_10", "op": "<=", "value": 2},
+        {"column": "DS20", "op": "not_up"}
+      ],
+      "rank": [
+        {"column": "pullback_quality_score", "ascending": false, "weight": 1.3},
+        {"column": "smart_money_score_no_sector", "ascending": false, "weight": 1.0},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.8},
+        {"column": "distance_ma50", "ascending": true, "weight": 0.5}
+      ],
+      "risk": {
+        "stop_loss": 0.06,
+        "take_profit": 0.15,
+        "max_holding_bars": 20,
+        "initial_atr_stop_mult": 1.8,
+        "trailing_atr_mult": 2.3,
+        "trailing_profit_activation": 0.07,
+        "use_regime_exposure": true,
+        "setup_type": "NEUTRAL_RANGE_BOUNCE"
+      }
+    },
+    {
+      "name": "any_regime_stoch_reclaim_v1",
+      "description": "All-regime: Stochastic cross from oversold + MA20 reclaim + RS not weak. Adapts to any market condition.",
+      "universe": "VN100",
+      "tags": ["mean_reversion", "all_regime", "stochastic", "reclaim", "smart_money_trace"],
+      "filters": [
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "stoch_oversold_cross", "op": "==", "value": true},
+        {"column": "reclaim_ma20", "op": "==", "value": true},
+        {"column": "close_location", "op": ">=", "value": 0.55},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 50},
+        {"column": "smart_money_score_no_sector_delta", "op": ">=", "value": -4},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.40},
+        {"column": "distribution_days_10", "op": "<=", "value": 2},
+        {"column": "DS20", "op": "<=", "value": 0.65},
+        {"column": "mkt_regime_score", "op": ">=", "value": 38}
+      ],
+      "rank": [
+        {"column": "smart_money_score_no_sector", "ascending": false, "weight": 1.2},
+        {"column": "pullback_quality_score", "ascending": false, "weight": 1.0},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.9}
+      ],
+      "risk": {
+        "stop_loss": 0.06,
+        "take_profit": 0.16,
+        "max_holding_bars": 18,
+        "initial_atr_stop_mult": 1.8,
+        "trailing_atr_mult": 2.2,
+        "trailing_profit_activation": 0.07,
+        "use_regime_exposure": false,
+        "setup_type": "STOCH_RECLAIM"
+      }
+    },
+    {
+      "name": "risk_on_loose_breakout_v1",
+      "description": "RISK_ON: Looser breakout (20-day only) + above MA20/MA50 + decent SMT. Higher frequency trend-following.",
+      "universe": "VN100",
+      "tags": ["breakout", "risk_on", "trend", "smart_money_trace", "high_frequency"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "in", "value": ["RISK_ON"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 55},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "breakout_20", "op": "==", "value": true},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "distance_ma20", "op": "between", "value": [0.0, 0.10]},
+        {"column": "close_location", "op": ">=", "value": 0.65},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.05},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 54},
+        {"column": "distribution_days_10", "op": "<=", "value": 1}
+      ],
+      "rank": [
+        {"column": "value_ratio_20", "ascending": false, "weight": 1.2},
+        {"column": "smart_money_score_no_sector", "ascending": false, "weight": 1.0},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.9},
+        {"column": "edge_score_no_sector", "ascending": false, "weight": 0.8}
+      ],
+      "risk": {
+        "stop_loss": 0.07,
+        "take_profit": 0.22,
+        "max_holding_bars": 30,
+        "initial_atr_stop_mult": 2.0,
+        "trailing_atr_mult": 2.5,
+        "trailing_profit_activation": 0.09,
+        "use_regime_exposure": true,
+        "setup_type": "LOOSE_BREAKOUT"
+      }
+    },
+    {
+      "name": "any_regime_volume_reclaim_v1",
+      "description": "All-regime: Volume climax reversal + MA50 still intact + SMT not deteriorating. Catches capitulation bounces.",
+      "universe": "VN100",
+      "tags": ["reversal", "all_regime", "volume", "climax", "smart_money_trace"],
+      "filters": [
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "vol_climax_reversal", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "distance_ma20", "op": "between", "value": [-0.08, 0.04]},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 48},
+        {"column": "smart_money_score_no_sector_delta", "op": ">=", "value": -5},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.38},
+        {"column": "distribution_days_10", "op": "<=", "value": 3},
+        {"column": "mkt_regime_score", "op": ">=", "value": 36}
+      ],
+      "rank": [
+        {"column": "smart_money_score_no_sector", "ascending": false, "weight": 1.1},
+        {"column": "pullback_quality_score", "ascending": false, "weight": 1.0},
+        {"column": "value_ratio_20", "ascending": false, "weight": 0.8}
+      ],
+      "risk": {
+        "stop_loss": 0.06,
+        "take_profit": 0.15,
+        "max_holding_bars": 18,
+        "initial_atr_stop_mult": 1.8,
+        "trailing_atr_mult": 2.2,
+        "trailing_profit_activation": 0.07,
+        "use_regime_exposure": false,
+        "setup_type": "VOL_CLIMAX_BOUNCE"
+      }
+    },
+    {
+      "name": "any_regime_ma20_spring_v1",
+      "description": "All-regime: Spring at MA20 zone (price swept below then recovered) + high close location + SMT. Frequent intra-trend entry.",
+      "universe": "VN100",
+      "tags": ["reversal", "spring", "all_regime", "ma20", "smart_money_trace"],
+      "filters": [
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "spring_20", "op": "==", "value": true},
+        {"column": "close_location", "op": ">=", "value": 0.65},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "ma50_slope_10", "op": ">=", "value": -0.03},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 50},
+        {"column": "smart_money_score_no_sector_delta", "op": ">=", "value": -4},
+        {"column": "distribution_days_10", "op": "<=", "value": 2},
+        {"column": "DS20", "op": "<=", "value": 0.65},
+        {"column": "mkt_regime_score", "op": ">=", "value": 38}
+      ],
+      "rank": [
+        {"column": "pullback_quality_score", "ascending": false, "weight": 1.2},
+        {"column": "smart_money_score_no_sector", "ascending": false, "weight": 1.0},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.8},
+        {"column": "close_location", "ascending": false, "weight": 0.6}
+      ],
+      "risk": {
+        "stop_loss": 0.06,
+        "take_profit": 0.17,
+        "max_holding_bars": 20,
+        "initial_atr_stop_mult": 1.9,
+        "trailing_atr_mult": 2.3,
+        "trailing_profit_activation": 0.07,
+        "use_regime_exposure": false,
+        "setup_type": "MA20_SPRING"
       }
     }
   ]

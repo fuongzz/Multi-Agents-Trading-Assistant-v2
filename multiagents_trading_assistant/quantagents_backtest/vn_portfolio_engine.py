@@ -67,11 +67,12 @@ def backtest_vn_portfolio(
     strategies: list[Strategy],
     market_regime: pd.Series | None = None,
     config: VNPortfolioConfig | None = None,
+    strategy_map: dict[str, list[Strategy]] | None = None,
 ) -> dict:
     """Backtest top strategies as one VN portfolio with shared capital."""
 
     cfg = config or VNPortfolioConfig()
-    prepared = _prepare_universe(universe_data, strategies, market_regime)
+    prepared = _prepare_universe(universe_data, strategies, market_regime, strategy_map=strategy_map)
     if not prepared:
         raise ValueError("No usable OHLCV data for portfolio backtest")
 
@@ -185,14 +186,16 @@ def _prepare_universe(
     universe_data: dict[str, pd.DataFrame],
     strategies: list[Strategy],
     market_regime: pd.Series | None,
+    strategy_map: dict[str, list[Strategy]] | None = None,
 ) -> dict[str, pd.DataFrame]:
     prepared = {}
     for symbol, raw in universe_data.items():
         if raw.empty:
             continue
         frame = add_indicators(raw)
+        symbol_strategies = strategy_map.get(symbol, strategies) if strategy_map is not None else strategies
         signals = []
-        for strategy in strategies:
+        for strategy in symbol_strategies:
             signal = evaluate_strategy_signal(frame, strategy)
             signal = _apply_vn_strategy_filter(frame, signal, strategy, market_regime)
             signals.append(signal.rename(strategy.strategy_id))

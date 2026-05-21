@@ -46,13 +46,22 @@ Hãy quyết đoán. Viết bằng tiếng Việt."""
 
 
 def _context(state: dict) -> str:
-    return (
+    agentic = state.get("agentic_context", "")
+    ctx = (
         f"Mã: {state['company_of_interest']} | Ngày: {state['trade_date']}\n\n"
         f"## Báo cáo Kỹ thuật\n{state.get('market_report', 'Chưa có')}\n\n"
         f"## Báo cáo Cơ bản\n{state.get('fundamentals_report', 'Chưa có')}\n\n"
         f"## Báo cáo Tin tức/Sentiment\n{state.get('sentiment_report', 'Chưa có')}\n\n"
         f"## Báo cáo Dòng tiền NĐTNN\n{state.get('flow_report', 'Chưa có')}\n"
     )
+    if agentic:
+        ctx += (
+            "\n\n## StrategySignal đã freeze\n"
+            "Đây là signal định lượng gốc. Không được thay strategy. "
+            "Chỉ phản biện approve/reject/watch/adjust execution.\n"
+            f"{agentic}\n"
+        )
+    return ctx
 
 
 def create_bull_researcher(llm):

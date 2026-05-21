@@ -1,0 +1,1486 @@
+{
+  "generation": 29,
+  "hypotheses": [
+    {
+      "name": "evo_8283635",
+      "description": "Evolved from evo_1022618",
+      "universe": "VN30",
+      "tags": [
+        "rotation",
+        "monthly",
+        "smart_money_trace",
+        "money_cycle",
+        "relative_strength",
+        "evolved"
+      ],
+      "filters": [
+        {
+          "column": "mkt_regime_state",
+          "op": "not_in",
+          "value": [
+            "RISK_OFF"
+          ]
+        },
+        {
+          "column": "mkt_regime_score",
+          "op": ">=",
+          "value": 50
+        },
+        {
+          "column": "excess_ret_20d_pctile",
+          "op": ">=",
+          "value": 0.58
+        },
+        {
+          "column": "sector_rs_rank_20d",
+          "op": ">=",
+          "value": 0.8
+        },
+        {
+          "column": "sector_breadth_ma20",
+          "op": ">=",
+          "value": 0.48
+        },
+        {
+          "column": "reclaim_ma20",
+          "op": "==",
+          "value": true
+        }
+      ],
+      "rank": [
+        {
+          "column": "edge_score",
+          "ascending": false,
+          "weight": 2.0
+        },
+        {
+          "column": "smart_money_score",
+          "ascending": false,
+          "weight": 1.0
+        },
+        {
+          "column": "rs_percentile_20",
+          "ascending": false,
+          "weight": 1.0
+        },
+        {
+          "column": "CHDM50",
+          "ascending": false,
+          "weight": 0.6
+        }
+      ],
+      "risk": {
+        "stop_loss": 0.084,
+        "take_profit": 0.264,
+        "max_holding_bars": 26,
+        "entry_every_n_bars": 20,
+        "initial_atr_stop_mult": 2.33,
+        "use_regime_exposure": true,
+        "trailing_atr_mult": 1.517,
+        "trailing_profit_activation": 0.049
+      },
+      "_fitness": 1.5920622118296555,
+      "_n_filters": 6,
+      "_n_trades": 176,
+      "_win_rate": 0.608,
+      "_mean_pnl": 3.775,
+      "_profit_factor": 2.41,
+      "_rr": 1.53,
+      "_sharpe": 1.15
+    },
+    {
+      "name": "evo_6557698",
+      "description": "Evolved from evo_3384178",
+      "universe": "VN30",
+      "tags": [
+        "rotation",
+        "monthly",
+        "smart_money_trace",
+        "money_cycle",
+        "relative_strength",
+        "evolved"
+      ],
+      "filters": [
+        {
+          "column": "mkt_regime_state",
+          "op": "not_in",
+          "value": [
+            "RISK_OFF"
+          ]
+        },
+        {
+          "column": "mkt_regime_score",
+          "op": ">=",
+          "value": 52.567
+        },
+        {
+          "column": "distance_ma20",
+          "op": "between",
+          "value": [
+            -0.045,
+            0.035
+          ]
+        },
+        {
+          "column": "reclaim_ma20_after_pullback",
+          "op": "==",
+          "value": true
+        },
+        {
+          "column": "value_flow_quality_score",
+          "op": ">=",
+          "value": 55
+        },
+        {
+          "column": "smart_money_score",
+          "op": ">=",
+          "value": 67.201
+        }
+      ],
+      "rank": [
+        {
+          "column": "edge_score",
+          "ascending": false,
+          "weight": 2.0
+        },
+        {
+          "column": "smart_money_score",
+          "ascending": false,
+          "weight": 1.0
+        },
+        {
+          "column": "rs_percentile_20",
+          "ascending": false,
+          "weight": 1.0
+        },
+        {
+          "column": "CHDM50",
+          "ascending": false,
+          "weight": 0.6
+        }
+      ],
+      "risk": {
+        "stop_loss": 0.079,
+        "take_profit": 0.256,
+        "max_holding_bars": 29,
+        "entry_every_n_bars": 20,
+        "initial_atr_stop_mult": 2.239,
+        "use_regime_exposure": true,
+        "trailing_atr_mult": 1.797,
+        "trailing_profit_activation": 0.058
+      },
+      "_fitness": 1.2147486169459185,
+      "_n_filters": 6,
+      "_n_trades": 202,
+      "_win_rate": 0.559,
+      "_mean_pnl": 2.573,
+      "_profit_factor": 2.115,
+      "_rr": 1.67,
+      "_sharpe": 0.924
+    },
+    {
+      "name": "evo_2779127",
+      "description": "Evolved from evo_3371945",
+      "universe": "VN100",
+      "tags": [
+        "mean_reversion",
+        "benchmark_relative",
+        "sector_leadership",
+        "ma20",
+        "smart_money_trace",
+        "evolved"
+      ],
+      "filters": [
+        {
+          "column": "mkt_regime_state",
+          "op": "in",
+          "value": [
+            "RISK_ON",
+            "NEUTRAL"
+          ]
+        },
+        {
+          "column": "mkt_regime_score",
+          "op": ">=",
+          "value": 50.548
+        },
+        {
+          "column": "mkt_DS20",
+          "op": "<=",
+          "value": 0.5
+        },
+        {
+          "column": "reclaim_ma20_after_pullback",
+          "op": "==",
+          "value": true
+        },
+        {
+          "column": "excess_ret_20d_pctile",
+          "op": ">=",
+          "value": 0.58
+        },
+        {
+          "column": "sector_rs_rank_20d",
+          "op": ">=",
+          "value": 0.6466
+        }
+      ],
+      "rank": [
+        {
+          "column": "sector_leadership_score",
+          "ascending": false,
+          "weight": 1.3
+        },
+        {
+          "column": "pullback_quality_score",
+          "ascending": false,
+          "weight": 1.1
+        },
+        {
+          "column": "excess_ret_20d_pctile",
+          "ascending": false,
+          "weight": 1.0
+        },
+        {
+          "column": "edge_score",
+          "ascending": false,
+          "weight": 0.9
+        },
+        {
+          "column": "distance_ma20",
+          "ascending": true,
+          "weight": 0.4
+        }
+      ],
+      "risk": {
+        "stop_loss": 0.071,
+        "take_profit": 0.249,
+        "max_holding_bars": 30,
+        "initial_atr_stop_mult": 2.143,
+        "trailing_atr_mult": 2.13,
+        "trailing_profit_activation": 0.068,
+        "use_regime_exposure": true
+      },
+      "_fitness": 1.1726814194799677,
+      "_n_filters": 6,
+      "_n_trades": 270,
+      "_win_rate": 0.581,
+      "_mean_pnl": 2.765,
+      "_profit_factor": 1.985,
+      "_rr": 1.42,
+      "_sharpe": 0.871
+    },
+    {
+      "name": "evo_5532919",
+      "description": "Evolved from evo_4971833",
+      "universe": "VN30",
+      "tags": [
+        "rotation",
+        "monthly",
+        "smart_money_trace",
+        "money_cycle",
+        "relative_strength",
+        "evolved"
+      ],
+      "filters": [
+        {
+          "column": "mkt_regime_state",
+          "op": "not_in",
+          "value": [
+            "RISK_OFF"
+          ]
+        },
+        {
+          "column": "mkt_regime_score",
+          "op": ">=",
+          "value": 48.243
+        },
+        {
+          "column": "excess_ret_20d_pctile",
+          "op": ">=",
+          "value": 0.58
+        },
+        {
+          "column": "reclaim_ma20_after_pullback",
+          "op": "==",
+          "value": true
+        },
+        {
+          "column": "value_flow_quality_score",
+          "op": ">=",
+          "value": 55
+        },
+        {
+          "column": "ma50_slope_10",
+          "op": ">=",
+          "value": -0.0176
+        },
+        {
+          "column": "close_location",
+          "op": ">=",
+          "value": 0.65
+        }
+      ],
+      "rank": [
+        {
+          "column": "edge_score",
+          "ascending": false,
+          "weight": 2.0
+        },
+        {
+          "column": "smart_money_score",
+          "ascending": false,
+          "weight": 1.0
+        },
+        {
+          "column": "rs_percentile_20",
+          "ascending": false,
+          "weight": 1.0
+        },
+        {
+          "column": "CHDM50",
+          "ascending": false,
+          "weight": 0.6
+        }
+      ],
+      "risk": {
+        "stop_loss": 0.083,
+        "take_profit": 0.262,
+        "max_holding_bars": 27,
+        "entry_every_n_bars": 20,
+        "initial_atr_stop_mult": 2.299,
+        "use_regime_exposure": true,
+        "trailing_atr_mult": 1.562,
+        "trailing_profit_activation": 0.051
+      },
+      "_fitness": 1.021351521359711,
+      "_n_filters": 7,
+      "_n_trades": 165,
+      "_win_rate": 0.552,
+      "_mean_pnl": 2.645,
+      "_profit_factor": 1.956,
+      "_rr": 1.57,
+      "_sharpe": 0.858
+    },
+    {
+      "name": "evo_8009197",
+      "description": "Evolved from evo_3246797",
+      "universe": "VN100",
+      "tags": [
+        "mean_reversion",
+        "benchmark_relative",
+        "sector_leadership",
+        "ma20",
+        "smart_money_trace",
+        "evolved"
+      ],
+      "filters": [
+        {
+          "column": "mkt_regime_state",
+          "op": "in",
+          "value": [
+            "RISK_ON",
+            "NEUTRAL"
+          ]
+        },
+        {
+          "column": "mkt_regime_score",
+          "op": ">=",
+          "value": 50.548
+        },
+        {
+          "column": "pullback_depth_20",
+          "op": "between",
+          "value": [
+            -0.12,
+            -0.04
+          ]
+        },
+        {
+          "column": "distance_ma50",
+          "op": "between",
+          "value": [
+            -0.12,
+            0.05
+          ]
+        },
+        {
+          "column": "close_location",
+          "op": ">=",
+          "value": 0.55
+        },
+        {
+          "column": "smart_money_score",
+          "op": ">=",
+          "value": 61.407
+        }
+      ],
+      "rank": [
+        {
+          "column": "sector_leadership_score",
+          "ascending": false,
+          "weight": 1.3
+        },
+        {
+          "column": "pullback_quality_score",
+          "ascending": false,
+          "weight": 1.1
+        },
+        {
+          "column": "excess_ret_20d_pctile",
+          "ascending": false,
+          "weight": 1.0
+        },
+        {
+          "column": "edge_score",
+          "ascending": false,
+          "weight": 0.9
+        },
+        {
+          "column": "distance_ma20",
+          "ascending": true,
+          "weight": 0.4
+        }
+      ],
+      "risk": {
+        "stop_loss": 0.076,
+        "take_profit": 0.255,
+        "max_holding_bars": 30,
+        "initial_atr_stop_mult": 2.215,
+        "trailing_atr_mult": 1.927,
+        "trailing_profit_activation": 0.061,
+        "use_regime_exposure": true
+      },
+      "_fitness": 0.8896915225557754,
+      "_n_filters": 6,
+      "_n_trades": 629,
+      "_win_rate": 0.569,
+      "_mean_pnl": 1.927,
+      "_profit_factor": 1.713,
+      "_rr": 1.27,
+      "_sharpe": 0.67
+    },
+    {
+      "name": "evo_5659044",
+      "description": "Evolved from evo_3483548",
+      "universe": "VN100",
+      "tags": [
+        "mean_reversion",
+        "benchmark_relative",
+        "sector_leadership",
+        "ma20",
+        "smart_money_trace",
+        "evolved"
+      ],
+      "filters": [
+        {
+          "column": "mkt_regime_state",
+          "op": "in",
+          "value": [
+            "RISK_ON",
+            "NEUTRAL"
+          ]
+        },
+        {
+          "column": "mkt_regime_score",
+          "op": ">=",
+          "value": 50.548
+        },
+        {
+          "column": "distance_ma20",
+          "op": "between",
+          "value": [
+            -0.045,
+            0.035
+          ]
+        },
+        {
+          "column": "excess_ret_20d_pctile",
+          "op": ">=",
+          "value": 0.58
+        },
+        {
+          "column": "sector_rs_rank_20d",
+          "op": ">=",
+          "value": 0.5596
+        },
+        {
+          "column": "distribution_days_10",
+          "op": "<=",
+          "value": 1
+        },
+        {
+          "column": "reclaim_ma20",
+          "op": "==",
+          "value": true
+        }
+      ],
+      "rank": [
+        {
+          "column": "sector_leadership_score",
+          "ascending": false,
+          "weight": 1.3
+        },
+        {
+          "column": "pullback_quality_score",
+          "ascending": false,
+          "weight": 1.1
+        },
+        {
+          "column": "excess_ret_20d_pctile",
+          "ascending": false,
+          "weight": 1.0
+        },
+        {
+          "column": "edge_score",
+          "ascending": false,
+          "weight": 0.9
+        },
+        {
+          "column": "distance_ma20",
+          "ascending": true,
+          "weight": 0.4
+        }
+      ],
+      "risk": {
+        "stop_loss": 0.077,
+        "take_profit": 0.257,
+        "max_holding_bars": 28,
+        "initial_atr_stop_mult": 2.237,
+        "trailing_atr_mult": 1.794,
+        "trailing_profit_activation": 0.058,
+        "use_regime_exposure": true
+      },
+      "_fitness": 1.1173557971702412,
+      "_n_filters": 7,
+      "_n_trades": 227,
+      "_win_rate": 0.581,
+      "_mean_pnl": 2.774,
+      "_profit_factor": 2.028,
+      "_rr": 1.44,
+      "_sharpe": 0.909
+    },
+    {
+      "name": "evo_0172897",
+      "description": "Evolved from evo_4941099",
+      "universe": "VN30",
+      "tags": [
+        "rotation",
+        "monthly",
+        "smart_money_trace",
+        "money_cycle",
+        "relative_strength",
+        "evolved"
+      ],
+      "filters": [
+        {
+          "column": "mkt_regime_state",
+          "op": "not_in",
+          "value": [
+            "RISK_OFF"
+          ]
+        },
+        {
+          "column": "mkt_regime_score",
+          "op": ">=",
+          "value": 50
+        },
+        {
+          "column": "reclaim_ma20_after_pullback",
+          "op": "==",
+          "value": true
+        },
+        {
+          "column": "pullback_depth_20",
+          "op": "between",
+          "value": [
+            -0.1,
+            -0.025
+          ]
+        },
+        {
+          "column": "value_flow_quality_score",
+          "op": ">=",
+          "value": 55
+        },
+        {
+          "column": "sector_rs_rank_20d",
+          "op": ">=",
+          "value": 0.58
+        },
+        {
+          "column": "sector_breadth_ma20",
+          "op": ">=",
+          "value": 0.48
+        }
+      ],
+      "rank": [
+        {
+          "column": "edge_score",
+          "ascending": false,
+          "weight": 2.0
+        },
+        {
+          "column": "smart_money_score",
+          "ascending": false,
+          "weight": 1.0
+        },
+        {
+          "column": "rs_percentile_20",
+          "ascending": false,
+          "weight": 1.0
+        },
+        {
+          "column": "CHDM50",
+          "ascending": false,
+          "weight": 0.6
+        }
+      ],
+      "risk": {
+        "stop_loss": 0.081,
+        "take_profit": 0.253,
+        "max_holding_bars": 28,
+        "entry_every_n_bars": 20,
+        "initial_atr_stop_mult": 2.242,
+        "use_regime_exposure": true,
+        "trailing_atr_mult": 1.817,
+        "trailing_profit_activation": 0.059
+      },
+      "_fitness": 0.827816372807345,
+      "_n_filters": 7,
+      "_n_trades": 223,
+      "_win_rate": 0.565,
+      "_mean_pnl": 2.073,
+      "_profit_factor": 1.683,
+      "_rr": 1.3,
+      "_sharpe": 0.685
+    },
+    {
+      "name": "evo_2753863",
+      "description": "Evolved from bare_sector_leader_pullback_v1",
+      "universe": "VN100",
+      "tags": [
+        "mean_reversion",
+        "benchmark_relative",
+        "sector_leadership",
+        "ma20",
+        "smart_money_trace",
+        "evolved"
+      ],
+      "filters": [
+        {
+          "column": "mkt_regime_state",
+          "op": "in",
+          "value": [
+            "RISK_ON",
+            "NEUTRAL"
+          ]
+        },
+        {
+          "column": "mkt_regime_score",
+          "op": ">=",
+          "value": 50.548
+        },
+        {
+          "column": "distance_ma20",
+          "op": "between",
+          "value": [
+            -0.045,
+            0.035
+          ]
+        },
+        {
+          "column": "ma50_slope_10",
+          "op": ">=",
+          "value": -0.015
+        },
+        {
+          "column": "pullback_quality_score",
+          "op": ">=",
+          "value": 55
+        },
+        {
+          "column": "smart_money_score",
+          "op": ">=",
+          "value": 56
+        },
+        {
+          "column": "smart_money_score_delta",
+          "op": ">=",
+          "value": -1
+        },
+        {
+          "column": "excess_ret_20d_pctile",
+          "op": ">=",
+          "value": 0.58
+        },
+        {
+          "column": "sector_rs_rank_20d",
+          "op": ">=",
+          "value": 0.58
+        },
+        {
+          "column": "sector_breadth_ma20",
+          "op": ">=",
+          "value": 0.48
+        },
+        {
+          "column": "distribution_days_10",
+          "op": "<=",
+          "value": 1
+        },
+        {
+          "column": "DS20",
+          "op": "not_up"
+        }
+      ],
+      "rank": [
+        {
+          "column": "sector_leadership_score",
+          "ascending": false,
+          "weight": 1.3
+        },
+        {
+          "column": "pullback_quality_score",
+          "ascending": false,
+          "weight": 1.1
+        },
+        {
+          "column": "excess_ret_20d_pctile",
+          "ascending": false,
+          "weight": 1.0
+        },
+        {
+          "column": "edge_score",
+          "ascending": false,
+          "weight": 0.9
+        },
+        {
+          "column": "distance_ma20",
+          "ascending": true,
+          "weight": 0.4
+        }
+      ],
+      "risk": {
+        "stop_loss": 0.07,
+        "take_profit": 0.24,
+        "max_holding_bars": 32,
+        "initial_atr_stop_mult": 2.0,
+        "trailing_atr_mult": 2.5,
+        "trailing_profit_activation": 0.08,
+        "use_regime_exposure": true
+      },
+      "_fitness": 0.43548522359271175,
+      "_n_filters": 12,
+      "_n_trades": 1238,
+      "_win_rate": 0.556,
+      "_mean_pnl": 1.788,
+      "_profit_factor": 1.701,
+      "_rr": 1.34,
+      "_sharpe": 0.695
+    },
+    {
+      "name": "evo_0414135",
+      "description": "Evolved from bare_pullback_deep_quality_v2",
+      "universe": "VN100",
+      "tags": [
+        "mean_reversion",
+        "deep_pullback",
+        "smart_money_trace",
+        "money_cycle",
+        "quality_gate",
+        "value_flow",
+        "evolved"
+      ],
+      "filters": [
+        {
+          "column": "mkt_regime_state",
+          "op": "not_in",
+          "value": [
+            "RISK_OFF"
+          ]
+        },
+        {
+          "column": "mkt_regime_score",
+          "op": ">=",
+          "value": 48
+        },
+        {
+          "column": "ma50_slope_10",
+          "op": ">=",
+          "value": -0.025
+        },
+        {
+          "column": "pullback_quality_score",
+          "op": ">=",
+          "value": 58
+        },
+        {
+          "column": "pullback_depth_20",
+          "op": "between",
+          "value": [
+            -0.12,
+            -0.04
+          ]
+        },
+        {
+          "column": "distance_ma50",
+          "op": "between",
+          "value": [
+            -0.12,
+            0.05
+          ]
+        },
+        {
+          "column": "close_location",
+          "op": ">=",
+          "value": 0.55
+        },
+        {
+          "column": "value_flow_quality_score",
+          "op": ">=",
+          "value": 52
+        },
+        {
+          "column": "smart_money_score",
+          "op": ">=",
+          "value": 56
+        },
+        {
+          "column": "smart_money_score_delta",
+          "op": ">=",
+          "value": -1
+        },
+        {
+          "column": "rs_percentile_20",
+          "op": ">=",
+          "value": 0.5
+        },
+        {
+          "column": "distribution_days_10",
+          "op": "<=",
+          "value": 2
+        },
+        {
+          "column": "CHDM50",
+          "op": ">=",
+          "value": 40
+        }
+      ],
+      "rank": [
+        {
+          "column": "pullback_quality_score",
+          "ascending": false,
+          "weight": 1.3
+        },
+        {
+          "column": "value_flow_quality_score",
+          "ascending": false,
+          "weight": 1.0
+        },
+        {
+          "column": "edge_score",
+          "ascending": false,
+          "weight": 0.9
+        },
+        {
+          "column": "smart_money_score_delta",
+          "ascending": false,
+          "weight": 0.7
+        },
+        {
+          "column": "pullback_depth_20",
+          "ascending": true,
+          "weight": 0.5
+        },
+        {
+          "column": "rs_percentile_20",
+          "ascending": false,
+          "weight": 0.6
+        }
+      ],
+      "risk": {
+        "stop_loss": 0.08,
+        "take_profit": 0.24,
+        "max_holding_bars": 35,
+        "initial_atr_stop_mult": 2.2,
+        "trailing_atr_mult": 2.7,
+        "trailing_profit_activation": 0.09,
+        "use_regime_exposure": true
+      },
+      "_fitness": 0.2677363093971344,
+      "_n_filters": 13,
+      "_n_trades": 109,
+      "_win_rate": 0.55,
+      "_mean_pnl": 1.627,
+      "_profit_factor": 1.594,
+      "_rr": 1.28,
+      "_sharpe": 0.637
+    },
+    {
+      "name": "evo_6663522",
+      "description": "Evolved from evo_1018387",
+      "universe": "VN100",
+      "tags": [
+        "mean_reversion",
+        "benchmark_relative",
+        "sector_leadership",
+        "ma20",
+        "smart_money_trace",
+        "evolved"
+      ],
+      "filters": [
+        {
+          "column": "mkt_regime_state",
+          "op": "in",
+          "value": [
+            "RISK_ON",
+            "NEUTRAL"
+          ]
+        },
+        {
+          "column": "mkt_regime_score",
+          "op": ">=",
+          "value": 50.548
+        },
+        {
+          "column": "mkt_DS20",
+          "op": "<=",
+          "value": 0.5
+        },
+        {
+          "column": "excess_ret_20d_pctile",
+          "op": ">=",
+          "value": 0.58
+        },
+        {
+          "column": "sector_rs_rank_20d",
+          "op": ">=",
+          "value": 0.6172
+        },
+        {
+          "column": "distribution_days_10",
+          "op": "<=",
+          "value": 1
+        },
+        {
+          "column": "reclaim_ma20",
+          "op": "==",
+          "value": true
+        }
+      ],
+      "rank": [
+        {
+          "column": "sector_leadership_score",
+          "ascending": false,
+          "weight": 1.3
+        },
+        {
+          "column": "pullback_quality_score",
+          "ascending": false,
+          "weight": 1.1
+        },
+        {
+          "column": "excess_ret_20d_pctile",
+          "ascending": false,
+          "weight": 1.0
+        },
+        {
+          "column": "edge_score",
+          "ascending": false,
+          "weight": 0.9
+        },
+        {
+          "column": "distance_ma20",
+          "ascending": true,
+          "weight": 0.4
+        }
+      ],
+      "risk": {
+        "stop_loss": 0.082,
+        "take_profit": 0.256,
+        "max_holding_bars": 28,
+        "initial_atr_stop_mult": 2.226,
+        "trailing_atr_mult": 1.841,
+        "trailing_profit_activation": 0.06,
+        "use_regime_exposure": true
+      },
+      "_fitness": 1.140900040959508,
+      "_n_filters": 7,
+      "_n_trades": 252,
+      "_win_rate": 0.591,
+      "_mean_pnl": 2.933,
+      "_profit_factor": 2.074,
+      "_rr": 1.42,
+      "_sharpe": 0.918
+    },
+    {
+      "name": "evo_6506569",
+      "description": "Evolved from evo_8458718",
+      "universe": "VN30",
+      "tags": [
+        "rotation",
+        "monthly",
+        "smart_money_trace",
+        "money_cycle",
+        "relative_strength",
+        "evolved"
+      ],
+      "filters": [
+        {
+          "column": "mkt_regime_state",
+          "op": "not_in",
+          "value": [
+            "RISK_OFF"
+          ]
+        },
+        {
+          "column": "mkt_regime_score",
+          "op": ">=",
+          "value": 50
+        },
+        {
+          "column": "excess_ret_20d_pctile",
+          "op": ">=",
+          "value": 0.58
+        },
+        {
+          "column": "sector_rs_rank_20d",
+          "op": ">=",
+          "value": 0.5596
+        },
+        {
+          "column": "distribution_days_10",
+          "op": "<=",
+          "value": 1
+        },
+        {
+          "column": "reclaim_ma20",
+          "op": "==",
+          "value": true
+        }
+      ],
+      "rank": [
+        {
+          "column": "edge_score",
+          "ascending": false,
+          "weight": 2.0
+        },
+        {
+          "column": "smart_money_score",
+          "ascending": false,
+          "weight": 1.0
+        },
+        {
+          "column": "rs_percentile_20",
+          "ascending": false,
+          "weight": 1.0
+        },
+        {
+          "column": "CHDM50",
+          "ascending": false,
+          "weight": 0.6
+        }
+      ],
+      "risk": {
+        "stop_loss": 0.095,
+        "take_profit": 0.262,
+        "max_holding_bars": 27,
+        "entry_every_n_bars": 20,
+        "initial_atr_stop_mult": 2.286,
+        "use_regime_exposure": true,
+        "trailing_atr_mult": 1.626,
+        "trailing_profit_activation": 0.052
+      },
+      "_fitness": 1.1183366429118546,
+      "_n_filters": 6,
+      "_n_trades": 283,
+      "_win_rate": 0.58,
+      "_mean_pnl": 2.561,
+      "_profit_factor": 1.922,
+      "_rr": 1.37,
+      "_sharpe": 0.832
+    },
+    {
+      "name": "evo_1022618",
+      "description": "Evolved from evo_6847066",
+      "universe": "VN30",
+      "tags": [
+        "rotation",
+        "monthly",
+        "smart_money_trace",
+        "money_cycle",
+        "relative_strength",
+        "evolved"
+      ],
+      "filters": [
+        {
+          "column": "mkt_regime_state",
+          "op": "not_in",
+          "value": [
+            "RISK_OFF"
+          ]
+        },
+        {
+          "column": "mkt_regime_score",
+          "op": ">=",
+          "value": 50
+        },
+        {
+          "column": "excess_ret_20d_pctile",
+          "op": ">=",
+          "value": 0.58
+        },
+        {
+          "column": "sector_rs_rank_20d",
+          "op": ">=",
+          "value": 0.7363
+        },
+        {
+          "column": "sector_breadth_ma20",
+          "op": ">=",
+          "value": 0.48
+        },
+        {
+          "column": "reclaim_ma20",
+          "op": "==",
+          "value": true
+        }
+      ],
+      "rank": [
+        {
+          "column": "edge_score",
+          "ascending": false,
+          "weight": 2.0
+        },
+        {
+          "column": "smart_money_score",
+          "ascending": false,
+          "weight": 1.0
+        },
+        {
+          "column": "rs_percentile_20",
+          "ascending": false,
+          "weight": 1.0
+        },
+        {
+          "column": "CHDM50",
+          "ascending": false,
+          "weight": 0.6
+        }
+      ],
+      "risk": {
+        "stop_loss": 0.084,
+        "take_profit": 0.264,
+        "max_holding_bars": 26,
+        "entry_every_n_bars": 20,
+        "initial_atr_stop_mult": 2.33,
+        "use_regime_exposure": true,
+        "trailing_atr_mult": 1.517,
+        "trailing_profit_activation": 0.049
+      },
+      "_fitness": 1.2780855420139925,
+      "_n_filters": 6,
+      "_n_trades": 219,
+      "_win_rate": 0.603,
+      "_mean_pnl": 2.967,
+      "_profit_factor": 2.049,
+      "_rr": 1.33,
+      "_sharpe": 0.928
+    },
+    {
+      "name": "evo_8148408",
+      "description": "Evolved from evo_1529015",
+      "universe": "VN100",
+      "tags": [
+        "mean_reversion",
+        "ma20",
+        "reclaim",
+        "smart_money_trace",
+        "money_cycle",
+        "value_flow",
+        "evolved"
+      ],
+      "filters": [
+        {
+          "column": "mkt_regime_state",
+          "op": "not_in",
+          "value": [
+            "RISK_OFF"
+          ]
+        },
+        {
+          "column": "mkt_regime_score",
+          "op": ">=",
+          "value": 50.452
+        },
+        {
+          "column": "mkt_DS20",
+          "op": "<=",
+          "value": 0.5
+        },
+        {
+          "column": "reclaim_ma20_after_pullback",
+          "op": "==",
+          "value": true
+        },
+        {
+          "column": "excess_ret_20d_pctile",
+          "op": ">=",
+          "value": 0.58
+        },
+        {
+          "column": "sector_rs_rank_20d",
+          "op": ">=",
+          "value": 0.523
+        },
+        {
+          "column": "distribution_days_10",
+          "op": "<=",
+          "value": 1.0
+        }
+      ],
+      "rank": [
+        {
+          "column": "pullback_quality_score",
+          "ascending": false,
+          "weight": 1.2
+        },
+        {
+          "column": "value_flow_quality_score",
+          "ascending": false,
+          "weight": 1.0
+        },
+        {
+          "column": "edge_score",
+          "ascending": false,
+          "weight": 0.9
+        },
+        {
+          "column": "close_location",
+          "ascending": false,
+          "weight": 0.7
+        },
+        {
+          "column": "smart_money_score_delta",
+          "ascending": false,
+          "weight": 0.8
+        },
+        {
+          "column": "rs_percentile_20",
+          "ascending": false,
+          "weight": 0.6
+        }
+      ],
+      "risk": {
+        "stop_loss": 0.082,
+        "take_profit": 0.259,
+        "max_holding_bars": 28,
+        "initial_atr_stop_mult": 2.287,
+        "trailing_atr_mult": 1.647,
+        "trailing_profit_activation": 0.055,
+        "use_regime_exposure": true
+      },
+      "_fitness": 1.0893066205675195,
+      "_n_filters": 7,
+      "_n_trades": 272,
+      "_win_rate": 0.581,
+      "_mean_pnl": 2.732,
+      "_profit_factor": 2.011,
+      "_rr": 1.43,
+      "_sharpe": 0.887
+    },
+    {
+      "name": "evo_9023461",
+      "description": "Evolved from evo_2452670",
+      "universe": "VN100",
+      "tags": [
+        "mean_reversion",
+        "benchmark_relative",
+        "sector_leadership",
+        "ma20",
+        "smart_money_trace",
+        "evolved"
+      ],
+      "filters": [
+        {
+          "column": "mkt_regime_state",
+          "op": "in",
+          "value": [
+            "RISK_ON",
+            "NEUTRAL"
+          ]
+        },
+        {
+          "column": "mkt_regime_score",
+          "op": ">=",
+          "value": 50.548
+        },
+        {
+          "column": "mkt_DS20",
+          "op": "<=",
+          "value": 0.5
+        },
+        {
+          "column": "reclaim_ma20_after_pullback",
+          "op": "==",
+          "value": true
+        },
+        {
+          "column": "excess_ret_20d_pctile",
+          "op": ">=",
+          "value": 0.58
+        },
+        {
+          "column": "sector_rs_rank_20d",
+          "op": ">=",
+          "value": 0.58
+        },
+        {
+          "column": "distribution_days_10",
+          "op": "<=",
+          "value": 1.0
+        }
+      ],
+      "rank": [
+        {
+          "column": "sector_leadership_score",
+          "ascending": false,
+          "weight": 1.3
+        },
+        {
+          "column": "pullback_quality_score",
+          "ascending": false,
+          "weight": 1.1
+        },
+        {
+          "column": "excess_ret_20d_pctile",
+          "ascending": false,
+          "weight": 1.0
+        },
+        {
+          "column": "edge_score",
+          "ascending": false,
+          "weight": 0.9
+        },
+        {
+          "column": "distance_ma20",
+          "ascending": true,
+          "weight": 0.4
+        }
+      ],
+      "risk": {
+        "stop_loss": 0.071,
+        "take_profit": 0.249,
+        "max_holding_bars": 30,
+        "initial_atr_stop_mult": 2.143,
+        "trailing_atr_mult": 2.074,
+        "trailing_profit_activation": 0.068,
+        "use_regime_exposure": true
+      },
+      "_fitness": 1.1343806338978997,
+      "_n_filters": 7,
+      "_n_trades": 253,
+      "_win_rate": 0.589,
+      "_mean_pnl": 2.918,
+      "_profit_factor": 2.072,
+      "_rr": 1.43,
+      "_sharpe": 0.915
+    },
+    {
+      "name": "evo_3101453",
+      "description": "Evolved from evo_1887229",
+      "universe": "VN30",
+      "tags": [
+        "rotation",
+        "monthly",
+        "smart_money_trace",
+        "money_cycle",
+        "relative_strength",
+        "evolved"
+      ],
+      "filters": [
+        {
+          "column": "mkt_regime_state",
+          "op": "not_in",
+          "value": [
+            "RISK_OFF"
+          ]
+        },
+        {
+          "column": "mkt_regime_score",
+          "op": ">=",
+          "value": 52.567
+        },
+        {
+          "column": "distance_ma20",
+          "op": "between",
+          "value": [
+            -0.045,
+            0.035
+          ]
+        },
+        {
+          "column": "excess_ret_20d_pctile",
+          "op": ">=",
+          "value": 0.58
+        },
+        {
+          "column": "sector_rs_rank_20d",
+          "op": ">=",
+          "value": 0.5598
+        },
+        {
+          "column": "distribution_days_10",
+          "op": "<=",
+          "value": 1
+        },
+        {
+          "column": "reclaim_ma20",
+          "op": "==",
+          "value": true
+        }
+      ],
+      "rank": [
+        {
+          "column": "edge_score",
+          "ascending": false,
+          "weight": 2.0
+        },
+        {
+          "column": "smart_money_score",
+          "ascending": false,
+          "weight": 1.0
+        },
+        {
+          "column": "rs_percentile_20",
+          "ascending": false,
+          "weight": 1.0
+        },
+        {
+          "column": "CHDM50",
+          "ascending": false,
+          "weight": 0.6
+        }
+      ],
+      "risk": {
+        "stop_loss": 0.083,
+        "take_profit": 0.264,
+        "max_holding_bars": 27,
+        "entry_every_n_bars": 20,
+        "initial_atr_stop_mult": 2.332,
+        "use_regime_exposure": true,
+        "trailing_atr_mult": 1.458,
+        "trailing_profit_activation": 0.048
+      },
+      "_fitness": 1.110723720788296,
+      "_n_filters": 7,
+      "_n_trades": 222,
+      "_win_rate": 0.581,
+      "_mean_pnl": 2.786,
+      "_profit_factor": 2.017,
+      "_rr": 1.44,
+      "_sharpe": 0.904
+    }
+  ]
+}

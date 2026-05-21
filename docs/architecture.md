@@ -1,5 +1,19 @@
 # Architecture — AI Trading Assistant
 
+## Target Architecture
+
+The broker-grade, agentic target architecture is defined in
+[`docs/agentic_broker_architecture.md`](agentic_broker_architecture.md).
+
+Use that document as the north star for future system changes:
+
+- match brokerage-grade data, workflows, reporting, and risk controls first;
+- keep deterministic alpha engines such as core3 as the production signal
+  source;
+- use GenAI and agentic AI for synthesis, review, personalization, monitoring,
+  and research;
+- keep deterministic risk and execution control as the final authority.
+
 ## Data Layer Direction
 
 Runtime code uses a vendor-neutral internal data provider:

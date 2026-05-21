@@ -1,0 +1,281 @@
+{
+  "hypotheses": [
+    {
+      "name": "breakout_market_cycle_defensive_v1",
+      "description": "[Experiment C] breakout_after_accumulation_v3 + market-cycle defensive gate only. Blocks v2 market MARKDOWN/DISTRIBUTION/RISK_OFF but does not require a strong sector.",
+      "universe": "WIDE",
+      "tags": ["breakout", "accumulation", "market_cycle", "defensive_gate"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "mkt_risk_state_v2", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_v2", "op": "not_in", "value": ["MARKDOWN", "DISTRIBUTION"]},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "breakout_20", "op": "==", "value": true},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "ma20_slope_5", "op": ">=", "value": 0},
+        {"column": "ma50_slope_10", "op": ">=", "value": -0.02},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.10},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 58},
+        {"column": "smart_money_score_no_sector_delta", "op": ">=", "value": 0},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.58},
+        {"column": "accumulation_days_10", "op": ">=", "value": 1},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "CHDM50", "op": ">=", "value": 45},
+        {"column": "DS20", "op": "<=", "value": 0.55}
+      ],
+      "rank": [
+        {"column": "edge_score_no_sector", "ascending": false, "weight": 1.5},
+        {"column": "value_ratio_20", "ascending": false, "weight": 1.0},
+        {"column": "smart_money_score_no_sector_delta", "ascending": false, "weight": 0.8},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.8}
+      ],
+      "risk": {
+        "stop_loss": 0.09,
+        "take_profit": 0.35,
+        "max_holding_bars": 45,
+        "initial_atr_stop_mult": 2.3,
+        "trailing_atr_mult": 2.8,
+        "trailing_profit_activation": 0.10,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "breakout_sector_anti_risk_v1",
+      "description": "[Experiment D] breakout_after_accumulation_v3 + defensive market/sector anti-risk. Blocks market and sector MARKDOWN/DISTRIBUTION, but does not require sector EARLY_MARKUP/MARKUP.",
+      "universe": "WIDE",
+      "tags": ["breakout", "accumulation", "sector_rotation", "anti_risk"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "mkt_risk_state_v2", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_v2", "op": "not_in", "value": ["MARKDOWN", "DISTRIBUTION"]},
+        {"column": "sl1_state", "op": "not_in", "value": ["MARKDOWN", "DISTRIBUTION"]},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "breakout_20", "op": "==", "value": true},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "ma20_slope_5", "op": ">=", "value": 0},
+        {"column": "ma50_slope_10", "op": ">=", "value": -0.02},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.10},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 58},
+        {"column": "smart_money_score_no_sector_delta", "op": ">=", "value": 0},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.58},
+        {"column": "accumulation_days_10", "op": ">=", "value": 1},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "CHDM50", "op": ">=", "value": 45},
+        {"column": "DS20", "op": "<=", "value": 0.55}
+      ],
+      "rank": [
+        {"column": "edge_score_no_sector", "ascending": false, "weight": 1.5},
+        {"column": "value_ratio_20", "ascending": false, "weight": 1.0},
+        {"column": "smart_money_score_no_sector_delta", "ascending": false, "weight": 0.8},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.8}
+      ],
+      "risk": {
+        "stop_loss": 0.09,
+        "take_profit": 0.35,
+        "max_holding_bars": 45,
+        "initial_atr_stop_mult": 2.3,
+        "trailing_atr_mult": 2.8,
+        "trailing_profit_activation": 0.10,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "breakout_sector_soft_rank_v1",
+      "description": "[Experiment E] breakout_after_accumulation_v3 + sector context as soft ranking only. Blocks market/sector down phases and gives a small boost to stronger sector RS.",
+      "universe": "WIDE",
+      "tags": ["breakout", "accumulation", "sector_rotation", "soft_rank"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "mkt_risk_state_v2", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_v2", "op": "not_in", "value": ["MARKDOWN", "DISTRIBUTION"]},
+        {"column": "sl1_state", "op": "not_in", "value": ["MARKDOWN", "DISTRIBUTION"]},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "breakout_20", "op": "==", "value": true},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "ma20_slope_5", "op": ">=", "value": 0},
+        {"column": "ma50_slope_10", "op": ">=", "value": -0.02},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.10},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 58},
+        {"column": "smart_money_score_no_sector_delta", "op": ">=", "value": 0},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.58},
+        {"column": "accumulation_days_10", "op": ">=", "value": 1},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "CHDM50", "op": ">=", "value": 45},
+        {"column": "DS20", "op": "<=", "value": 0.55}
+      ],
+      "rank": [
+        {"column": "edge_score_no_sector", "ascending": false, "weight": 1.5},
+        {"column": "value_ratio_20", "ascending": false, "weight": 1.0},
+        {"column": "smart_money_score_no_sector_delta", "ascending": false, "weight": 0.8},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.8},
+        {"column": "sl1_rs_rank_20d", "ascending": false, "weight": 0.25}
+      ],
+      "risk": {
+        "stop_loss": 0.09,
+        "take_profit": 0.35,
+        "max_holding_bars": 45,
+        "initial_atr_stop_mult": 2.3,
+        "trailing_atr_mult": 2.8,
+        "trailing_profit_activation": 0.10,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "breakout_with_rotation_gate_v1",
+      "description": "[Experiment A] Clone of breakout_after_accumulation_v3 + rotation gate: sector L1 must be in EARLY_MARKUP or MARKUP. Tests whether adding top-down sector context lifts the best core strategy.",
+      "universe": "WIDE",
+      "tags": ["breakout", "accumulation", "rotation_gate"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "sl1_state", "op": "in", "value": ["EARLY_MARKUP", "MARKUP"]},
+        {"column": "breakout_20", "op": "==", "value": true},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "ma20_slope_5", "op": ">=", "value": 0},
+        {"column": "ma50_slope_10", "op": ">=", "value": -0.02},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.10},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 58},
+        {"column": "smart_money_score_no_sector_delta", "op": ">=", "value": 0},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.58},
+        {"column": "accumulation_days_10", "op": ">=", "value": 1},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "CHDM50", "op": ">=", "value": 45},
+        {"column": "DS20", "op": "<=", "value": 0.55}
+      ],
+      "rank": [
+        {"column": "edge_score_no_sector", "ascending": false, "weight": 1.5},
+        {"column": "sl1_rs_rank_20d", "ascending": false, "weight": 0.8},
+        {"column": "value_ratio_20", "ascending": false, "weight": 1.0},
+        {"column": "smart_money_score_no_sector_delta", "ascending": false, "weight": 0.8},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.8}
+      ],
+      "risk": {
+        "stop_loss": 0.09,
+        "take_profit": 0.35,
+        "max_holding_bars": 45,
+        "initial_atr_stop_mult": 2.3,
+        "trailing_atr_mult": 2.8,
+        "trailing_profit_activation": 0.10,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "rotation_sector_leader_v2",
+      "description": "[Experiment B] Tightened v1: only EARLY_MARKUP, RS rank top quartile, breakout_20 trigger required.",
+      "universe": "WIDE",
+      "tags": ["rotation", "sector_state", "tightened"],
+      "filters": [
+        {"column": "mkt_risk_state_v2", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_v2", "op": "not_in", "value": ["MARKDOWN", "DISTRIBUTION"]},
+        {"column": "sl1_state", "op": "==", "value": "EARLY_MARKUP"},
+        {"column": "sl1_rs_rank_20d", "op": ">=", "value": 0.75},
+        {"column": "sl1_chdm_50", "op": "between", "value": [35, 70]},
+        {"column": "sl1_ds_20", "op": "<=", "value": 0.45},
+        {"column": "breakout_20", "op": "==", "value": true},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "ma50_slope_10", "op": ">=", "value": -0.01},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 60},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.65},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.10},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "CHDM50", "op": ">=", "value": 45}
+      ],
+      "rank": [
+        {"column": "edge_score_no_sector", "ascending": false, "weight": 1.2},
+        {"column": "sl1_rs_rank_20d", "ascending": false, "weight": 1.0},
+        {"column": "sl1_rs_20d", "ascending": false, "weight": 0.8},
+        {"column": "value_ratio_20", "ascending": false, "weight": 0.6}
+      ],
+      "risk": {
+        "stop_loss": 0.08,
+        "take_profit": 0.28,
+        "max_holding_bars": 35,
+        "initial_atr_stop_mult": 2.2,
+        "trailing_atr_mult": 2.6,
+        "trailing_profit_activation": 0.08,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "rotation_sector_leader_v1",
+      "description": "Top-down: enter stocks whose ICB-L1 sector is in EARLY_MARKUP/MARKUP with strong cross-sector RS, market regime not RISK_OFF, plus bottom-up smart-money confirmation.",
+      "universe": "WIDE",
+      "tags": ["rotation", "sector_state", "top_down", "money_cycle", "smart_money_trace"],
+      "filters": [
+        {"column": "mkt_risk_state_v2", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_v2", "op": "not_in", "value": ["MARKDOWN", "DISTRIBUTION"]},
+        {"column": "sl1_state", "op": "in", "value": ["EARLY_MARKUP", "MARKUP"]},
+        {"column": "sl1_rs_rank_20d", "op": ">=", "value": 0.60},
+        {"column": "sl1_chdm_50", "op": "between", "value": [30, 80]},
+        {"column": "sl1_ds_20", "op": "<=", "value": 0.50},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "ma50_slope_10", "op": ">=", "value": -0.01},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 55},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.55},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.0},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "CHDM50", "op": ">=", "value": 40}
+      ],
+      "rank": [
+        {"column": "edge_score_no_sector", "ascending": false, "weight": 1.2},
+        {"column": "sl1_rs_rank_20d", "ascending": false, "weight": 1.0},
+        {"column": "sl1_rs_20d", "ascending": false, "weight": 0.8},
+        {"column": "smart_money_score_no_sector_delta", "ascending": false, "weight": 0.6}
+      ],
+      "risk": {
+        "stop_loss": 0.08,
+        "take_profit": 0.28,
+        "max_holding_bars": 40,
+        "initial_atr_stop_mult": 2.2,
+        "trailing_atr_mult": 2.6,
+        "trailing_profit_activation": 0.08,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "rotation_early_entry_v1",
+      "description": "Aggressive timing: enter when sector just flips to EARLY_MARKUP (sl1_state up vs prev day) with reclaim_ma20 and accumulation footprint.",
+      "universe": "WIDE",
+      "tags": ["rotation", "sector_state", "early_entry", "money_cycle", "smart_money_trace"],
+      "filters": [
+        {"column": "mkt_risk_state_v2", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "sl1_state", "op": "in", "value": ["EARLY_MARKUP", "ACCUMULATION"]},
+        {"column": "sl1_rs_rank_20d", "op": ">=", "value": 0.50},
+        {"column": "sl1_ds_20", "op": "<=", "value": 0.55},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "reclaim_ma20", "op": "==", "value": true},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 52},
+        {"column": "accumulation_days_10", "op": ">=", "value": 1},
+        {"column": "distribution_days_10", "op": "<=", "value": 2},
+        {"column": "CHDM50", "op": ">=", "value": 35},
+        {"column": "DS20", "op": "<=", "value": 0.60}
+      ],
+      "rank": [
+        {"column": "edge_score_no_sector", "ascending": false, "weight": 1.0},
+        {"column": "sl1_rs_20d", "ascending": false, "weight": 1.0},
+        {"column": "pullback_quality_score", "ascending": false, "weight": 0.6},
+        {"column": "accumulation_distribution_score", "ascending": false, "weight": 0.6}
+      ],
+      "risk": {
+        "stop_loss": 0.07,
+        "take_profit": 0.22,
+        "max_holding_bars": 30,
+        "initial_atr_stop_mult": 2.0,
+        "trailing_atr_mult": 2.4,
+        "trailing_profit_activation": 0.06,
+        "use_regime_exposure": true
+      }
+    }
+  ]
+}

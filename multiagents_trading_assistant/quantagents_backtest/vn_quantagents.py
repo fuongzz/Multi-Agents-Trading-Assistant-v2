@@ -160,6 +160,9 @@ def run_vn_quantagents(
     memory = _init_memory(pool)
     symbol_reports: list[dict] = []
     fold_reports: list[dict] = []
+    best_fold_curves: dict[str, list[pd.Series]] = {}
+    ensemble_fold_curves: dict[str, list[pd.Series]] = {}
+    execution_schedule: dict[int, dict] = {}
 
     for symbol, raw_frame in universe_data.items():
         if raw_frame.empty:
@@ -182,6 +185,22 @@ def run_vn_quantagents(
             ensemble = backtest_ensemble(test, selected, backtest_cfg)
             ensemble_curve = apply_regime_scaling(ensemble.equity_curve, fold_regime, cfg)
             ensemble_metrics = compute_metrics(ensemble_curve, ensemble.trades, backtest_cfg.periods_per_year)
+            if selected:
+                best_curve = apply_regime_scaling(test_results[0].equity_curve, fold_regime, cfg)
+                best_fold_curves.setdefault(symbol, []).append(best_curve)
+            ensemble_fold_curves.setdefault(symbol, []).append(ensemble_curve)
+            execution_schedule.setdefault(
+                fold_id,
+                {
+                    "test_start": test.index[0],
+                    "test_end": test.index[-1],
+                    "market_regime": fold_regime,
+                    "strategy_map": {},
+                    "window_universe": {},
+                },
+            )
+            execution_schedule[fold_id]["strategy_map"][symbol] = selected
+            execution_schedule[fold_id]["window_universe"][symbol] = test.copy()
 
             for result in test_results:
                 strategy = result.strategy
@@ -231,20 +250,17 @@ def run_vn_quantagents(
     strategy_memory = pd.DataFrame([item.to_row(cfg) for item in memory.values()])
     strategy_memory = strategy_memory.sort_values("qa_score", ascending=False).reset_index(drop=True)
     top_strategies = _strategies_from_ids(pool, strategy_memory.head(cfg.top_k)["strategy_id"].tolist())
-    portfolio = run_qa_portfolios(universe_data, top_strategies, regime, cfg, backtest_cfg)
-    execution_portfolio = backtest_vn_portfolio(
-        universe_data,
-        top_strategies,
-        market_regime=regime,
-        config=cfg.portfolio,
-    )
+    portfolio = build_oos_research_portfolio(best_fold_curves, ensemble_fold_curves, cfg, backtest_cfg)
+    execution_portfolio = run_oos_execution_portfolio(execution_schedule, cfg)
+    portfolio_summary = pd.DataFrame([{"portfolio": "qa_execution_schedule", **execution_portfolio["metrics"]}])
 
     return {
         "strategy_memory": strategy_memory,
         "symbol_reports": pd.DataFrame(symbol_reports),
         "fold_reports": pd.DataFrame(fold_reports),
         "top_strategies": top_strategies,
-        "portfolio_summary": portfolio["portfolio_summary"],
+        "portfolio_summary": portfolio_summary,
+        "research_summary": portfolio["research_summary"],
         "best_strategy_equity": portfolio["best_strategy_equity"],
         "ensemble_equity": portfolio["ensemble_equity"],
         "execution_portfolio": execution_portfolio,
@@ -287,39 +303,90 @@ def apply_regime_scaling(
     return scaled
 
 
-def run_qa_portfolios(
-    universe_data: dict[str, pd.DataFrame],
-    top_strategies: list[Strategy],
-    regime: pd.Series | None,
+def build_oos_research_portfolio(
+    best_fold_curves: dict[str, list[pd.Series]],
+    ensemble_fold_curves: dict[str, list[pd.Series]],
     cfg: VNQuantAgentsConfig,
     backtest_cfg: BacktestConfig,
 ) -> dict:
-    best_strategy = top_strategies[0]
-    best_curves: dict[str, pd.Series] = {}
-    ensemble_curves: dict[str, pd.Series] = {}
-
-    for symbol, raw_frame in universe_data.items():
-        if raw_frame.empty:
-            continue
-        data = add_indicators(raw_frame)
-        symbol_regime = _align_regime(regime, data.index)
-        best = backtest_strategy(data, best_strategy, backtest_cfg)
-        ensemble = backtest_ensemble(data, top_strategies, backtest_cfg)
-        best_curves[symbol] = apply_regime_scaling(best.equity_curve, symbol_regime, cfg)
-        ensemble_curves[symbol] = apply_regime_scaling(ensemble.equity_curve, symbol_regime, cfg)
-
-    best_equity = _equal_weight_portfolio(best_curves, cfg.initial_capital, "qa_best_strategy")
-    ensemble_equity = _equal_weight_portfolio(ensemble_curves, cfg.initial_capital, "qa_ensemble")
+    best_curves = {symbol: _stitch_fold_curves(curves) for symbol, curves in best_fold_curves.items() if curves}
+    ensemble_curves = {
+        symbol: _stitch_fold_curves(curves) for symbol, curves in ensemble_fold_curves.items() if curves
+    }
+    best_equity = _equal_weight_portfolio(best_curves, cfg.initial_capital, "qa_best_strategy_oos")
+    ensemble_equity = _equal_weight_portfolio(ensemble_curves, cfg.initial_capital, "qa_ensemble_oos")
     summary = pd.DataFrame(
         [
-            {"portfolio": "qa_best_strategy", **compute_metrics(best_equity, [])},
-            {"portfolio": "qa_ensemble", **compute_metrics(ensemble_equity, [])},
+            _curve_only_summary(best_equity, "qa_best_strategy_oos", backtest_cfg.periods_per_year),
+            _curve_only_summary(ensemble_equity, "qa_ensemble_oos", backtest_cfg.periods_per_year),
         ]
     )
     return {
-        "portfolio_summary": summary,
+        "research_summary": summary,
         "best_strategy_equity": best_equity,
         "ensemble_equity": ensemble_equity,
+    }
+
+
+def run_oos_execution_portfolio(execution_schedule: dict[int, dict], cfg: VNQuantAgentsConfig) -> dict:
+    """Execute fold-selected strategies only in their future test windows."""
+
+    fold_ids = sorted(execution_schedule)
+    if not fold_ids:
+        empty_curve = pd.Series(dtype=float, name="vn_quantagents_portfolio_oos")
+        empty_frame = pd.DataFrame(columns=["equity", "cash", "positions", "regime", "gross_exposure"])
+        return {
+            "equity_curve": empty_curve,
+            "equity_frame": empty_frame,
+            "trades": [],
+            "metrics": compute_metrics(pd.Series([cfg.portfolio.initial_capital]), []),
+            "open_positions": {},
+        }
+
+    current_capital = cfg.portfolio.initial_capital
+    equity_frames: list[pd.DataFrame] = []
+    trades: list[dict] = []
+    open_positions = {}
+
+    for fold_id in fold_ids:
+        fold = execution_schedule[fold_id]
+        fold_cfg = VNPortfolioConfig(
+            initial_capital=current_capital,
+            max_positions=cfg.portfolio.max_positions,
+            min_position_value=cfg.portfolio.min_position_value,
+            periods_per_year=cfg.portfolio.periods_per_year,
+            risk_on_exposure=cfg.portfolio.risk_on_exposure,
+            neutral_exposure=cfg.portfolio.neutral_exposure,
+            risk_off_exposure=cfg.portfolio.risk_off_exposure,
+            crash_exposure=cfg.portfolio.crash_exposure,
+            allow_new_in_risk_off=cfg.portfolio.allow_new_in_risk_off,
+            mean_reversion_requires_trend=cfg.portfolio.mean_reversion_requires_trend,
+            costs=cfg.portfolio.costs,
+        )
+        result = backtest_vn_portfolio(
+            fold["window_universe"],
+            [],
+            market_regime=fold["market_regime"],
+            config=fold_cfg,
+            strategy_map=fold["strategy_map"],
+        )
+        fold_equity = result["equity_frame"].copy()
+        if equity_frames:
+            fold_equity = fold_equity.loc[~fold_equity.index.isin(equity_frames[-1].index)]
+        equity_frames.append(fold_equity)
+        trades.extend(result["trades"])
+        current_capital = float(result["equity_curve"].iloc[-1]) if not result["equity_curve"].empty else current_capital
+        open_positions = result["open_positions"]
+
+    equity_frame = pd.concat(equity_frames).sort_index() if equity_frames else pd.DataFrame()
+    equity_curve = equity_frame["equity"].rename("vn_quantagents_portfolio_oos") if not equity_frame.empty else pd.Series(dtype=float)
+    metrics = compute_metrics(equity_curve, trades, cfg.portfolio.periods_per_year) if not equity_curve.empty else {}
+    return {
+        "equity_curve": equity_curve,
+        "equity_frame": equity_frame,
+        "trades": trades,
+        "metrics": metrics,
+        "open_positions": open_positions,
     }
 
 
@@ -330,6 +397,8 @@ def save_vn_quantagents_result(result: dict, output_dir: str | Path) -> Path:
     result["symbol_reports"].to_csv(out / "symbol_reports.csv", index=False)
     result["fold_reports"].to_csv(out / "fold_reports.csv", index=False)
     result["portfolio_summary"].to_csv(out / "portfolio_summary.csv", index=False)
+    if result.get("research_summary") is not None:
+        result["research_summary"].to_csv(out / "research_summary.csv", index=False)
     summarize_equity(result["best_strategy_equity"]).to_csv(out / "equity_best_strategy.csv")
     summarize_equity(result["ensemble_equity"]).to_csv(out / "equity_ensemble.csv")
     if result.get("execution_portfolio") is not None:
@@ -456,6 +525,29 @@ def _equal_weight_portfolio(
     portfolio = frame.mean(axis=1) * initial_capital
     portfolio.name = name
     return portfolio
+
+
+def _stitch_fold_curves(curves: list[pd.Series]) -> pd.Series:
+    stitched = pd.concat(curves).sort_index()
+    stitched = stitched[~stitched.index.duplicated(keep="last")]
+    return stitched
+
+
+def _curve_only_summary(equity_curve: pd.Series, portfolio: str, periods_per_year: int) -> dict:
+    if equity_curve.empty:
+        return {
+            "portfolio": portfolio,
+            "metric_scope": "research_curve_only",
+            "total_return": 0.0,
+            "sharpe_ratio": 0.0,
+            "max_drawdown": 0.0,
+            "win_rate": None,
+            "number_of_trades": None,
+        }
+    metrics = compute_metrics(equity_curve, [], periods_per_year)
+    metrics["win_rate"] = None
+    metrics["number_of_trades"] = None
+    return {"portfolio": portfolio, "metric_scope": "research_curve_only", **metrics}
 
 
 def _strategies_from_ids(strategies: list[Strategy], ids: list[str]) -> list[Strategy]:

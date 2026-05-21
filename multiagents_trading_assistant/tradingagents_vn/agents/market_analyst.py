@@ -32,10 +32,19 @@ def create_market_analyst(llm):
         symbol = state["company_of_interest"]
         trade_date = state["trade_date"]
         past = state.get("past_context", "")
+        agentic = state.get("agentic_context", "")
 
         system = _SYSTEM
         if past:
             system += f"\n\n## Lịch sử phân tích trước\n{past}"
+        if agentic:
+            system += (
+                "\n\n## Agentic Phase 1 Context\n"
+                "Bạn đang review một signal định lượng đã được freeze. "
+                "Không được đổi strategy gốc; chỉ đánh giá chất lượng, rủi ro, "
+                "và điều kiện execution.\n"
+                f"{agentic}"
+            )
 
         messages = list(state.get("messages", []))
         if not messages:
@@ -43,7 +52,8 @@ def create_market_analyst(llm):
                 SystemMessage(content=system),
                 HumanMessage(content=(
                     f"Phân tích kỹ thuật cho mã **{symbol}** ngày {trade_date}. "
-                    f"Dùng get_stock_data và get_technical_indicators để lấy dữ liệu."
+                    f"Dùng get_stock_data và get_technical_indicators để lấy dữ liệu. "
+                    f"Nếu có Agentic Phase 1 Context, hãy review đúng strategy_signal đó."
                 )),
             ]
 

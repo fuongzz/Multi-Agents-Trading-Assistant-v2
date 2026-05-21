@@ -152,9 +152,14 @@ def test_vn_quantagents_smoke_with_regime_and_risk_gate():
 
     assert not result["strategy_memory"].empty
     assert not result["portfolio_summary"].empty
+    assert not result["research_summary"].empty
     assert not result["best_strategy_equity"].empty
     assert not result["ensemble_equity"].empty
     assert "metrics" in result["execution_portfolio"]
+    assert (
+        result["portfolio_summary"]["number_of_trades"].iloc[0]
+        == result["execution_portfolio"]["metrics"]["number_of_trades"]
+    )
 
 
 def test_vn_portfolio_engine_uses_shared_capital_and_costs():

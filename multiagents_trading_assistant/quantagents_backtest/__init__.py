@@ -18,7 +18,9 @@ from multiagents_trading_assistant.quantagents_backtest.walk_forward import (
 from multiagents_trading_assistant.quantagents_backtest.vn_quantagents import (
     RiskGateConfig,
     VNQuantAgentsConfig,
+    build_oos_research_portfolio,
     run_vn_quantagents,
+    run_oos_execution_portfolio,
     save_vn_quantagents_result,
 )
 from multiagents_trading_assistant.quantagents_backtest.vn_portfolio_engine import (
@@ -32,15 +34,40 @@ from multiagents_trading_assistant.quantagents_backtest.vn_universe import (
     get_universe_snapshot,
     load_historical_constituents,
 )
+from multiagents_trading_assistant.quantagents_backtest.local_data import (
+    DEFAULT_INDEX_PATH,
+    DEFAULT_OHLCV_PATH,
+    LocalUniverseConfig,
+    load_local_index,
+    load_local_universe,
+)
+from multiagents_trading_assistant.quantagents_backtest.run_local import (
+    run_local_quantagents,
+    save_local_quantagents_result,
+)
+from multiagents_trading_assistant.quantagents_backtest.edge_research import (
+    DEFAULT_COMBOS,
+    EdgeResearchConfig,
+    ResearchStrategy,
+    load_research_strategies,
+    run_edge_vn_quantagents,
+)
 
 __all__ = [
     "BacktestConfig",
     "BacktestResult",
     "Strategy",
     "Trade",
+    "build_oos_research_portfolio",
     "RiskGateConfig",
     "CURRENT_VN30",
+    "DEFAULT_INDEX_PATH",
+    "DEFAULT_OHLCV_PATH",
+    "DEFAULT_COMBOS",
+    "EdgeResearchConfig",
+    "ResearchStrategy",
     "UniverseSnapshot",
+    "LocalUniverseConfig",
     "VNMarketCostConfig",
     "VNQuantAgentsConfig",
     "VNPortfolioConfig",
@@ -50,8 +77,15 @@ __all__ = [
     "backtest_vn_portfolio",
     "generate_strategy_pool",
     "get_universe_snapshot",
+    "load_local_index",
+    "load_local_universe",
     "load_historical_constituents",
+    "run_local_quantagents",
+    "load_research_strategies",
+    "run_edge_vn_quantagents",
+    "run_oos_execution_portfolio",
     "run_walk_forward",
     "run_vn_quantagents",
+    "save_local_quantagents_result",
     "save_vn_quantagents_result",
 ]

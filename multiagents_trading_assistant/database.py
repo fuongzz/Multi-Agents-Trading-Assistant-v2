@@ -154,11 +154,18 @@ def init_db() -> None:
     _alter_columns = [
         ("positions", "peak_price",   "REAL"),
         ("positions", "last_checked", "TEXT"),
+        ("positions", "setup_type",   "TEXT"),
+        ("positions", "signal_close", "REAL"),
+        ("positions", "regime_at_entry", "TEXT"),
         ("trades",    "exit_price",   "REAL"),
         ("trades",    "exit_date",    "TEXT"),
         ("trades",    "exit_reason",  "TEXT"),
         ("trades",    "realized_pnl", "REAL"),
         ("trades",    "realized_rr",  "REAL"),
+        ("trades",    "pnl_pct",       "REAL"),
+        ("trades",    "holding_bars",  "INTEGER"),
+        ("trades",    "loss_category", "TEXT"),
+        ("trades",    "regime",        "TEXT"),
     ]
     with get_connection() as conn:
         for table, col, col_type in _alter_columns:
@@ -277,23 +284,185 @@ def close_position(
 ) -> None:
     """
     Đóng vị thế: ghi BÁN vào trades với các trường exit, rồi xóa khỏi positions.
+    Đồng thời classify_loss() và lưu loss_category cho closed-loop learning.
 
     exit_reason: SL_HIT / TP_HIT / MOMENTUM_LOSS / MANUAL
     """
     risk = entry_price - (entry_price * 0.05)  # fallback nếu không có sl
     pnl = (exit_price - entry_price) * quantity
     rr = (exit_price - entry_price) / max(entry_price - risk, 1) if entry_price > risk else None
+    pnl_pct = (exit_price - entry_price) / entry_price * 100.0 if entry_price > 0 else 0.0
+
+    # Pull setup_type/signal_close/regime/entry_date from positions before delete
+    pos = get_position(symbol) or {}
+    setup_type = pos.get("setup_type") or strategy or ""
+    signal_close = pos.get("signal_close")
+    regime = pos.get("regime_at_entry")
+    holding_bars = _trading_days_between(pos.get("entry_date"), exit_date)
+
+    loss_category = _classify_close(
+        pnl_pct=pnl_pct,
+        setup_type=setup_type,
+        exit_reason=exit_reason,
+        holding_bars=holding_bars,
+        signal_close=signal_close,
+        entry_price=entry_price,
+    )
 
     with get_connection() as conn:
         conn.execute("""
             INSERT INTO trades
                 (symbol, action, price, quantity, trade_date, strategy, note,
-                 exit_price, exit_date, exit_reason, realized_pnl, realized_rr)
-            VALUES (?, 'BÁN', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 exit_price, exit_date, exit_reason, realized_pnl, realized_rr,
+                 pnl_pct, holding_bars, loss_category, regime)
+            VALUES (?, 'BÁN', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (symbol, exit_price, quantity, exit_date, strategy,
               f"Auto exit: {exit_reason}",
-              exit_price, exit_date, exit_reason, pnl, rr))
+              exit_price, exit_date, exit_reason, pnl, rr,
+              pnl_pct, holding_bars, loss_category, regime))
         conn.execute("DELETE FROM positions WHERE symbol = ?", (symbol,))
+
+
+def _trading_days_between(entry_date: str | None, exit_date: str | None) -> int:
+    """Approximate trading bars between two YYYY-MM-DD dates (weekdays only)."""
+    if not entry_date or not exit_date:
+        return 0
+    try:
+        d1 = datetime.strptime(entry_date, "%Y-%m-%d").date()
+        d2 = datetime.strptime(exit_date, "%Y-%m-%d").date()
+    except ValueError:
+        return 0
+    if d2 <= d1:
+        return 0
+    days = 0
+    cur = d1
+    while cur < d2:
+        cur += timedelta(days=1)
+        if cur.weekday() < 5:
+            days += 1
+    return days
+
+
+def _classify_close(
+    *,
+    pnl_pct: float,
+    setup_type: str,
+    exit_reason: str,
+    holding_bars: int,
+    signal_close: float | None,
+    entry_price: float,
+) -> str:
+    """Lazy-import classify_loss to avoid circular deps. Returns LossCategory.value."""
+    if pnl_pct >= 0:
+        return "WINNER"
+    try:
+        from multiagents_trading_assistant.agentic.post_trade_review import classify_loss
+        cat = classify_loss({
+            "pnl_pct": pnl_pct,
+            "setup_type": setup_type,
+            "exit_reason": exit_reason,
+            "holding_bars": holding_bars,
+            "signal_close_price": signal_close,
+            "entry_price": entry_price,
+        })
+        return cat.value
+    except Exception:
+        return "UNCLASSIFIED"
+
+
+def reclassify_closed_losses(
+    days: int,
+    ohlcv_map: dict | None = None,
+    vnindex_df=None,
+) -> int:
+    """Re-run classify_loss on closed losses with full OHLCV+VNI context.
+
+    close_position() classifies at exit time without future bars or market slice,
+    so REGIME_SHIFT and EXIT_TOO_EARLY can never trigger. Bob has this data —
+    re-classify here to upgrade UNCLASSIFIED rows when better evidence is available.
+
+    Returns count of rows actually updated (loss_category changed).
+    """
+    from multiagents_trading_assistant.agentic.post_trade_review import classify_loss
+
+    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    updated = 0
+    with get_connection() as conn:
+        rows = conn.execute("""
+            SELECT id, symbol, exit_date, exit_reason, pnl_pct, holding_bars,
+                   loss_category, strategy, regime, entry_price = price AS entry_price
+            FROM trades
+            WHERE action='BÁN' AND realized_pnl < 0 AND trade_date >= ?
+        """, (cutoff,)).fetchall()
+
+        for r in rows:
+            row = dict(r)
+            ohlcv_after = None
+            market_after = None
+            sym_df = (ohlcv_map or {}).get(row["symbol"])
+            if sym_df is not None and len(sym_df) and "date" in sym_df.columns:
+                import pandas as pd
+                ex = pd.to_datetime(row["exit_date"])
+                tail = sym_df[sym_df["date"] > ex]
+                if not tail.empty:
+                    ohlcv_after = tail.head(20)
+            if vnindex_df is not None and len(vnindex_df) and "date" in vnindex_df.columns:
+                import pandas as pd
+                # Approximation: use last `holding_bars` of vni leading up to exit
+                ex = pd.to_datetime(row["exit_date"])
+                slice_ = vnindex_df[vnindex_df["date"] <= ex].tail(max(int(row.get("holding_bars") or 5), 5))
+                if not slice_.empty:
+                    market_after = slice_
+
+            new_cat = classify_loss(
+                {
+                    "pnl_pct": row.get("pnl_pct") or 0.0,
+                    "setup_type": row.get("strategy") or "",
+                    "exit_reason": row.get("exit_reason") or "",
+                    "holding_bars": row.get("holding_bars") or 0,
+                },
+                ohlcv_after=ohlcv_after,
+                market_after=market_after,
+            ).value
+
+            if new_cat and new_cat != row.get("loss_category"):
+                conn.execute(
+                    "UPDATE trades SET loss_category=? WHERE id=?",
+                    (new_cat, row["id"]),
+                )
+                updated += 1
+    return updated
+
+
+def aggregate_loss_patterns(
+    days: int = 90,
+    min_count: int = 2,
+) -> list[dict]:
+    """Group closed losses by (setup × loss_category × regime) over last N days.
+
+    Returns sorted list of patterns Bob should pay attention to:
+        [{setup, regime, loss_category, count, avg_pnl_pct, total_pnl}, ...]
+    Sorted by total_pnl ascending (worst first).
+    """
+    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    with get_connection() as conn:
+        rows = conn.execute("""
+            SELECT
+                COALESCE(strategy, '?')      AS setup,
+                COALESCE(regime, 'UNKNOWN')  AS regime,
+                COALESCE(loss_category, 'UNCLASSIFIED') AS loss_category,
+                COUNT(*)                     AS count,
+                AVG(pnl_pct)                 AS avg_pnl_pct,
+                SUM(realized_pnl)            AS total_pnl
+            FROM trades
+            WHERE action = 'BÁN'
+              AND realized_pnl < 0
+              AND trade_date >= ?
+            GROUP BY setup, regime, loss_category
+            HAVING count >= ?
+            ORDER BY total_pnl ASC
+        """, (cutoff, min_count)).fetchall()
+        return [dict(r) for r in rows]
 
 
 def get_closed_trades(limit: int = 100) -> list[dict]:

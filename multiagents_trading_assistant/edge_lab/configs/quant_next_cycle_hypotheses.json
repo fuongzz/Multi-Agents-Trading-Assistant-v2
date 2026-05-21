@@ -1,0 +1,364 @@
+{
+  "hypotheses": [
+    {
+      "name": "sector_ranked_reclaim_ma20_v1",
+      "description": "Sector-led MA20 reclaim: only trade reclaim signals in RISK_ON/NEUTRAL regimes when cross-sectional sector rank is strong.",
+      "universe": "VN100",
+      "tags": ["mean_reversion", "sector_leadership", "ma20", "smart_money_trace", "research_shadow"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "in", "value": ["RISK_ON", "NEUTRAL"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 52},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "sector_rs_rank_20d", "op": ">=", "value": 0.72},
+        {"column": "reclaim_ma20", "op": "==", "value": true},
+        {"column": "accumulation_days_10", "op": ">=", "value": 1},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 52},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "DS20", "op": "<=", "value": 0.58}
+      ],
+      "rank": [
+        {"column": "sector_leadership_score", "ascending": false, "weight": 1.3},
+        {"column": "pullback_quality_score", "ascending": false, "weight": 1.1},
+        {"column": "excess_ret_20d_pctile", "ascending": false, "weight": 1.0},
+        {"column": "edge_score_no_sector", "ascending": false, "weight": 0.8},
+        {"column": "distance_ma20", "ascending": true, "weight": 0.4}
+      ],
+      "risk": {
+        "stop_loss": 0.075,
+        "take_profit": 0.24,
+        "max_holding_bars": 30,
+        "initial_atr_stop_mult": 2.1,
+        "trailing_atr_mult": 2.4,
+        "trailing_profit_activation": 0.075,
+        "use_regime_exposure": true,
+        "setup_type": "SECTOR_RECLAIM_MA20"
+      }
+    },
+    {
+      "name": "ichimoku_volume_surge_breakout_v1",
+      "description": "Ichimoku-confirmed volume breakout: breakout_20 with strong close location, positive CMF, PSAR bullish, and price above cloud.",
+      "universe": "VN100",
+      "tags": ["breakout", "ichimoku", "volume", "smart_money_trace", "research_shadow"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "breakout_20", "op": "==", "value": true},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "ich_price_above_cloud", "op": "==", "value": true},
+        {"column": "ich_tk_bull", "op": "==", "value": true},
+        {"column": "psar_bullish", "op": "==", "value": true},
+        {"column": "cmf20", "op": ">=", "value": 0.03},
+        {"column": "close_location", "op": ">=", "value": 0.75},
+        {"column": "rsi14", "op": "<=", "value": 68},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.62},
+        {"column": "distribution_days_10", "op": "<=", "value": 1}
+      ],
+      "rank": [
+        {"column": "volume_ratio_20", "ascending": false, "weight": 1.1},
+        {"column": "value_flow_quality_score", "ascending": false, "weight": 1.0},
+        {"column": "edge_score_no_sector", "ascending": false, "weight": 0.9},
+        {"column": "smart_money_score_no_sector_delta", "ascending": false, "weight": 0.8},
+        {"column": "close_location", "ascending": false, "weight": 0.6}
+      ],
+      "risk": {
+        "stop_loss": 0.08,
+        "take_profit": 0.29,
+        "max_holding_bars": 32,
+        "initial_atr_stop_mult": 2.15,
+        "trailing_atr_mult": 2.6,
+        "trailing_profit_activation": 0.09,
+        "use_regime_exposure": true,
+        "setup_type": "ICH_VOLUME_BREAKOUT"
+      }
+    },
+    {
+      "name": "relative_strength_ma50_pullback_v1",
+      "description": "Relative-strength MA50 pullback: high excess return names that pull back near MA50 without smart-money deterioration.",
+      "universe": "VN100",
+      "tags": ["mean_reversion", "relative_strength", "ma50", "smart_money_trace", "research_shadow"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 46},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "distance_ma50", "op": "between", "value": [-0.04, 0.035]},
+        {"column": "excess_ret_60d_pctile", "op": ">=", "value": 0.65},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 54},
+        {"column": "smart_money_score_no_sector_delta", "op": ">=", "value": -3},
+        {"column": "distribution_days_10", "op": "<=", "value": 2},
+        {"column": "DS20", "op": "not_up"}
+      ],
+      "rank": [
+        {"column": "excess_ret_60d_pctile", "ascending": false, "weight": 1.2},
+        {"column": "pullback_quality_score", "ascending": false, "weight": 1.0},
+        {"column": "smart_money_score_no_sector", "ascending": false, "weight": 0.9},
+        {"column": "distance_ma50", "ascending": true, "weight": 0.5}
+      ],
+      "risk": {
+        "stop_loss": 0.07,
+        "take_profit": 0.20,
+        "max_holding_bars": 25,
+        "initial_atr_stop_mult": 2.0,
+        "trailing_atr_mult": 2.35,
+        "trailing_profit_activation": 0.075,
+        "use_regime_exposure": true,
+        "setup_type": "RS_MA50_PULLBACK"
+      }
+    },
+    {
+      "name": "volatility_squeeze_leader_break_v1",
+      "description": "Volatility squeeze break in leaders: ATR expansion after compression with sector leadership and clean distribution profile.",
+      "universe": "VN100",
+      "tags": ["volatility", "compression", "breakout", "sector_leadership", "research_shadow"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "volatility_squeeze_break", "op": "==", "value": true},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "sector_leadership_score", "op": ">=", "value": 58},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 54},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.02},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "DS20", "op": "<=", "value": 0.58}
+      ],
+      "rank": [
+        {"column": "atr_ratio", "ascending": false, "weight": 1.2},
+        {"column": "sector_leadership_score", "ascending": false, "weight": 1.0},
+        {"column": "value_ratio_20", "ascending": false, "weight": 0.9},
+        {"column": "edge_score_no_sector", "ascending": false, "weight": 0.8}
+      ],
+      "risk": {
+        "stop_loss": 0.08,
+        "take_profit": 0.27,
+        "max_holding_bars": 35,
+        "initial_atr_stop_mult": 2.15,
+        "trailing_atr_mult": 2.7,
+        "trailing_profit_activation": 0.09,
+        "use_regime_exposure": true,
+        "setup_type": "SQUEEZE_LEADER_BREAK"
+      }
+    },
+    {
+      "name": "spring_leader_reversal_v1",
+      "description": "Leader spring reversal: spring_20 with strong close location, lower wick recovery, and stable smart-money context.",
+      "universe": "VN100",
+      "tags": ["reversal", "spring", "leader", "smart_money_trace", "research_shadow"],
+      "filters": [
+        {"column": "mkt_regime_score", "op": ">=", "value": 38},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "spring_20", "op": "==", "value": true},
+        {"column": "close_location", "op": ">=", "value": 0.68},
+        {"column": "lower_wick_pct", "op": ">=", "value": 0.015},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "ma50_slope_10", "op": ">=", "value": -0.03},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 50},
+        {"column": "smart_money_score_no_sector_delta", "op": ">=", "value": -4},
+        {"column": "distribution_days_10", "op": "<=", "value": 2},
+        {"column": "DS20", "op": "<=", "value": 0.65}
+      ],
+      "rank": [
+        {"column": "pullback_quality_score", "ascending": false, "weight": 1.2},
+        {"column": "close_location", "ascending": false, "weight": 0.9},
+        {"column": "smart_money_score_no_sector", "ascending": false, "weight": 0.9},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.7}
+      ],
+      "risk": {
+        "stop_loss": 0.06,
+        "take_profit": 0.17,
+        "max_holding_bars": 20,
+        "initial_atr_stop_mult": 1.9,
+        "trailing_atr_mult": 2.25,
+        "trailing_profit_activation": 0.07,
+        "use_regime_exposure": false,
+        "setup_type": "SPRING_LEADER_REVERSAL"
+      }
+    },
+    {
+      "name": "cci_trend_continuation_v1",
+      "description": "CCI momentum continuation: CCI above +100 in a clean MA20/MA50 trend with controlled RSI and value flow.",
+      "universe": "VN100",
+      "tags": ["momentum", "cci", "trend", "smart_money_trace", "research_shadow"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 50},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "cci_momentum", "op": "==", "value": true},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "distance_ma20", "op": "between", "value": [0.0, 0.10]},
+        {"column": "rsi14", "op": "<=", "value": 70},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 54},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.03},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "CHDM50", "op": ">=", "value": 42}
+      ],
+      "rank": [
+        {"column": "edge_score_no_sector", "ascending": false, "weight": 1.1},
+        {"column": "value_ratio_20", "ascending": false, "weight": 1.0},
+        {"column": "smart_money_score_no_sector", "ascending": false, "weight": 0.9},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.8}
+      ],
+      "risk": {
+        "stop_loss": 0.075,
+        "take_profit": 0.24,
+        "max_holding_bars": 32,
+        "initial_atr_stop_mult": 2.05,
+        "trailing_atr_mult": 2.5,
+        "trailing_profit_activation": 0.085,
+        "use_regime_exposure": true,
+        "setup_type": "CCI_TREND_CONTINUATION"
+      }
+    },
+    {
+      "name": "long_term_support_bounce_v1",
+      "description": "Buy quality stocks near MA200, 120-day low, or 250-day low support with a recovery candle and stable smart-money context.",
+      "universe": "VN100",
+      "tags": ["support", "mean_reversion", "ma200", "long_term", "smart_money_trace", "research_shadow"],
+      "filters": [
+        {"column": "mkt_regime_score", "op": ">=", "value": 38},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "near_long_support", "op": "==", "value": true},
+        {"column": "ma200_slope_20", "op": ">=", "value": -0.025},
+        {"column": "close_location", "op": ">=", "value": 0.60},
+        {"column": "lower_wick_pct", "op": ">=", "value": 0.012},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 50},
+        {"column": "smart_money_score_no_sector_delta", "op": ">=", "value": -3},
+        {"column": "distribution_days_10", "op": "<=", "value": 2},
+        {"column": "DS20", "op": "<=", "value": 0.65}
+      ],
+      "rank": [
+        {"column": "support_confluence_score", "ascending": false, "weight": 1.4},
+        {"column": "pullback_quality_score", "ascending": false, "weight": 1.0},
+        {"column": "smart_money_score_no_sector", "ascending": false, "weight": 0.9},
+        {"column": "close_location", "ascending": false, "weight": 0.6},
+        {"column": "distance_ma200", "ascending": true, "weight": 0.4}
+      ],
+      "risk": {
+        "stop_loss": 0.06,
+        "take_profit": 0.16,
+        "max_holding_bars": 25,
+        "initial_atr_stop_mult": 1.8,
+        "trailing_atr_mult": 2.2,
+        "trailing_profit_activation": 0.07,
+        "use_regime_exposure": false,
+        "setup_type": "LONG_SUPPORT_BOUNCE"
+      }
+    },
+    {
+      "name": "long_term_support_bounce_v2_quality",
+      "description": "Stricter support bounce: require non-risk-off regime, stronger support confluence, flat/rising MA200, and lower market distribution.",
+      "universe": "VN100",
+      "tags": ["support", "mean_reversion", "ma200", "long_term", "quality_gate", "research_shadow"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "in", "value": ["RISK_ON", "NEUTRAL"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 45},
+        {"column": "mkt_DS20", "op": "<=", "value": 0.55},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "near_long_support", "op": "==", "value": true},
+        {"column": "support_confluence_score", "op": ">=", "value": 60},
+        {"column": "ma200_slope_20", "op": ">=", "value": 0.0},
+        {"column": "close_location", "op": ">=", "value": 0.65},
+        {"column": "lower_wick_pct", "op": ">=", "value": 0.012},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 52},
+        {"column": "smart_money_score_no_sector_delta", "op": ">=", "value": -2},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "DS20", "op": "<=", "value": 0.58}
+      ],
+      "rank": [
+        {"column": "support_confluence_score", "ascending": false, "weight": 1.5},
+        {"column": "pullback_quality_score", "ascending": false, "weight": 1.0},
+        {"column": "smart_money_score_no_sector", "ascending": false, "weight": 0.9},
+        {"column": "close_location", "ascending": false, "weight": 0.7},
+        {"column": "mkt_regime_score", "ascending": false, "weight": 0.5}
+      ],
+      "risk": {
+        "stop_loss": 0.06,
+        "take_profit": 0.16,
+        "max_holding_bars": 25,
+        "initial_atr_stop_mult": 1.8,
+        "trailing_atr_mult": 2.2,
+        "trailing_profit_activation": 0.07,
+        "use_regime_exposure": true,
+        "setup_type": "LONG_SUPPORT_BOUNCE_Q"
+      }
+    },
+    {
+      "name": "long_term_support_bounce_v3_above_ma200",
+      "description": "MA200 support bounce: only buy when price remains above MA200 support and the long-term average is flat/rising.",
+      "universe": "VN100",
+      "tags": ["support", "mean_reversion", "ma200", "above_ma200", "research_shadow"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "in", "value": ["RISK_ON", "NEUTRAL"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 48},
+        {"column": "mkt_DS20", "op": "<=", "value": 0.52},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "near_ma200_support", "op": "==", "value": true},
+        {"column": "above_ma200", "op": "==", "value": true},
+        {"column": "ma200_slope_20", "op": ">=", "value": 0.0},
+        {"column": "close_location", "op": ">=", "value": 0.65},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 52},
+        {"column": "smart_money_score_no_sector_delta", "op": ">=", "value": -2},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "DS20", "op": "<=", "value": 0.58}
+      ],
+      "rank": [
+        {"column": "support_confluence_score", "ascending": false, "weight": 1.4},
+        {"column": "distance_ma200", "ascending": true, "weight": 0.9},
+        {"column": "pullback_quality_score", "ascending": false, "weight": 0.9},
+        {"column": "smart_money_score_no_sector", "ascending": false, "weight": 0.8}
+      ],
+      "risk": {
+        "stop_loss": 0.055,
+        "take_profit": 0.15,
+        "max_holding_bars": 22,
+        "initial_atr_stop_mult": 1.7,
+        "trailing_atr_mult": 2.1,
+        "trailing_profit_activation": 0.065,
+        "use_regime_exposure": true,
+        "setup_type": "MA200_SUPPORT_HOLD"
+      }
+    },
+    {
+      "name": "long_term_support_bounce_v4_shallow_break",
+      "description": "Shallow MA200 break bounce: allow a small break below MA200 only when support confluence, close location, and smart-money stability are strong.",
+      "universe": "VN100",
+      "tags": ["support", "mean_reversion", "ma200", "shallow_break", "research_shadow"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "in", "value": ["RISK_ON", "NEUTRAL"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 45},
+        {"column": "mkt_DS20", "op": "<=", "value": 0.55},
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "near_long_support", "op": "==", "value": true},
+        {"column": "support_confluence_score", "op": ">=", "value": 65},
+        {"column": "distance_ma200", "op": ">=", "value": -0.02},
+        {"column": "ma200_slope_20", "op": ">=", "value": -0.005},
+        {"column": "close_location", "op": ">=", "value": 0.70},
+        {"column": "lower_wick_pct", "op": ">=", "value": 0.015},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 54},
+        {"column": "smart_money_score_no_sector_delta", "op": ">=", "value": -1},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "DS20", "op": "<=", "value": 0.55}
+      ],
+      "rank": [
+        {"column": "support_confluence_score", "ascending": false, "weight": 1.5},
+        {"column": "close_location", "ascending": false, "weight": 1.0},
+        {"column": "smart_money_score_no_sector_delta", "ascending": false, "weight": 0.8},
+        {"column": "pullback_quality_score", "ascending": false, "weight": 0.8}
+      ],
+      "risk": {
+        "stop_loss": 0.055,
+        "take_profit": 0.15,
+        "max_holding_bars": 20,
+        "initial_atr_stop_mult": 1.7,
+        "trailing_atr_mult": 2.1,
+        "trailing_profit_activation": 0.065,
+        "use_regime_exposure": true,
+        "setup_type": "MA200_SHALLOW_BREAK_BOUNCE"
+      }
+    }
+  ]
+}

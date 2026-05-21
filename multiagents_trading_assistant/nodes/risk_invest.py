@@ -7,13 +7,22 @@ Rules:
        Bluechip (FPT, VCB, MWG, PNJ, REE, ACB, VNM, MBB, TCB): ≥ 20%
        Ngân hàng, FMCG, Tech: ≥ 25%
        Cyclical, BĐS, Chứng khoán, Unknown: ≥ 30%  (default)
-  4. Sector concentration ≤ 25% NAV:
+  4. Sector concentration ≤ 25% NAV (ICB L2):
        Đếm số vị thế đang giữ cùng ngành từ DB
        ≥ 2 vị thế cùng sector → WARNING
        ≥ 3 vị thế cùng sector → BLOCK (CHỜ)
+  5. Cycle gate (Layer-1 market regime + Layer-2 sector rotation):
+       Market regime DISTRIBUTION / MARKDOWN     → BLOCK MUA (CHỜ)
+       Sector L1 state DISTRIBUTION / MARKDOWN   → BLOCK MUA (CHỜ)
+       Sector L1 state ACCUMULATION late stage  → WARNING (sizing prudent)
 """
 
+from pathlib import Path
+
+import pandas as pd
+
 from multiagents_trading_assistant import database as db
+from multiagents_trading_assistant.research.sector_rotation.icb_mapping import L2_TO_L1
 
 
 # ── Bluechip — chất lượng cao, biên độ MoS thấp hơn ──
@@ -51,6 +60,49 @@ _SECTOR_GROUP: dict[str, str] = {
 }
 _SECTOR_WARN_COUNT  = 2   # ≥ 2 vị thế cùng sector → warning
 _SECTOR_BLOCK_COUNT = 3   # ≥ 3 vị thế cùng sector → CHỜ
+
+# ── Cycle gate paths (parquets produced by research/sector_rotation) ──
+_SECTOR_ROTATION_PATH = "data/research/sector_rotation/sector_rotation.parquet"
+_MARKET_REGIME_PATH   = "data/research/sector_rotation/market_regime.parquet"
+
+_CYCLE_BLOCK_MARKET = {"MARKDOWN", "DISTRIBUTION"}
+_CYCLE_BLOCK_SECTOR = {"MARKDOWN", "DISTRIBUTION"}
+_CYCLE_WARN_SECTOR  = {"ACCUMULATION"}  # đáy chưa xác nhận — sizing prudent
+
+
+def _latest_market_regime(root: Path) -> tuple[str, str]:
+    """Return (regime, risk_state) for the most recent date in the regime parquet."""
+    path = root / _MARKET_REGIME_PATH
+    if not path.exists():
+        return ("NEUTRAL", "NEUTRAL")
+    try:
+        df = pd.read_parquet(path, columns=["date", "regime", "risk_state"])
+        last = df.sort_values("date").iloc[-1]
+        return (str(last["regime"]), str(last["risk_state"]))
+    except Exception as exc:
+        print(f"[risk_invest] cycle regime read skipped: {exc}")
+        return ("NEUTRAL", "NEUTRAL")
+
+
+def _latest_sector_state(root: Path, industry_l2: str) -> str:
+    """Return latest sector L1 state for the L2 industry of this symbol."""
+    if not industry_l2:
+        return "NEUTRAL"
+    sector_l1 = L2_TO_L1.get(industry_l2)
+    if not sector_l1:
+        return "NEUTRAL"
+    path = root / _SECTOR_ROTATION_PATH
+    if not path.exists():
+        return "NEUTRAL"
+    try:
+        df = pd.read_parquet(path, columns=["date", "sector_l1", "sector_state"])
+        df = df[df["sector_l1"] == sector_l1].sort_values("date")
+        if df.empty:
+            return "NEUTRAL"
+        return str(df.iloc[-1]["sector_state"])
+    except Exception as exc:
+        print(f"[risk_invest] cycle sector read skipped: {exc}")
+        return "NEUTRAL"
 
 
 def _mos_threshold(symbol: str, industry: str) -> int:
@@ -91,6 +143,7 @@ def check(state: dict) -> dict:
     action   = trader.get("action", "CHỜ")
     original = action
     warnings: list[str] = []
+    sizing_modifier: float = 1.0
 
     print(f"[risk_invest] {symbol} — action={action}")
 
@@ -134,6 +187,32 @@ def check(state: dict) -> dict:
     elif action == "MUA":
         warnings.append("Kiểm tra tập trung ngành ≤ 25% NAV trước khi vào")
 
+    # Rule 5: Cycle gate — market regime + sector L1 state
+    if action == "MUA":
+        repo_root = Path(__file__).resolve().parents[2]
+        mkt_regime, mkt_risk = _latest_market_regime(repo_root)
+        sector_state = _latest_sector_state(repo_root, industry)
+
+        if mkt_regime in _CYCLE_BLOCK_MARKET:
+            return _override(
+                original, "CHỜ",
+                f"Market regime {mkt_regime} — chu kỳ thị trường không ủng hộ mua mới",
+                warnings,
+            )
+        if sector_state in _CYCLE_BLOCK_SECTOR:
+            return _override(
+                original, "CHỜ",
+                f"Sector {L2_TO_L1.get(industry, industry)} đang {sector_state} — chờ chuyển pha",
+                warnings,
+            )
+        if sector_state in _CYCLE_WARN_SECTOR:
+            warnings.append(
+                f"Sector {L2_TO_L1.get(industry, industry)} đang ACCUMULATION — đáy chưa xác nhận, sizing thận trọng"
+            )
+            sizing_modifier = 0.7
+        if mkt_risk == "RISK_OFF":
+            warnings.append("Market RISK_OFF — cân nhắc trì hoãn vào lệnh")
+
     if warnings:
         print(f"[risk_invest] warnings: {'; '.join(warnings)}")
     print(f"[risk_invest] OK — final={action}")
@@ -142,7 +221,7 @@ def check(state: dict) -> dict:
         "final_action":    action,
         "override_reason": None,
         "warnings":        warnings,
-        "sizing_modifier": 1.0,
+        "sizing_modifier": sizing_modifier,
         "original_action": original,
     }
 

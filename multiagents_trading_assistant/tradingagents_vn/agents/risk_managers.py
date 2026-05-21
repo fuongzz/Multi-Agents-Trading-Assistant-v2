@@ -89,10 +89,19 @@ Tất cả giá tính bằng nghìn đồng (VD: 50.5 nghĩa là 50,500 VND). Qu
 
 
 def _trader_context(state: dict) -> str:
-    return (
+    ctx = (
         f"Mã: {state['company_of_interest']} | Ngày: {state['trade_date']}\n\n"
         f"## Kế hoạch Trader\n{state.get('trader_investment_plan', 'Chưa có')}\n"
     )
+    agentic = state.get("agentic_context", "")
+    if agentic:
+        ctx += (
+            "\n\n## StrategySignal đã freeze\n"
+            "Risk debate phải kiểm tra plan dựa trên signal gốc này; "
+            "không được tạo strategy khác.\n"
+            f"{agentic}\n"
+        )
+    return ctx
 
 
 def create_aggressive_analyst(llm):
@@ -193,8 +202,16 @@ def create_portfolio_manager(llm):
             f"## Tổng hợp Nghiên cứu\n{state.get('investment_plan', 'Chưa có')}\n\n"
             f"## Kế hoạch Trader\n{state.get('trader_investment_plan', 'Chưa có')}\n\n"
             f"## Lịch sử tranh luận rủi ro\n{risk.get('history', 'Chưa có')}\n\n"
-            "Hãy đưa ra quyết định danh mục cuối cùng."
         )
+        agentic = state.get("agentic_context", "")
+        if agentic:
+            user_msg += (
+                "## StrategySignal đã freeze\n"
+                "Quyết định cuối phải review signal gốc, không đổi strategy. "
+                "Nếu không đạt, trả action CHO hoặc TRANH trong JSON.\n"
+                f"{agentic}\n\n"
+            )
+        user_msg += "Hãy đưa ra quyết định danh mục cuối cùng."
 
         response = llm.invoke([SystemMessage(content=_PM_SYSTEM), HumanMessage(content=user_msg)])
 

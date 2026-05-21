@@ -1,0 +1,106 @@
+{
+  "meta": {
+    "description": "QMV Ichimoku x Turtle hypotheses translated from course framework into causal edge_lab filters.",
+    "created": "2026-05-17",
+    "notes": [
+      "Ichimoku cloud at date T uses Senkou values shifted from T-26, not future data.",
+      "Chikou confirmation is proxied causally as close(T) > close(T-26).",
+      "Entries are evaluated EOD T and filled next open T+1 by the harness."
+    ]
+  },
+  "hypotheses": [
+    {
+      "name": "qmv_ichimoku_perfect_bull_v1",
+      "description": "San Yaku Kouten style bullish alignment: TK bull, price above cloud, current/future cloud green, Chikou free. Entry only on the first alignment bar.",
+      "universe": "VN100",
+      "tags": ["qmv", "ichimoku", "perfect_bullish", "trend_following"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 55},
+        {"column": "ich_perfect_bullish_signal", "op": "==", "value": true},
+        {"column": "ich_no_chase", "op": "==", "value": true},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.60},
+        {"column": "distribution_days_10", "op": "<=", "value": 2},
+        {"column": "data_quality_ok", "op": "==", "value": true}
+      ],
+      "rank": [
+        {"column": "rs_percentile_20", "ascending": false, "weight": 1.0},
+        {"column": "smart_money_score", "ascending": false, "weight": 0.8},
+        {"column": "value_ratio_20", "ascending": false, "weight": 0.6},
+        {"column": "ich_kijun_distance", "ascending": true, "weight": 0.4}
+      ],
+      "risk": {
+        "stop_loss": 0.08,
+        "take_profit": 0.35,
+        "max_holding_bars": 80,
+        "initial_atr_stop_mult": 2.0,
+        "trailing_atr_mult": 2.5,
+        "trailing_profit_activation": 0.08,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "qmv_ichimoku_kijun_bounce_v1",
+      "description": "Kijun pullback/bounce in bullish cloud regime. Designed to catch continuation after a healthy pullback rather than chase extended breakouts.",
+      "universe": "VN100",
+      "tags": ["qmv", "ichimoku", "kijun_bounce", "pullback", "trend_following"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 55},
+        {"column": "ich_kijun_bounce", "op": "==", "value": true},
+        {"column": "ich_tk_bull", "op": "==", "value": true},
+        {"column": "ich_chikou_free", "op": "==", "value": true},
+        {"column": "ich_future_green", "op": "==", "value": true},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.55},
+        {"column": "smart_money_score", "op": ">=", "value": 50},
+        {"column": "data_quality_ok", "op": "==", "value": true}
+      ],
+      "rank": [
+        {"column": "smart_money_score", "ascending": false, "weight": 1.0},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.8},
+        {"column": "close_location", "ascending": false, "weight": 0.5},
+        {"column": "ich_kijun_distance", "ascending": true, "weight": 0.5}
+      ],
+      "risk": {
+        "stop_loss": 0.07,
+        "take_profit": 0.25,
+        "max_holding_bars": 45,
+        "initial_atr_stop_mult": 1.8,
+        "trailing_atr_mult": 2.2,
+        "trailing_profit_activation": 0.07,
+        "use_regime_exposure": true
+      }
+    },
+    {
+      "name": "qmv_turtle_ichimoku_breakout_v1",
+      "description": "Turtle Donchian breakout filtered by Ichimoku battlefield: breakout above prior 55-day high while price is above cloud and Chikou confirms trend strength.",
+      "universe": "VN100",
+      "tags": ["qmv", "turtle", "donchian", "ichimoku", "breakout", "trend_following"],
+      "filters": [
+        {"column": "mkt_regime_state", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_score", "op": ">=", "value": 55},
+        {"column": "breakout_55", "op": "==", "value": true},
+        {"column": "ich_price_above_cloud", "op": "==", "value": true},
+        {"column": "ich_tk_bull", "op": "==", "value": true},
+        {"column": "ich_chikou_free", "op": "==", "value": true},
+        {"column": "ich_future_green", "op": "==", "value": true},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.05},
+        {"column": "data_quality_ok", "op": "==", "value": true}
+      ],
+      "rank": [
+        {"column": "value_ratio_20", "ascending": false, "weight": 1.0},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.9},
+        {"column": "smart_money_score", "ascending": false, "weight": 0.6}
+      ],
+      "risk": {
+        "stop_loss": 0.10,
+        "take_profit": 0.45,
+        "max_holding_bars": 90,
+        "initial_atr_stop_mult": 2.0,
+        "trailing_atr_mult": 2.5,
+        "trailing_profit_activation": 0.08,
+        "use_regime_exposure": true
+      }
+    }
+  ]
+}

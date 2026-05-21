@@ -34,7 +34,7 @@ from zoneinfo import ZoneInfo
 
 _log = logging.getLogger("dnse_ws")
 
-_WS_URL = "wss://ws-openapi.dnse.com.vn"
+_WS_URL = "wss://ws-openapi.dnse.com.vn/v1/stream?encoding=json"
 _VN_TZ  = ZoneInfo("Asia/Ho_Chi_Minh")
 
 # Boards HOSE thường dùng
@@ -48,6 +48,7 @@ _cache_lock = threading.Lock()
 # ── Trạng thái kết nối ──
 _ws_thread: threading.Thread | None = None
 _ws_loop:   asyncio.AbstractEventLoop | None = None
+_ws_connection = None
 _connected  = threading.Event()
 _subscribed_symbols: set[str] = set()
 
@@ -99,11 +100,9 @@ def subscribe_symbols(symbols: list[str]) -> None:
         return
     _subscribed_symbols.update(new)
 
-    if _ws_loop and _connected.is_set():
-        api_key    = os.getenv("DNSE_API_KEY", "").strip()
-        api_secret = os.getenv("DNSE_API_SECRET", "").strip()
+    if _ws_loop and _connected.is_set() and _ws_connection is not None:
         asyncio.run_coroutine_threadsafe(
-            _subscribe(_ws_loop._running_connection, list(new)),  # type: ignore
+            _subscribe(_ws_connection, list(new)),
             _ws_loop,
         )
 
@@ -197,7 +196,7 @@ def _make_signature(api_key: str, api_secret: str, timestamp: int, nonce: str) -
 
 
 async def _authenticate(ws, api_key: str, api_secret: str) -> bool:
-    """Gửi auth message, đợi auth_success. Returns True nếu thành công."""
+    """Send auth message and only fail on auth_error."""
     timestamp = int(time.time())
     nonce = str(int(time.time() * 1_000_000))
     signature = _make_signature(api_key, api_secret, timestamp, nonce)
@@ -213,12 +212,12 @@ async def _authenticate(ws, api_key: str, api_secret: str) -> bool:
 
     try:
         resp = await asyncio.wait_for(ws.recv(), timeout=10.0)
-        data = json.loads(resp)
-        if data.get("action") == "auth_success":
-            _log.info("[ws_price] Auth thành công.")
-            return True
-        _log.error(f"[ws_price] Auth thất bại: {data}")
-        return False
+        data = _decode_message(resp)
+        if data.get("action") == "auth_error":
+            _log.error(f"[ws_price] Auth that bai: {data}")
+            return False
+        _log.info("[ws_price] Auth thanh cong.")
+        return True
     except asyncio.TimeoutError:
         _log.error("[ws_price] Auth timeout.")
         return False
@@ -238,12 +237,20 @@ async def _subscribe(ws, symbols: list[str], boards: list[str] | None = None) ->
     _log.info(f"[ws_price] Subscribe {len(symbols)} mã trên boards {boards}")
 
 
+def _decode_message(raw) -> dict:
+    if isinstance(raw, bytes):
+        raw = raw.decode("utf-8", errors="ignore")
+    if isinstance(raw, str):
+        return json.loads(raw)
+    return {}
+
+
 def _handle_tick(data: dict) -> None:
     """Parse tick message và cập nhật cache."""
-    # DNSE Trade model fields (từ SDK models.py)
-    sym   = data.get("sym") or data.get("symbol")
-    price = data.get("mp")  or data.get("matchPrice") or data.get("price")
-    qty   = data.get("mq")  or data.get("matchQtty")  or data.get("quantity") or 0
+    # SDK 0.5.0 accepts both verbose fields and compact keys.
+    sym = data.get("symbol") or data.get("sym") or data.get("s")
+    price = data.get("price") or data.get("matchPrice") or data.get("mp") or data.get("p")
+    qty = data.get("volume") or data.get("matchQtty") or data.get("mq") or data.get("v") or 0
 
     if not sym or not price:
         return
@@ -253,6 +260,8 @@ def _handle_tick(data: dict) -> None:
         q = int(qty)
     except (TypeError, ValueError):
         return
+
+    sym = str(sym).upper().strip()
 
     with _cache_lock:
         _price_cache[sym] = {
@@ -266,6 +275,7 @@ async def _ws_main(api_key: str, api_secret: str, symbols: list[str]) -> None:
     """Main coroutine — kết nối, auth, subscribe, đọc messages với auto-reconnect."""
     import websockets
 
+    global _ws_connection
     reconnect_delay = 5.0
     max_reconnect_delay = 60.0
 
@@ -278,9 +288,10 @@ async def _ws_main(api_key: str, api_secret: str, symbols: list[str]) -> None:
                 ping_timeout=30,
                 close_timeout=10,
             ) as ws:
+                _ws_connection = ws
                 # Nhận welcome message
                 welcome_raw = await asyncio.wait_for(ws.recv(), timeout=10.0)
-                welcome = json.loads(welcome_raw)
+                welcome = _decode_message(welcome_raw)
                 session_id = welcome.get("session_id") or welcome.get("sid", "?")
                 _log.info(f"[ws_price] Connected. Session: {session_id}")
 
@@ -299,14 +310,18 @@ async def _ws_main(api_key: str, api_secret: str, symbols: list[str]) -> None:
                 # Read loop
                 async for raw in ws:
                     try:
-                        data = json.loads(raw)
+                        data = _decode_message(raw)
                     except (json.JSONDecodeError, TypeError):
                         continue
 
-                    action = data.get("action") or data.get("type") or data.get("event")
+                    action = data.get("action") or data.get("type") or data.get("event") or data.get("T")
 
-                    if action in ("tick", "trade", None):
+                    if action in ("tick", "trade", "t", "te", None):
                         _handle_tick(data)
+                    elif action == "ping":
+                        await ws.send(json.dumps({"action": "pong"}))
+                    elif action == "auth_error":
+                        raise RuntimeError(f"auth_error: {data}")
                     elif action == "subscribe_success":
                         _log.debug(f"[ws_price] Subscribe OK: {data.get('channels')}")
                     elif action == "error":
@@ -314,6 +329,7 @@ async def _ws_main(api_key: str, api_secret: str, symbols: list[str]) -> None:
 
         except Exception as e:
             _connected.clear()
+            _ws_connection = None
             _log.warning(f"[ws_price] Ngắt kết nối: {e}. Reconnect sau {reconnect_delay:.0f}s ...")
             await asyncio.sleep(reconnect_delay)
             reconnect_delay = min(reconnect_delay * 2, max_reconnect_delay)

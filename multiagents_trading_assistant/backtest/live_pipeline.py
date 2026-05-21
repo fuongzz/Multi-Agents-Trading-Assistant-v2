@@ -168,6 +168,9 @@ class LivePipelineBacktestConfig:
     # Proxy LLM: tỉ lệ tối đa candidate được giữ lại sau gate (60-80% bị loại)
     llm_gate_keep_ratio: float = 0.30
     edge_strategy_name: str | None = None
+    # Closed-loop learning: skip candidates whose (edge_strategy_name, regime) is in this set.
+    # Set is built by Bob's Friday meeting from real losses (or offline from prior backtest).
+    deprecated_keys: frozenset[tuple[str, str]] | None = None
 
 
 @dataclass
@@ -563,6 +566,12 @@ def _apply_simulated_llm_gate(
         soft_flags = [f for f in flags if f not in _BAD_FLAGS and not f.startswith("OVERBOUGHT")]
         if len(soft_flags) > 1:
             continue
+        # Closed-loop deprecate gate: skip if (strategy, regime) flagged from past losses
+        if cfg.deprecated_keys:
+            strat = str(c.get("edge_strategy_name") or "")
+            regime = str(c.get("mkt_regime_label") or c.get("regime") or "").upper()
+            if (strat, regime) in cfg.deprecated_keys:
+                continue
         filtered.append(c)
 
     # Enforce keep_ratio cap (simulate LLM culling down to top fraction)
@@ -686,6 +695,10 @@ def _edge_take_profit(
 
 
 def _edge_exit_decision(row: pd.Series, position: LivePosition, cfg: LivePipelineBacktestConfig) -> tuple[str | None, float]:
+    # 2026-05-14 bias fix: previous code returned open_ * slip on intraday
+    # triggers, under-counting losses (and wins) ~1.8x on full portfolios.
+    # Now: SL/ATR/trailing exit at min(open, trigger); TP at max(open, trigger).
+    # See MIGRATION_NOTES.md for details.
     low = float(row["low"])
     high = float(row["high"])
     close = float(row["close"])
@@ -696,26 +709,31 @@ def _edge_exit_decision(row: pd.Series, position: LivePosition, cfg: LivePipelin
 
     stop_pct = _safe_float(risk.get("stop_loss"))
     if stop_pct and low <= entry * (1.0 - stop_pct):
-        return "EDGE_STOP_LOSS", open_ * (1.0 - cfg.slippage_rate)
+        trigger = entry * (1.0 - stop_pct)
+        return "EDGE_STOP_LOSS", min(open_, trigger) * (1.0 - cfg.slippage_rate)
 
     atr = _safe_float(position.entry_atr)
     if atr and atr > 0:
         initial_mult = risk.get("initial_atr_stop_mult")
-        if initial_mult is not None and low <= entry - float(initial_mult) * atr:
-            return "EDGE_ATR_STOP", open_ * (1.0 - cfg.slippage_rate)
+        if initial_mult is not None:
+            atr_trigger = entry - float(initial_mult) * atr
+            if low <= atr_trigger:
+                return "EDGE_ATR_STOP", min(open_, atr_trigger) * (1.0 - cfg.slippage_rate)
 
         trailing_mult = risk.get("trailing_atr_mult")
         activation = _safe_float(risk.get("trailing_profit_activation")) or 0.0
         if (
             trailing_mult is not None
             and float(position.highest_price or entry) >= entry * (1.0 + activation)
-            and low <= float(position.highest_price or entry) - float(trailing_mult) * atr
         ):
-            return "EDGE_TRAILING_ATR_STOP", open_ * (1.0 - cfg.slippage_rate)
+            trail_trigger = float(position.highest_price or entry) - float(trailing_mult) * atr
+            if low <= trail_trigger:
+                return "EDGE_TRAILING_ATR_STOP", min(open_, trail_trigger) * (1.0 - cfg.slippage_rate)
 
     take_profit_pct = _safe_float(risk.get("take_profit"))
     if take_profit_pct and high >= entry * (1.0 + take_profit_pct):
-        return "EDGE_TAKE_PROFIT", open_ * (1.0 - cfg.slippage_rate)
+        tp_trigger = entry * (1.0 + take_profit_pct)
+        return "EDGE_TAKE_PROFIT", max(open_, tp_trigger) * (1.0 - cfg.slippage_rate)
 
     max_holding = int(risk.get("max_holding_bars") or cfg.max_hold_bars)
     if position.holding_bars >= max_holding:
@@ -853,7 +871,7 @@ def _add_feature_columns(frame: pd.DataFrame) -> pd.DataFrame:
     for target, source in mapping.items():
         data[target] = _align_series(ta_values.get(source), data.index)
     data["bb_width"] = _bb_width_series(data["bb_upper"], data["bb_mid"], data["bb_lower"])
-    data["bb_width_min20"] = data["bb_width"].rolling(20).min()
+    data["bb_width_min20"] = data["bb_width"].shift(1).rolling(20).min()
     data["bb_percent"] = _bb_percent_series(data["close"], data["bb_upper"], data["bb_lower"])
     data["kc_width"] = _channel_width_series(data["kc_upper"], data["kc_mid"], data["kc_lower"])
     data["linreg_slope_14"] = _diff_series(data["linreg_14"], periods=5)

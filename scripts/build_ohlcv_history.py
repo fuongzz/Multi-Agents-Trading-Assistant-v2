@@ -22,16 +22,17 @@ from multiagents_trading_assistant.fetcher import (
     get_vn100_symbols,
     get_ohlcv_history,
 )
-from multiagents_trading_assistant.data.providers.vnstock_provider import VnstockDataProvider
 from multiagents_trading_assistant.data import ohlcv_store
 
 
 def get_exchange_map() -> dict[str, str]:
     """Fetch exchange mapping: {symbol: 'HOSE' | 'HNX'}"""
     try:
-        provider = VnstockDataProvider()
-        ref_df = provider._reference.equity.by_exchange()
+        from vnstock_data import Reference
+
+        ref_df = Reference().equity.list_by_exchange()
         # Columns: symbol, exchange, ...
+        ref_df["symbol"] = ref_df["symbol"].astype(str).str.upper().str.strip()
         exchange_map = dict(zip(ref_df["symbol"], ref_df["exchange"]))
         return exchange_map
     except Exception as e:
@@ -42,14 +43,18 @@ def get_exchange_map() -> dict[str, str]:
 def get_industry_map() -> dict[str, str]:
     """Fetch industry mapping: {symbol: icb_name (L2)}"""
     try:
-        provider = VnstockDataProvider()
-        industry_map = {}
-        # Reference.equity.list_by_industry() returns dict[industry] -> [symbols]
-        all_industries = provider._reference.equity.list_by_industry()
-        for icb_name, symbols in all_industries.items():
-            for sym in symbols:
-                industry_map[sym] = icb_name
-        return industry_map
+        from vnstock_data import Reference
+
+        industry_df = Reference().equity.list_by_industry()
+        industry_df = industry_df[industry_df["icb_level"].astype("Int64") == 2].copy()
+        industry_df["symbol"] = industry_df["symbol"].astype(str).str.upper().str.strip()
+        return (
+            industry_df.dropna(subset=["symbol", "icb_name"])
+            .drop_duplicates("symbol", keep="first")
+            .set_index("symbol")["icb_name"]
+            .astype(str)
+            .to_dict()
+        )
     except Exception as e:
         print(f"⚠️  Failed to fetch industry map: {e}")
         return {}

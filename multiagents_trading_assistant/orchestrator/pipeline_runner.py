@@ -87,14 +87,168 @@ def _update_ohlcv_daily() -> None:
     """
     print(f"\n{'=' * 60}\n[runner] OHLCV DAILY UPDATE — {_today()}\n{'=' * 60}")
     try:
-        import subprocess
         from pathlib import Path
 
         script_path = Path(__file__).parent.parent.parent / "scripts" / "update_ohlcv_daily.py"
-        subprocess.run([sys.executable, str(script_path)], check=False, timeout=300)
+        subprocess.run([sys.executable, str(script_path)], check=False, timeout=600)
         print("[runner] OHLCV update complete")
     except Exception as e:
         print(f"[runner] OHLCV update FAIL: {e}")
+
+
+def _update_vnindex() -> None:
+    """Append latest VNINDEX bar to index_master.parquet."""
+    print(f"\n{'-' * 60}\n[runner] VNINDEX update — {_today()}\n{'-' * 60}")
+    try:
+        from pathlib import Path
+
+        import pandas as pd
+
+        from multiagents_trading_assistant.fetcher import get_vnindex
+
+        vni = get_vnindex(n_days=10)
+        if vni is None or vni.empty:
+            print("[runner] VNINDEX fetch returned empty — skip")
+            return
+        vni = vni.copy()
+        vni["date"] = pd.to_datetime(vni["date"]).dt.normalize()
+        vni["symbol"] = "VNINDEX"
+
+        master_path = (
+            Path(__file__).parent.parent / "data" / "index_master.parquet"
+        )
+        if master_path.exists():
+            master = pd.read_parquet(master_path)
+            master["date"] = pd.to_datetime(master["date"]).dt.normalize()
+            existing = set(
+                master[master["symbol"].astype(str).str.upper() == "VNINDEX"]["date"]
+            )
+            new_rows = vni[~vni["date"].isin(existing)][
+                ["date", "symbol", "open", "high", "low", "close", "volume"]
+            ]
+            if new_rows.empty:
+                print("[runner] VNINDEX already up to date")
+                return
+            combined = (
+                pd.concat([master, new_rows], ignore_index=True)
+                .sort_values(["symbol", "date"])
+                .drop_duplicates(["symbol", "date"], keep="last")
+                .reset_index(drop=True)
+            )
+        else:
+            combined = vni[
+                ["date", "symbol", "open", "high", "low", "close", "volume"]
+            ]
+        master_path.parent.mkdir(parents=True, exist_ok=True)
+        combined.to_parquet(master_path, index=False)
+        latest = combined[combined["symbol"] == "VNINDEX"]["date"].max()
+        print(f"[runner] VNINDEX latest: {latest}")
+    except Exception as e:
+        print(f"[runner] VNINDEX update FAIL: {e}")
+
+
+def _compute_money_cycle() -> None:
+    """Recompute CHDM / DS parquets from latest OHLCV master."""
+    print(f"\n{'-' * 60}\n[runner] Money cycle compute — {_today()}\n{'-' * 60}")
+    try:
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "multiagents_trading_assistant.research.money_cycle.cli",
+            ],
+            check=False,
+            timeout=900,
+        )
+        print("[runner] Money cycle compute done")
+    except Exception as e:
+        print(f"[runner] Money cycle compute FAIL: {e}")
+
+
+def _compute_smart_money_trace() -> None:
+    """Recompute smart_money_by_symbol parquet (depends on CHDM)."""
+    print(f"\n{'-' * 60}\n[runner] Smart money trace compute — {_today()}\n{'-' * 60}")
+    try:
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "multiagents_trading_assistant.research.smart_money_trace.cli",
+            ],
+            check=False,
+            timeout=900,
+        )
+        print("[runner] Smart money trace done")
+    except Exception as e:
+        print(f"[runner] Smart money trace FAIL: {e}")
+
+
+def _run_daily_data_refresh() -> None:
+    """Sequential daily data refresh — chạy sau market close hoặc trước ATO.
+
+    Sequence (cần đúng thứ tự dependency):
+        1. OHLCV master       (per-symbol price)
+        2. VNINDEX master     (market index)
+        3. Money cycle        (CHDM, DS — depends on OHLCV)
+        4. Smart money trace  (depends on OHLCV + CHDM)
+    """
+    print(f"\n{'=' * 60}\n[runner] DAILY DATA REFRESH — {_today()}\n{'=' * 60}")
+    _update_ohlcv_daily()
+    _update_vnindex()
+    _compute_money_cycle()
+    _compute_smart_money_trace()
+    print(f"[runner] Daily data refresh COMPLETE\n")
+
+
+def _run_daily_data_refresh_if_stale() -> None:
+    """Morning catch-up: only refresh if EOD job didn't run (e.g. PC was off).
+
+    Idempotent — safe to call. Skips if all data layers are fresh.
+    """
+    ok, stale = _check_data_freshness()
+    if ok:
+        print(f"[runner] Morning data check — all fresh, skip refresh")
+        return
+    print(f"[runner] Morning catch-up triggered. Stale layers: {stale}")
+    _run_daily_data_refresh()
+
+
+def _check_data_freshness(date: str | None = None) -> tuple[bool, list[str]]:
+    """Verify all data layers are at most 1 trading day stale.
+
+    Returns (ok, stale_layers). Used as gate before trade pipeline scan.
+    """
+    from datetime import timedelta
+    from pathlib import Path
+
+    import pandas as pd
+
+    target = pd.Timestamp(date or _today()).normalize()
+    # Allow data 3 calendar days old (weekend + Monday morning before refresh)
+    cutoff = target - pd.Timedelta(days=3)
+
+    repo_root = Path(__file__).parent.parent.parent
+    checks = {
+        "ohlcv_master": repo_root / "multiagents_trading_assistant/data/ohlcv_master.parquet",
+        "index_master": repo_root / "multiagents_trading_assistant/data/index_master.parquet",
+        "money_cycle/chdm": repo_root / "data/research/money_cycle/chdm_by_symbol.parquet",
+        "money_cycle/ds": repo_root / "data/research/money_cycle/ds_by_symbol.parquet",
+        "smart_money_trace": repo_root
+        / "data/research/smart_money_trace/smart_money_by_symbol.parquet",
+    }
+    stale: list[str] = []
+    for name, path in checks.items():
+        if not path.exists():
+            stale.append(f"{name} (missing file)")
+            continue
+        try:
+            df = pd.read_parquet(path, columns=["date"])
+            latest = pd.to_datetime(df["date"]).max().normalize()
+            if latest < cutoff:
+                stale.append(f"{name} (latest={latest.date()})")
+        except Exception as e:
+            stale.append(f"{name} (read error: {e})")
+    return (not stale, stale)
 
 
 # ──────────────────────────────────────────────
@@ -156,6 +310,32 @@ def run_trade_pipeline(
     date = date or _today()
     db.init_db()
     print(f"\n{'=' * 60}\n[runner] TRADE PIPELINE — {date} | mode={_GRAPH_MODE}\n{'=' * 60}")
+
+    # Data freshness gate — refuse to scan with stale data (signals will all
+    # fail filter chain due to NaN in SMT/CHDM, masquerading as "no opportunity")
+    ok, stale = _check_data_freshness(date)
+    if not ok:
+        msg = f"Trade pipeline aborted — stale data layers: {stale}"
+        print(f"[runner] ⚠ {msg}")
+        try:
+            output_service.send_to_channel(
+                "trade",
+                f"⚠️ **{date}** — Trade pipeline tạm dừng: data stale.\n"
+                f"Stale: {', '.join(stale)}\nĐang thử refresh.",
+            )
+        except Exception:
+            pass
+        _run_daily_data_refresh()
+        ok2, stale2 = _check_data_freshness(date)
+        if not ok2:
+            print(f"[runner] Data refresh failed to fix: {stale2}. Skip scan.")
+            send_pipeline_alert(
+                "trade",
+                RuntimeError(f"Stale data after refresh: {stale2}"),
+                date=date,
+            )
+            return []
+
     try:
         if _GRAPH_MODE == "deep":
             return _run_trade_pipeline_deep(symbol, date)
@@ -170,6 +350,10 @@ def _run_trade_pipeline_deep(
     date: str,
 ) -> list[dict]:
     """Deep mode: screener → top 3–5 candidates → TradingAgentsVN full debate → batch Discord."""
+    from multiagents_trading_assistant.agentic import (
+        build_strategy_signal_from_candidate,
+    )
+    from multiagents_trading_assistant.agentic.evidence_builder import EvidenceBuilder
     from multiagents_trading_assistant.tradingagents_vn.graph import TradingAgentsVN
     from multiagents_trading_assistant.backtest.validator import validate_trade_plan
     from multiagents_trading_assistant.backtest.plan_scorer import evaluate_plan
@@ -182,6 +366,7 @@ def _run_trade_pipeline_deep(
 
     if symbol:
         candidates_sym = [symbol.upper()]
+        candidate_by_symbol = {}
     else:
         _market_ctx, candidates = trade_screener()
         if _EDGE_STRATEGY_ONLY:
@@ -194,7 +379,9 @@ def _run_trade_pipeline_deep(
                 f"Trend: {_market_ctx.reference_trend} | VNI: {_market_ctx.vni_change_pct:+.2f}%",
             )
             return []
-        candidates_sym = [c.symbol for c in candidates[:_DEEP_TOP_N]]
+        selected_candidates = candidates[:_DEEP_TOP_N]
+        candidate_by_symbol = {c.symbol.upper(): c for c in selected_candidates}
+        candidates_sym = [c.symbol for c in selected_candidates]
 
     print(f"[runner:deep] Phân tích sâu: {candidates_sym}")
 
@@ -204,11 +391,34 @@ def _run_trade_pipeline_deep(
     for sym in candidates_sym:
         print(f"\n[runner:deep] → {sym}")
         try:
+            candidate = candidate_by_symbol.get(sym.upper())
+            strategy_signal = None
+            evidence_packet = None
+            setup_type = "UNKNOWN"
+            features = {}
+            if candidate is not None:
+                strategy_signal = build_strategy_signal_from_candidate(candidate, date)
+                if strategy_signal is None:
+                    print(f"[runner:deep] {sym}: skip — không có core3 StrategySignal")
+                    continue
+                evidence_packet = EvidenceBuilder(date, backtest_mode=False).build(
+                    candidate, signal=strategy_signal
+                )
+                setup_type = strategy_signal.setup_type
+                features = dict(candidate.indicators or {})
+                features["market_trend"] = candidate.market_context.reference_trend
+
             # Lấy current price để validate
             df = get_ohlcv(sym, 5)
             current_price = float(df["close"].iloc[-1]) if not df.empty else 0.0
 
-            plan = graph.propagate(sym, signal_date=date, setup_type="UNKNOWN")
+            plan = graph.propagate(
+                sym,
+                signal_date=date,
+                setup_type=setup_type,
+                strategy_signal=strategy_signal.model_dump() if strategy_signal else None,
+                evidence_packet=evidence_packet.model_dump() if evidence_packet else None,
+            )
 
             if plan is None:
                 print(f"[runner:deep] {sym}: không parse được TradePlan")
@@ -219,12 +429,13 @@ def _run_trade_pipeline_deep(
                 print(f"[runner:deep] {sym}: validate fail — {vr.errors}")
                 continue
 
-            score, should_trade = evaluate_plan(plan, {})
+            score, should_trade = evaluate_plan(plan, features)
             print(f"[runner:deep] {sym}: action={plan.action} score={score:.3f}")
 
             state_dict = {
                 "symbol": sym,
                 "date": date,
+                "strategy_signal": strategy_signal.model_dump() if strategy_signal else None,
                 "plan": plan.model_dump(),
                 "score": score,
                 "should_trade": should_trade,
@@ -410,18 +621,27 @@ def start_scheduler() -> None:
         ),
         id="session_monitor",
     )
+    # Full data refresh after market close (Mon-Fri 15:35)
     scheduler.add_job(
-        _update_ohlcv_daily,
+        _run_daily_data_refresh,
         CronTrigger(day_of_week="mon-fri", hour=15, minute=35, timezone=_VN_TZ),
-        id="ohlcv_daily_update",
+        id="daily_data_refresh_eod",
+    )
+    # Morning catch-up at 07:30 — only re-runs if data is stale (e.g. PC was off
+    # last night). Idempotent: OHLCV/VNINDEX updaters skip if up-to-date.
+    scheduler.add_job(
+        _run_daily_data_refresh_if_stale,
+        CronTrigger(day_of_week="mon-fri", hour=7, minute=30, timezone=_VN_TZ),
+        id="daily_data_refresh_morning",
     )
 
     print("[runner] APScheduler started:")
-    print("  - Bob (ℳₛ)     : Thu 6 20:00 VN — Strategy Development Meeting")
+    print("  - Bob (M_s)     : Thu 6 20:00 VN — Strategy Development Meeting")
     print("  - Investment    : Thu 2 08:00 VN")
-    print("  - Trade         : Hang ngay 08:30 VN")
+    print("  - Trade         : Hang ngay 08:30 VN (co data freshness gate)")
     print("  - Session mon.  : Moi 5 phut (09:00-14:35) — real-time risk")
-    print("  - OHLCV update  : Moi 5 phut (15:35) — sau market close")
+    print("  - Data refresh  : 15:35 EOD + 07:30 morning catch-up")
+    print("                    (OHLCV + VNINDEX + Money Cycle + Smart Money Trace)")
     print("  - Cleanup       : Chu nhat 02:00 VN")
     print("  Ctrl+C de dung.\n")
 

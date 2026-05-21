@@ -553,6 +553,12 @@ def save_outputs(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    def _atomic_to_parquet(frame: pd.DataFrame, path: Path) -> None:
+        tmp_path = path.with_name(f"{path.stem}.tmp{path.suffix}")
+        tmp_path.unlink(missing_ok=True)
+        frame.to_parquet(tmp_path, index=False)
+        tmp_path.replace(path)
+
     # Include CHDM columns if present
     chdm_cols = sorted(c for c in df.columns if c.startswith("CHDM"))
     all_cols = _BY_SYMBOL_COLS + [c for c in chdm_cols if c not in _BY_SYMBOL_COLS]
@@ -560,17 +566,17 @@ def save_outputs(
     df_out = df[existing]
 
     p1 = output_dir / "smart_money_by_symbol.parquet"
-    df_out.to_parquet(p1, index=False)
+    _atomic_to_parquet(df_out, p1)
     logger.info("Saved %s: %d rows", p1.name, len(df_out))
 
     p2 = output_dir / "smart_money_daily_summary.parquet"
-    summary.to_parquet(p2, index=False)
+    _atomic_to_parquet(summary, p2)
     logger.info("Saved %s: %d rows", p2.name, len(summary))
 
     hot_states = {"HOT_BUT_STRONG", "HOT_AND_EXHAUSTED", "HOT_AND_DISTRIBUTING", "RESET_IN_UPTREND"}
     hot_df = df_out[df_out["smart_money_state"].isin(hot_states)]
     p3 = output_dir / "smart_money_hot_states.parquet"
-    hot_df.to_parquet(p3, index=False)
+    _atomic_to_parquet(hot_df, p3)
     logger.info("Saved %s: %d rows", p3.name, len(hot_df))
 
 

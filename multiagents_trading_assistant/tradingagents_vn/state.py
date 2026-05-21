@@ -59,3 +59,7 @@ class AgentState(TypedDict):
     final_trade_decision: str   # tên field giống repo gốc
     # Memory
     past_context: str           # injected từ memory lúc bắt đầu
+    # Agentic Phase 1 context
+    strategy_signal: dict       # immutable deterministic alpha signal
+    evidence_packet: dict       # broker-grade evidence snapshot
+    agentic_context: str        # compact prompt context for LLM review

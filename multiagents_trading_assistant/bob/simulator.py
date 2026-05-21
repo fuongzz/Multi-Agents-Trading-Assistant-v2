@@ -114,6 +114,7 @@ def run_strategy_development_meeting(
     except Exception as e:
         print(f"[Bob] market_context failed ({e}) — using defaults")
 
+    vni_df = None
     try:
         vni_df = get_vnindex(30)
         if not vni_df.empty and len(vni_df) >= 20:
@@ -218,4 +219,48 @@ def run_strategy_development_meeting(
         f"\n[Bob] Complete — {len(active)}/{len(records)} strategies active"
         f" → ℳₛ updated ({memory._path})"
     )
+
+    # ── Closed-loop: real loss post-mortem from live DB ──────────────────────
+    # Backtest đo "edge tiềm năng"; phần dưới đo "thực tế đang lỗ ở đâu".
+    # Bob có OHLCV + VNI sẵn → re-classify với full context để trigger được
+    # REGIME_SHIFT và EXIT_TOO_EARLY (close_position thiếu data này).
+    try:
+        from multiagents_trading_assistant.database import (
+            aggregate_loss_patterns,
+            reclassify_closed_losses,
+        )
+        n_updated = reclassify_closed_losses(
+            days=lookback_days,
+            ohlcv_map=ohlcv_map,
+            vnindex_df=vni_df,
+        )
+        if n_updated:
+            print(f"[Bob] Re-classified {n_updated} closed losses with OHLCV+VNI context")
+
+        patterns = aggregate_loss_patterns(days=lookback_days, min_count=2)
+        if patterns:
+            print(f"\n[Bob] Real loss patterns (last {lookback_days}d, ≥2 occurrences):")
+            print(f"  {'SETUP':<22} {'REGIME':<10} {'CATEGORY':<18} {'N':>3}  {'AVG%':>7}  {'TOTAL':>14}")
+            for p in patterns[:15]:
+                print(
+                    f"  {str(p['setup'])[:22]:<22} {str(p['regime'])[:10]:<10} "
+                    f"{str(p['loss_category'])[:18]:<18} {p['count']:>3}  "
+                    f"{(p['avg_pnl_pct'] or 0):>6.2f}%  {(p['total_pnl'] or 0):>14,.0f}"
+                )
+
+            # ── Closed-loop level 2: auto-deprecate ℳₛ entries based on real losses ──
+            from multiagents_trading_assistant.memory.strategy_memory import (
+                deprecate_from_loss_patterns,
+            )
+            deprecated = deprecate_from_loss_patterns(memory, patterns, regime=regime)
+            if deprecated:
+                print(f"\n[Bob] Auto-deprecated {len(deprecated)} ℳₛ entries from loss patterns:")
+                for d in deprecated:
+                    print(f"  ✗ {d['strategy_id']}  reason: {d['reason']}")
+        else:
+            print(f"\n[Bob] No real-loss patterns yet (need ≥2 closed losers in last {lookback_days}d)")
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        print(f"[Bob] loss-pattern aggregation skipped: {e}")
+
     return active

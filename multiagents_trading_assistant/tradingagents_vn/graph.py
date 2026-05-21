@@ -37,6 +37,7 @@ from multiagents_trading_assistant.tradingagents_vn.tools import (
     as_of_date_context,
 )
 from multiagents_trading_assistant.tradingagents_vn.schema import TradePlan
+from multiagents_trading_assistant.agentic import format_agentic_context
 
 _HAIKU = "claude-haiku-4-5-20251001"
 _SONNET = "claude-sonnet-4-6"
@@ -367,6 +368,8 @@ class TradingAgentsVN:
         symbol: str,
         trade_date: str | None = None,
         as_of_date: str | None = None,
+        strategy_signal: dict | None = None,
+        evidence_packet: dict | None = None,
     ) -> dict:
         """Chạy toàn bộ pipeline phân tích đa tác nhân.
 
@@ -383,6 +386,7 @@ class TradingAgentsVN:
             trade_date = _date.today().strftime("%Y-%m-%d")
         symbol = symbol.upper()
         effective_as_of = as_of_date or trade_date
+        agentic_context = format_agentic_context(strategy_signal, evidence_packet)
 
         past_context = _load_memory(symbol)
         if as_of_date:
@@ -423,6 +427,9 @@ class TradingAgentsVN:
             },
             "final_trade_decision": "",
             "past_context": past_context,
+            "strategy_signal": strategy_signal or {},
+            "evidence_packet": evidence_packet or {},
+            "agentic_context": agentic_context,
         }
 
         # Inject as_of_date vào tools qua context manager — tất cả tool calls
@@ -439,6 +446,8 @@ class TradingAgentsVN:
         signal_date: str | None = None,
         as_of_date: str | None = None,
         setup_type: str = "UNKNOWN",
+        strategy_signal: dict | None = None,
+        evidence_packet: dict | None = None,
     ) -> TradePlan | None:
         """Phân tích và trả về TradePlan đã parse + validate.
 
@@ -451,6 +460,12 @@ class TradingAgentsVN:
             as_of_date: Dữ liệu cutoff. Mặc định = signal_date.
             setup_type: Setup type từ screener để điền vào TradePlan.
         """
-        state = self.analyze(symbol, signal_date, as_of_date)
+        state = self.analyze(
+            symbol,
+            signal_date,
+            as_of_date,
+            strategy_signal=strategy_signal,
+            evidence_packet=evidence_packet,
+        )
         raw_decision = state.get("final_trade_decision", "")
         return _parse_trade_plan(raw_decision, setup_type, symbol)

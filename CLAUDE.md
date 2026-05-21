@@ -494,4 +494,42 @@ python -m multiagents_trading_assistant.main --backtest --setup BREAKOUT --unive
 
 ---
 
-**Last Updated**: 2026-05-05 (session: full sync CLAUDE.md với code — pipeline graph structure, scheduler jobs, agents/models, state schema, synthesis weights, valuation method, risk rules thứ tự + dynamic confluence threshold, holding horizon price-action, GIA_TĂNG conditions, Bob meeting, code update check, cleanup job)
+## ⚠️ Backtest Bias Patch #2 — 2026-05-18
+
+Phát hiện 3 self-referential rolling bugs trong `features.py` (edge_lab) và 1 optimistic fill trong `llm_backtest.py`.
+
+| Bug | File | Fix |
+|---|---|---|
+| `range_pct_min7` / `range_pct_q20` không shift → NR7 signal luôn true với chính nó | `edge_lab/features.py:134-135` | Thêm `.shift(1)` trước `rolling` |
+| `atr_rolling_min` không shift → `volatility_squeeze_break` self-referential | `edge_lab/features.py:481` | Thêm `.shift(1)` trước `rolling` |
+| `bb_width_min20` không shift → BB squeeze detection self-referential | `backtest/live_pipeline.py:874` | Thêm `.shift(1)` trước `rolling` |
+| SL/TP fill dùng exact trigger price, bỏ qua gap open | `backtest/llm_backtest.py:188-193` | Dùng `min(open, sl)` và `max(open, tp)` |
+
+**Impact ước tính**: NR7/BB squeeze WR sẽ giảm nhẹ, SL loss avg sẽ xấu hơn một chút (thực tế hơn). Chưa re-run full benchmark sau patch này.
+
+---
+
+## ⚠️ Backtest Bias Discovery — 2026-05-14
+
+Phát hiện **same-bar-open exit lookahead bias** trong `_edge_exit_decision()`. **Số liệu backtest trước 2026-05-14 phóng đại ~1.8 lần**.
+
+Đã patch `live_pipeline.py` để sửa: SL/ATR/trailing exit dùng `min(open, trigger) * (1 - slip)` thay vì `open * slip`. TP dùng `max(open, trigger) * (1 - slip)`.
+
+### True benchmark — 3 core live strategies (VN100, 2025-01 → 2026-05, 16 tháng)
+
+| Metric | Reported (biased) | **TRUE (sau fix)** |
+|---|---|---|
+| Total return | +101% | **+56%** |
+| CAGR | (~76%) | **~40%** |
+| Sharpe | 3.28 | **2.05** |
+| MaxDD | -11% | **-17%** |
+| Win rate | 63% | 62% (giống) |
+| Avg SL loss | -5.8% | **-8.1%** |
+
+Vẫn outperform VN-Index buy-hold cùng kỳ (~30%/16th, MDD -25%): +26pp return với MDD thấp hơn 8pp.
+
+Chi tiết: `MIGRATION_NOTES.md`. Reproducible: `scripts/compare_live_pipeline_intraday_cached_v2.py --mode v1_fixed_bias`.
+
+---
+
+**Last Updated**: 2026-05-14 (session: backtest bias discovery + fix; baseline benchmark sửa từ +101% phóng đại xuống +56% thực; added MIGRATION_NOTES.md)

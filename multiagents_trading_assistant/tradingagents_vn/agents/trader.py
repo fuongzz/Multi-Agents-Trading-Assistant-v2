@@ -40,13 +40,21 @@ def create_trader(llm):
         trade_date = state["trade_date"]
         investment_plan = state.get("investment_plan", "Chưa có")
         market_report = state.get("market_report", "Chưa có")
+        agentic = state.get("agentic_context", "")
 
         user_msg = (
             f"Mã: **{symbol}** | Ngày: {trade_date}\n\n"
             f"## Tổng hợp từ nhóm nghiên cứu\n{investment_plan}\n\n"
             f"## Báo cáo Kỹ thuật\n{market_report}\n\n"
-            "Hãy xây dựng kế hoạch giao dịch."
         )
+        if agentic:
+            user_msg += (
+                "## StrategySignal đã freeze\n"
+                "Core strategy là nguồn signal gốc. Không đổi strategy_name/setup gốc; "
+                "chỉ đề xuất execution hoặc từ chối nếu rủi ro không đạt.\n"
+                f"{agentic}\n\n"
+            )
+        user_msg += "Hãy xây dựng kế hoạch giao dịch."
 
         response = llm.invoke([
             SystemMessage(content=_SYSTEM),

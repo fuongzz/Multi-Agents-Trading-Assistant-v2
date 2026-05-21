@@ -96,7 +96,7 @@ def _technical_alignment(features: dict) -> float:
             passed += 1
 
     # ADX > 20 (có trend)
-    adx = features.get("adx")
+    adx = features.get("adx") or features.get("adx_14")
     if adx is not None:
         checks += 1
         if float(adx) > 20:

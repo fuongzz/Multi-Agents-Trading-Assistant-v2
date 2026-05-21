@@ -82,6 +82,7 @@ def get_edge_strategy_signals(
         .tail(1)
         .reset_index(drop=True)
     )
+    latest["data_age_days"] = (end.normalize() - pd.to_datetime(latest["date"]).dt.normalize()).dt.days
     strategy_names = _resolve_strategy_names_for_latest(strategy_names, latest)
     hypotheses = [_load_strategy(name, config_path) for name in strategy_names]
     out: dict[str, dict[str, Any]] = {}
@@ -104,13 +105,16 @@ def get_edge_strategy_signals(
             "DS20": _round_or_none(row.get("DS20")),
             "mkt_regime_state": row.get("mkt_regime_state"),
             "mkt_regime_score": _round_or_none(row.get("mkt_regime_score")),
+            "data_age_days": int(row.get("data_age_days") or 0),
+            "data_quality_ok": bool(row.get("data_quality_ok", True)),
             "filters_failed": _failed_filters(row, hypotheses[0]) if len(hypotheses) == 1 else [],
             "risk": {},
         }
 
+    active_latest = latest[latest["data_age_days"] <= 14].copy()
     for hypothesis in hypotheses:
-        mask = evaluate_filters(latest, hypothesis)
-        ranked = rank_candidates(latest[mask], hypothesis)
+        mask = evaluate_filters(active_latest, hypothesis)
+        ranked = rank_candidates(active_latest[mask], hypothesis)
         for rank_idx, row in enumerate(ranked.to_dict("records"), start=1):
             symbol = str(row["symbol"])
             rank_score = float(row.get("_edge_rank") or 0.0)
@@ -141,6 +145,14 @@ def get_edge_strategy_signals(
                 "error": "No latest feature row for symbol",
             },
         )
+        if symbol in out and out[symbol].get("available") and int(out[symbol].get("data_age_days") or 0) > 14:
+            out[symbol].update(
+                {
+                    "passed": False,
+                    "available": False,
+                    "error": f"Stale feature row: {out[symbol].get('feature_date')}",
+                }
+            )
     return out
 
 

@@ -1,0 +1,212 @@
+{
+  "_meta": {
+    "description": "VN100-wide thematic flow hypotheses generalized from observed oil/gas flow bursts. No fixed industry or symbol universe."
+  },
+  "hypotheses": [
+    {
+      "name": "theme_flow_recovery_v1",
+      "description": "Market-wide recovery flow: smart-money surge plus value expansion and improving RS while price has reclaimed MA20.",
+      "universe": "VN100",
+      "tags": ["theme_flow", "smart_money", "recovery", "market_wide"],
+      "filters": [
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.58},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.25},
+        {"column": "smart_money_score", "op": ">=", "value": 60},
+        {"column": "smart_money_score_delta", "op": ">=", "value": 0},
+        {"column": "DS20", "op": "<=", "value": 0.35},
+        {"column": "distribution_days_10", "op": "<=", "value": 2},
+        {"column": "edge_score", "op": ">=", "value": 68}
+      ],
+      "rank": [
+        {"column": "edge_score", "ascending": false, "weight": 1.5},
+        {"column": "smart_money_score_delta", "ascending": false, "weight": 1.2},
+        {"column": "smart_money_score", "ascending": false, "weight": 1.0},
+        {"column": "value_ratio_20", "ascending": false, "weight": 0.9},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.9},
+        {"column": "DS20", "ascending": true, "weight": 0.5}
+      ],
+      "risk": {
+        "stop_loss": 0.08,
+        "take_profit": 0.24,
+        "max_holding_bars": 25,
+        "initial_atr_stop_mult": 2.0,
+        "trailing_atr_mult": 2.4,
+        "trailing_profit_activation": 0.07
+      }
+    },
+    {
+      "name": "theme_flow_breakout_v1",
+      "description": "Market-wide breakout flow: 20-day breakout confirmed by smart money and value expansion.",
+      "universe": "VN100",
+      "tags": ["theme_flow", "breakout", "smart_money", "market_wide"],
+      "filters": [
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "breakout_20", "op": "==", "value": true},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.65},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.35},
+        {"column": "smart_money_score", "op": ">=", "value": 58},
+        {"column": "DS20", "op": "<=", "value": 0.40},
+        {"column": "distribution_days_10", "op": "<=", "value": 2}
+      ],
+      "rank": [
+        {"column": "edge_score", "ascending": false, "weight": 1.4},
+        {"column": "value_ratio_20", "ascending": false, "weight": 1.1},
+        {"column": "smart_money_score", "ascending": false, "weight": 1.0},
+        {"column": "smart_money_score_delta", "ascending": false, "weight": 0.8},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 1.0}
+      ],
+      "risk": {
+        "stop_loss": 0.075,
+        "take_profit": 0.25,
+        "max_holding_bars": 30,
+        "initial_atr_stop_mult": 2.0,
+        "trailing_atr_mult": 2.5,
+        "trailing_profit_activation": 0.08
+      }
+    },
+    {
+      "name": "theme_flow_sector_leader_v1",
+      "description": "Market-wide theme leader: stock-level flow plus sector/top-down confirmation as a filter.",
+      "universe": "VN100",
+      "tags": ["theme_flow", "sector_leader", "smart_money", "market_wide"],
+      "filters": [
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "mkt_risk_state_v2", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_v2", "op": "not_in", "value": ["MARKDOWN", "DISTRIBUTION"]},
+        {"column": "sl1_state", "op": "not_in", "value": ["MARKDOWN", "DISTRIBUTION"]},
+        {"column": "sl1_rs_rank_20d", "op": ">=", "value": 0.55},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.60},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.20},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 58},
+        {"column": "smart_money_score_no_sector_delta", "op": ">=", "value": 0},
+        {"column": "DS20", "op": "<=", "value": 0.40},
+        {"column": "distribution_days_10", "op": "<=", "value": 2}
+      ],
+      "rank": [
+        {"column": "edge_score_no_sector", "ascending": false, "weight": 1.4},
+        {"column": "smart_money_score_no_sector_delta", "ascending": false, "weight": 1.0},
+        {"column": "sl1_rs_rank_20d", "ascending": false, "weight": 0.8},
+        {"column": "value_ratio_20", "ascending": false, "weight": 0.8},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.8}
+      ],
+      "risk": {
+        "stop_loss": 0.08,
+        "take_profit": 0.26,
+        "max_holding_bars": 30,
+        "initial_atr_stop_mult": 2.1,
+        "trailing_atr_mult": 2.5,
+        "trailing_profit_activation": 0.08
+      }
+    },
+    {
+      "name": "theme_flow_leader_quality_v2",
+      "description": "Strict market-wide leader flow: smart-money expansion only when the stock is already a structural leader above MA20/MA50.",
+      "universe": "VN100",
+      "tags": ["theme_flow", "leader_quality", "smart_money", "market_wide"],
+      "filters": [
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "mkt_risk_state_v2", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_v2", "op": "not_in", "value": ["MARKDOWN", "DISTRIBUTION"]},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "ma20_slope_5", "op": ">=", "value": 0},
+        {"column": "ma50_slope_10", "op": ">=", "value": -0.01},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.75},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.30},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 65},
+        {"column": "smart_money_score_no_sector_delta", "op": ">=", "value": 2},
+        {"column": "accumulation_days_10", "op": ">=", "value": 1},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "CHDM50", "op": ">=", "value": 45},
+        {"column": "DS20", "op": "<=", "value": 0.30}
+      ],
+      "rank": [
+        {"column": "edge_score_no_sector", "ascending": false, "weight": 1.5},
+        {"column": "smart_money_score_no_sector_delta", "ascending": false, "weight": 1.2},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 1.0},
+        {"column": "value_ratio_20", "ascending": false, "weight": 0.9},
+        {"column": "CHDM50", "ascending": false, "weight": 0.5}
+      ],
+      "risk": {
+        "stop_loss": 0.075,
+        "take_profit": 0.26,
+        "max_holding_bars": 30,
+        "initial_atr_stop_mult": 2.1,
+        "trailing_atr_mult": 2.6,
+        "trailing_profit_activation": 0.08
+      }
+    },
+    {
+      "name": "theme_flow_shock_reclaim_v2",
+      "description": "Very selective reclaim burst: large smart-money/value shock after reclaiming MA20, intended to catch early theme turns without buying every weak bounce.",
+      "universe": "VN100",
+      "tags": ["theme_flow", "shock_reclaim", "smart_money", "market_wide"],
+      "filters": [
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.70},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.80},
+        {"column": "smart_money_score", "op": ">=", "value": 68},
+        {"column": "smart_money_score_delta", "op": ">=", "value": 8},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "DS20", "op": "<=", "value": 0.25},
+        {"column": "edge_score", "op": ">=", "value": 80}
+      ],
+      "rank": [
+        {"column": "edge_score", "ascending": false, "weight": 1.5},
+        {"column": "smart_money_score_delta", "ascending": false, "weight": 1.3},
+        {"column": "value_ratio_20", "ascending": false, "weight": 1.1},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 0.9},
+        {"column": "DS20", "ascending": true, "weight": 0.5}
+      ],
+      "risk": {
+        "stop_loss": 0.08,
+        "take_profit": 0.24,
+        "max_holding_bars": 18,
+        "initial_atr_stop_mult": 2.0,
+        "trailing_atr_mult": 2.3,
+        "trailing_profit_activation": 0.07
+      }
+    },
+    {
+      "name": "theme_flow_breakout_quality_v2",
+      "description": "Strict breakout flow: 20-day breakout, strong RS, strong volume, and non-risk-off market context.",
+      "universe": "VN100",
+      "tags": ["theme_flow", "breakout_quality", "smart_money", "market_wide"],
+      "filters": [
+        {"column": "data_quality_ok", "op": "==", "value": true},
+        {"column": "mkt_risk_state_v2", "op": "not_in", "value": ["RISK_OFF"]},
+        {"column": "mkt_regime_v2", "op": "not_in", "value": ["MARKDOWN", "DISTRIBUTION"]},
+        {"column": "breakout_20", "op": "==", "value": true},
+        {"column": "above_ma20", "op": "==", "value": true},
+        {"column": "above_ma50", "op": "==", "value": true},
+        {"column": "rs_percentile_20", "op": ">=", "value": 0.75},
+        {"column": "value_ratio_20", "op": ">=", "value": 1.50},
+        {"column": "smart_money_score_no_sector", "op": ">=", "value": 62},
+        {"column": "smart_money_score_no_sector_delta", "op": ">=", "value": 0},
+        {"column": "accumulation_days_10", "op": ">=", "value": 1},
+        {"column": "distribution_days_10", "op": "<=", "value": 1},
+        {"column": "DS20", "op": "<=", "value": 0.35}
+      ],
+      "rank": [
+        {"column": "edge_score_no_sector", "ascending": false, "weight": 1.4},
+        {"column": "value_ratio_20", "ascending": false, "weight": 1.1},
+        {"column": "smart_money_score_no_sector_delta", "ascending": false, "weight": 1.0},
+        {"column": "rs_percentile_20", "ascending": false, "weight": 1.0},
+        {"column": "CHDM50", "ascending": false, "weight": 0.4}
+      ],
+      "risk": {
+        "stop_loss": 0.075,
+        "take_profit": 0.28,
+        "max_holding_bars": 35,
+        "initial_atr_stop_mult": 2.1,
+        "trailing_atr_mult": 2.6,
+        "trailing_profit_activation": 0.08
+      }
+    }
+  ]
+}
