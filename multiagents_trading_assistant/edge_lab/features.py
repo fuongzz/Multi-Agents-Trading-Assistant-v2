@@ -10,6 +10,28 @@ import pandas as pd
 import pandas_ta as ta
 
 
+TA_COLUMNS = [
+    "rsi14",
+    "linreg_14",
+    "kalman_close",
+    "kalman_trend_5d",
+    "kalman_residual_pct",
+    "kalman_adaptive_close",
+    "kalman_adaptive_trend_5d",
+    "kalman_adaptive_residual_pct",
+    "kalman_confidence",
+    "kalman_shock_score",
+    "adx_14",
+    "dmp_14",
+    "dmn_14",
+    "stoch_k",
+    "stoch_d",
+    "cci_14",
+    "psar_long",
+    "psar_bullish",
+]
+
+
 def build_feature_table(
     universe: list[str],
     start: str | pd.Timestamp,
@@ -69,6 +91,7 @@ def build_feature_table(
     )
     _add_benchmark_columns(features, root, start_ts - pd.Timedelta(days=warmup_days), end_ts)
     _add_derived_columns(features)
+    _defragment_inplace(features)
 
     price_map = {
         symbol: frame.reset_index(drop=True)
@@ -100,6 +123,7 @@ def _add_derived_columns(features: pd.DataFrame) -> None:
     features["ma50_slope_10"] = group["ma50"].diff(10) / group["ma50"].shift(10) if "ma50" in features.columns else pd.NA
     features["ma200_slope_20"] = group["ma200"].diff(20) / group["ma200"].shift(20) if "ma200" in features.columns else pd.NA
     _add_market_derived_columns(features)
+    _defragment_inplace(features)
     features["above_ma50"] = features["close"] > features.get("ma50")
     features["above_ma20"] = features["close"] > features.get("ma20")
     ma200 = features.get("ma200", pd.Series(np.nan, index=features.index))
@@ -145,7 +169,9 @@ def _add_derived_columns(features: pd.DataFrame) -> None:
     features["breakout_20"] = features["close"] > features["high20_prev"]
     features["breakout_55"] = features["close"] > features["high55_prev"]
     _add_ichimoku_columns(features)
+    _defragment_inplace(features)
     _add_ta_columns(features)
+    _defragment_inplace(features)
     features["ret_1d"] = group["close"].pct_change()
     features["ret_3d"] = group["close"].pct_change(3)
     features["large_return_1d"] = features["ret_1d"].abs() > 0.30
@@ -205,8 +231,10 @@ def _add_derived_columns(features: pd.DataFrame) -> None:
     features["adx_bullish"] = features["dmp_14"] > features["dmn_14"] * 1.05
     features["rsi_recovering"] = features["rsi14"] > group["rsi14"].shift(1)
     _add_pattern_columns(features)
+    _defragment_inplace(features)
     _add_sector_derived_columns(features)
     _add_flow_v2_columns(features)
+    _defragment_inplace(features)
     features["edge_score"] = _edge_score(features)
     features["edge_score_no_sector"] = _edge_score(features, smart_money_col="smart_money_score_no_sector")
 
@@ -545,13 +573,48 @@ def _add_pattern_columns(features: pd.DataFrame) -> None:
 
     # ── Parabolic SAR flip ───────────────────────────────────────────────────
     if "psar_bullish" in features.columns:
-        psar_bull_prev = g["psar_bullish"].shift(1).fillna(True)
+        psar_bull_prev = g["psar_bullish"].shift(1).astype("boolean").fillna(True).astype(bool)
         features["psar_flip_bull"] = (
             features["psar_bullish"].fillna(False) & (~psar_bull_prev.astype(bool))
         ).fillna(False)
     else:
         features["psar_bullish"] = False
         features["psar_flip_bull"] = False
+
+    low = features["low"]
+    low5 = g["low"].transform(lambda item: item.rolling(5, min_periods=3).min())
+    prior_low20 = g["low"].transform(lambda item: item.rolling(20, min_periods=10).min().shift(5))
+    price_retests_low = (low5 <= prior_low20 * 1.025).fillna(False)
+
+    if "rsi14" in features.columns:
+        rsi = features["rsi14"].fillna(50.0)
+        rsi5 = g["rsi14"].transform(lambda item: item.rolling(5, min_periods=3).min())
+        prior_rsi20 = g["rsi14"].transform(lambda item: item.rolling(20, min_periods=10).min().shift(5))
+        features["bullish_rsi_divergence"] = (
+            price_retests_low
+            & (rsi5 >= prior_rsi20 + 3.0)
+            & rsi.between(32.0, 62.0)
+            & (rsi > g["rsi14"].shift(1))
+        ).fillna(False)
+    else:
+        features["bullish_rsi_divergence"] = False
+
+    if "mfi14" in features.columns:
+        mfi = features["mfi14"].fillna(50.0)
+        mfi5 = g["mfi14"].transform(lambda item: item.rolling(5, min_periods=3).min())
+        prior_mfi20 = g["mfi14"].transform(lambda item: item.rolling(20, min_periods=10).min().shift(5))
+        features["bullish_mfi_divergence"] = (
+            price_retests_low
+            & (mfi5 >= prior_mfi20 + 4.0)
+            & mfi.between(35.0, 70.0)
+            & (mfi >= g["mfi14"].shift(1))
+        ).fillna(False)
+    else:
+        features["bullish_mfi_divergence"] = False
+
+    features["bullish_positive_divergence"] = (
+        features["bullish_rsi_divergence"] | features["bullish_mfi_divergence"]
+    ).fillna(False)
 
     # ── Three White Soldiers ──────────────────────────────────────────────────
     c1_open = g["open"].shift(2)
@@ -612,7 +675,7 @@ def _add_pattern_columns(features: pd.DataFrame) -> None:
 
     # ── Volatility squeeze break ──────────────────────────────────────────────
     if "atr14" in features.columns:
-        atr = features["atr14"].fillna(method="ffill")
+        atr = features["atr14"].ffill()
         atr_rolling_min = g["atr14"].transform(lambda s: s.rolling(10, min_periods=5).min().shift(1))
         features["atr_ratio"] = (atr / atr_rolling_min.replace(0, pd.NA)).fillna(1.0).clip(0.5, 5.0)
         atr_ratio_lag3 = g["atr_ratio"].shift(3).fillna(1.0)
@@ -634,9 +697,29 @@ def _add_pattern_columns(features: pd.DataFrame) -> None:
         & kalman_resid.between(-0.04, 0.03)
         & (kalman_conf >= 0.55)
     ).fillna(False)
+    features["bullish_technical_signal"] = (
+        features["bullish_positive_divergence"]
+        & (
+            features["stoch_cross_up"].fillna(False)
+            | features["cci_oversold_bounce"].fillna(False)
+            | features["psar_flip_bull"].fillna(False)
+            | features["reclaim_ma20"].fillna(False)
+            | features["reclaim_ma20_after_pullback"].fillna(False)
+            | features["hammer_like"].fillna(False)
+            | features["spring_20"].fillna(False)
+        )
+        & (features["close_location"] >= 0.50)
+    ).fillna(False)
 
 
 def _add_ta_columns(features: pd.DataFrame) -> None:
+    missing = [column for column in TA_COLUMNS if column not in features.columns]
+    if missing:
+        defaults = {column: False if column == "psar_bullish" else np.nan for column in missing}
+        additions = pd.DataFrame(defaults, index=features.index)
+        features[missing] = additions
+        _defragment_inplace(features)
+
     for _, idx in features.groupby("symbol", sort=False).groups.items():
         frame = features.loc[idx]
         if len(frame) < 20:
@@ -938,5 +1021,13 @@ def _edge_score(features: pd.DataFrame, smart_money_col: str = "smart_money_scor
 
 def _feature_col(features: pd.DataFrame, column: str, default: float) -> pd.Series:
     if column in features.columns:
-        return features[column].fillna(default)
+        return pd.to_numeric(features[column], errors="coerce").fillna(default)
     return pd.Series(default, index=features.index)
+
+
+def _defragment_inplace(frame: pd.DataFrame) -> None:
+    """Consolidate pandas blocks after large feature batches."""
+    try:
+        frame._consolidate_inplace()
+    except Exception:
+        pass

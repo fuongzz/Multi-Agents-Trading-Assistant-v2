@@ -4,12 +4,15 @@ from multiagents_trading_assistant.edge_lab.backtest import (
     PortfolioConfig,
     Position,
     _atr_exit_reason,
+    _entry_confirmation_passes,
+    _feature_exit_reason,
     _regime_strategy_names,
     run_portfolio,
 )
 from multiagents_trading_assistant.edge_lab.features import (
     _add_derived_columns,
     _add_market_derived_columns,
+    _add_pattern_columns,
     _kalman_adaptive_price_gate,
     _kalman_price_trend,
 )
@@ -18,6 +21,7 @@ from multiagents_trading_assistant.edge_lab.hypothesis import (
     evaluate_filters,
     rank_candidates,
 )
+from multiagents_trading_assistant.edge_lab.portfolio_optimizer import AllocationConfig, candidate_weights
 from multiagents_trading_assistant.edge_lab.research_cli import _load_grid_arg
 
 
@@ -178,6 +182,51 @@ def test_adaptive_kalman_outputs_confidence_and_shock_score():
     assert kalman["kalman_shock_score"].iloc[5] > kalman["kalman_shock_score"].iloc[2]
 
 
+def test_bullish_positive_divergence_requires_price_retest_and_oscillator_higher_low():
+    lows = [10.0] * 14 + [9.0, 9.2, 9.3, 9.4, 9.5] + [8.95, 9.0, 9.05, 9.10, 9.15, 9.20]
+    closes = [low + 0.4 for low in lows]
+    frame = pd.DataFrame(
+        {
+            "date": pd.date_range("2024-01-01", periods=len(lows)),
+            "symbol": ["AAA"] * len(lows),
+            "open": [close - 0.2 for close in closes],
+            "high": [close + 0.3 for close in closes],
+            "low": lows,
+            "close": closes,
+            "rsi14": [50.0] * 14 + [34.0, 35.0, 36.0, 37.0, 38.0] + [41.0, 43.0, 45.0, 47.0, 49.0, 51.0],
+            "mfi14": [50.0] * 14 + [38.0, 39.0, 40.0, 41.0, 42.0] + [45.0, 47.0, 49.0, 51.0, 53.0, 55.0],
+            "stoch_k": [50.0] * 23 + [25.0, 35.0],
+            "stoch_d": [50.0] * 23 + [30.0, 32.0],
+            "psar_bullish": [True] * len(lows),
+            "above_ma20": [False] * len(lows),
+            "above_ma50": [True] * len(lows),
+            "reclaim_ma20": [False] * len(lows),
+            "reclaim_ma20_after_pullback": [False] * 24 + [True],
+            "spring_20": [False] * len(lows),
+            "hammer_like": [False] * len(lows),
+            "close_location": [0.7] * len(lows),
+            "body_pct": [0.02] * len(lows),
+            "lower_wick_pct": [0.01] * len(lows),
+            "upper_wick_pct": [0.01] * len(lows),
+            "distance_ma20": [0.0] * len(lows),
+            "low20_prev": [9.0] * len(lows),
+            "volume_ratio_20": [1.0] * len(lows),
+            "ma200": [8.0] * len(lows),
+            "ma20": [9.0] * len(lows),
+            "ma50": [8.8] * len(lows),
+            "atr14": [0.5] * len(lows),
+            "kalman_trend_5d": [0.0] * len(lows),
+            "kalman_residual_pct": [0.0] * len(lows),
+            "kalman_confidence": [0.5] * len(lows),
+        }
+    )
+
+    _add_pattern_columns(frame)
+
+    assert bool(frame["bullish_positive_divergence"].iloc[-1])
+    assert bool(frame["bullish_technical_signal"].iloc[-1])
+
+
 def test_atr_trailing_exit_after_activation():
     position = Position(
         hypothesis="demo",
@@ -192,6 +241,29 @@ def test_atr_trailing_exit_after_activation():
     )
 
     assert _atr_exit_reason(104.0, position) == "TRAILING_ATR_STOP"
+
+
+def test_entry_confirmation_uses_signal_bar_and_entry_open():
+    candidate = {
+        "low": 10.0,
+        "ma20": 10.5,
+        "close": 11.0,
+        "_risk": {
+            "entry_open_above_signal_low_buffer_pct": 0.0,
+            "entry_open_above_signal_ma20": True,
+            "max_entry_gap_up_pct": 0.05,
+        },
+    }
+
+    assert _entry_confirmation_passes(pd.Series({"open": 10.7}), candidate)
+    assert not _entry_confirmation_passes(pd.Series({"open": 10.4}), candidate)
+    assert not _entry_confirmation_passes(pd.Series({"open": 11.7}), candidate)
+
+
+def test_feature_exit_supports_ma20_break():
+    features = pd.Series({"close": 9.8, "ma20": 10.0})
+
+    assert _feature_exit_reason(features, {"exit_close_below_ma20": True}) == "MA20_EXIT"
 
 
 def test_regime_strategy_names_switches_by_market_state():
@@ -249,3 +321,74 @@ def test_portfolio_deduplicates_same_symbol_orders_in_one_batch():
     )
 
     assert len(trades[trades["symbol"] == "AAA"]) == 1
+
+
+def test_portfolio_optimizer_respects_weight_bounds():
+    candidates = pd.DataFrame(
+        {
+            "symbol": ["AAA", "BBB", "CCC"],
+            "_edge_rank": [3.0, 2.0, 1.0],
+        }
+    )
+    returns = pd.DataFrame(
+        {
+            "AAA": [0.03, -0.02, 0.04, -0.01],
+            "BBB": [0.01, 0.01, 0.00, 0.02],
+            "CCC": [0.02, -0.03, 0.01, -0.02],
+        }
+    )
+
+    weights = candidate_weights(
+        candidates,
+        returns,
+        AllocationConfig(method="inverse_volatility", min_weight=0.10, max_weight=0.60),
+    )
+
+    assert round(float(weights.sum()), 8) == 1.0
+    assert weights.min() >= 0.10
+    assert weights.max() <= 0.60
+
+
+def test_portfolio_runs_with_minimum_variance_allocator():
+    dates = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04"])
+    rows = []
+    for symbol, base in [("AAA", 10.0), ("BBB", 20.0), ("CCC", 30.0)]:
+        for idx, date in enumerate(dates):
+            rows.append(
+                {
+                    "date": date,
+                    "symbol": symbol,
+                    "open": base + idx,
+                    "high": base + idx + 0.5,
+                    "low": base + idx - 0.5,
+                    "close": base + idx,
+                    "volume": 100_000,
+                    "value": 1_000_000,
+                    "score": 100.0 - idx,
+                }
+            )
+    features = pd.DataFrame(rows)
+    price_map = {symbol: frame.copy() for symbol, frame in features.groupby("symbol", sort=False)}
+    hypothesis = Hypothesis(
+        name="allocator_demo",
+        filters=[{"column": "score", "op": ">=", "value": 90}],
+        rank=[{"column": "score"}],
+    )
+
+    trades, equity = run_portfolio(
+        features,
+        price_map,
+        [hypothesis],
+        "2024-01-01",
+        "2024-01-04",
+        config=PortfolioConfig(
+            max_positions=3,
+            top_n=3,
+            allocation_method="minimum_variance",
+            allocation_lookback_bars=3,
+            allocation_max_weight=0.70,
+        ),
+    )
+
+    assert not equity.empty
+    assert not trades.empty

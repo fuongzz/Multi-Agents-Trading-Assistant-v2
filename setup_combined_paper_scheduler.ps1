@@ -1,5 +1,5 @@
 param(
-    [string]$At = "15:55"
+    [string]$At = "15:35"
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,11 +19,11 @@ Register-ScheduledTask `
     -Action $Action `
     -Trigger $Trigger `
     -Settings $Settings `
-    -Description "AI Trading Assistant combined paper dashboard for MVP p5, MVP p4, and Flow V2." `
+    -Description "AI Trading Assistant combined paper dashboard for five VN100 sleeves. Starts after close and waits for EOD coverage before screening." `
     -Force | Out-Null
 
 Write-Host "Registered scheduled task:"
-Write-Host "  AI-Trading-Combined-Paper-Demo Mon-Fri $At"
+Write-Host "  AI-Trading-Combined-Paper-Demo Mon-Fri $At (waits and retries EOD data until 18:30)"
 Write-Host "Output:"
 Write-Host "  reports\combined_paper_trading_demo\index.html"
 Write-Host "Log:"

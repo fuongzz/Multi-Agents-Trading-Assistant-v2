@@ -103,6 +103,223 @@ def _candidate_rows(pool: pd.DataFrame, score_col: str, limit: int) -> list[dict
     return rows
 
 
+def _ungated_discovery_pool(day: pd.DataFrame, pool_filter: str) -> pd.DataFrame:
+    """Apply stock-quality filters only for the display-only idea list."""
+    if pool_filter == "clean_flow":
+        stock_mask = (
+            (day["above_ma50"] == True)
+            & (day["distribution_pressure_score"] <= 55)
+            & (day["flow_sponsorship_score"] >= 50)
+            & (day["flow_absorption_score"] >= 45)
+            & (day["value_ratio_20"] >= 0.90)
+            & (day["rs_percentile_20"] >= 0.50)
+        )
+    elif pool_filter == "high_rs":
+        stock_mask = (
+            (day["above_ma50"] == True)
+            & (day["distribution_pressure_score"] <= 65)
+            & (day["flow_sponsorship_score"] >= 45)
+            & (day["value_ratio_20"] >= 0.80)
+            & (day["rs_percentile_20"] >= 0.60)
+        )
+    elif pool_filter == "loose_flow":
+        stock_mask = (
+            (day["above_ma50"] == True)
+            & (day["distribution_pressure_score"] <= 70)
+            & (day["flow_sponsorship_score"] >= 42)
+            & (day["value_ratio_20"] >= 0.70)
+            & (day["rs_percentile_20"] >= 0.40)
+        )
+    else:
+        stock_mask = (
+            (day["above_ma50"] == True)
+            & (day["distribution_pressure_score"] <= 65)
+            & (day["flow_sponsorship_score"] >= 45)
+            & (day["value_ratio_20"] >= 0.80)
+            & (day["rs_percentile_20"] >= 0.45)
+        )
+    return day[stock_mask.fillna(False)].copy()
+
+
+def _ungated_discovery_rows(
+    day: pd.DataFrame,
+    *,
+    score_col: str,
+    pool_filter: str,
+    market_gate: str,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Rank Flow V2 observations without its market gate; never drives targets."""
+    rows = _candidate_rows(_ungated_discovery_pool(day, pool_filter), score_col, limit)
+    regime = str(day.iloc[0].get("mkt_regime_state") or "UNKNOWN") if not day.empty else "UNKNOWN"
+    signal_date = pd.Timestamp(day.iloc[0]["date"]).strftime("%Y-%m-%d") if not day.empty else None
+    for row in rows:
+        row.update(
+            {
+                "date": signal_date,
+                "family": "Flow V2 Rotation",
+                "sleeves": "flow_v2, flow_v2_baseline, flow_v2_tiered",
+                "strategy_name": f"{pool_filter} + flow_heavy ranking",
+                "score": row.get("flow_v2_rotation_score"),
+                "smart_money_score": None,
+                "market_regime_state": regime,
+                "relaxed_rule": f"Bỏ qua market gate: {market_gate}",
+                "display_only": True,
+                "explanation": (
+                    f"Đạt lọc cổ phiếu Flow V2: sponsorship {row.get('flow_sponsorship_score')}, "
+                    f"absorption {row.get('flow_absorption_score')}, RS {row.get('rs_percentile_20')}, "
+                    f"thanh khoản {row.get('value_ratio_20')}x; chỉ quan sát khi bỏ gate thị trường."
+                ),
+            }
+        )
+    return rows
+
+
+def _money_flow_mask(frame: pd.DataFrame) -> pd.Series:
+    """Identify high-quality flow proxy observations used for display only."""
+    return (
+        (frame["flow_sponsorship_score"] >= 50)
+        & (frame["flow_absorption_score"] >= 45)
+        & (frame["distribution_pressure_score"] <= 55)
+        & (frame["value_ratio_20"] >= 0.90)
+    ).fillna(False)
+
+
+def _flow_label(row: pd.Series) -> str:
+    if bool(row.get("strong_flow_today")) and float(row.get("value_ratio_20", 0.0) or 0.0) >= 1.20:
+        return "DONG_TIEN_VAO_MANH"
+    if bool(row.get("strong_flow_today")):
+        return "DONG_TIEN_VAO"
+    if float(row.get("distribution_pressure_score", 0.0) or 0.0) >= 70:
+        return "AP_LUC_PHAN_PHOI"
+    return "THEO_DOI"
+
+
+def _flow_trend(row: pd.Series) -> str:
+    persistent_days = int(row.get("inflow_days_5d", 0) or 0)
+    change = float(row.get("flow_score_change_5d", 0.0) or 0.0)
+    active_today = bool(row.get("strong_flow_today"))
+    if persistent_days >= 3 and active_today and change >= -5:
+        return "DUY_TRI_TIEN_VAO"
+    if persistent_days >= 3 and not active_today:
+        return "ROI_NHOM_TIEN_VAO"
+    if change >= 8:
+        return "DANG_TANG_TOC"
+    if change <= -8:
+        return "DANG_GIAM_NHIET"
+    return "DI_NGANG"
+
+
+def _money_flow_pulse(
+    features: pd.DataFrame,
+    as_of: pd.Timestamp,
+    score_col: str,
+    *,
+    limit: int = 15,
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Summarize observable price/volume flow proxies without affecting trading."""
+    dates = (
+        features.loc[features["date"] <= as_of, "date"]
+        .drop_duplicates()
+        .sort_values()
+        .tail(6)
+        .tolist()
+    )
+    if not dates:
+        return {"available": False, "date": as_of.strftime("%Y-%m-%d")}, [], []
+
+    recent = features[features["date"].isin(dates)].copy()
+    recent["strong_flow"] = _money_flow_mask(recent)
+    latest = recent[recent["date"] == dates[-1]].copy()
+    latest["strong_flow_today"] = latest["strong_flow"]
+    five_dates = dates[-5:]
+    five_session = recent[recent["date"].isin(five_dates)]
+    persistent = five_session.groupby("symbol")["strong_flow"].sum().rename("inflow_days_5d")
+    average_score = five_session.groupby("symbol")[score_col].mean().rename("flow_score_avg_5d")
+
+    prior = recent[recent["date"] == dates[0]][["symbol", score_col]].rename(
+        columns={score_col: "flow_score_5d_ago"}
+    )
+    latest = (
+        latest.merge(persistent, on="symbol", how="left")
+        .merge(average_score, on="symbol", how="left")
+        .merge(prior, on="symbol", how="left")
+    )
+    latest["inflow_days_5d"] = latest["inflow_days_5d"].fillna(0).astype(int)
+    latest["flow_score_change_5d"] = latest[score_col] - latest["flow_score_5d_ago"]
+    latest["flow_signal"] = latest.apply(_flow_label, axis=1)
+    latest["flow_trend_5d"] = latest.apply(_flow_trend, axis=1)
+
+    market_daily = recent.drop_duplicates("date").sort_values("date")
+    today_market = market_daily.iloc[-1]
+    prior_market = market_daily.iloc[0]
+    chdm_delta = float(today_market["mkt_CHDM20"] - prior_market["mkt_CHDM20"])
+    ds_delta = float(today_market["mkt_DS20"] - prior_market["mkt_DS20"])
+    state = str(today_market.get("mkt_regime_state") or "UNKNOWN")
+    if state == "RISK_OFF":
+        pulse_state = "REGIME_CHAN_GIAI_NGAN"
+    elif chdm_delta >= 5 and ds_delta <= -0.05:
+        pulse_state = "DONG_TIEN_DANG_CAI_THIEN"
+    elif chdm_delta <= -5 or ds_delta >= 0.05:
+        pulse_state = "AP_LUC_PHAN_PHOI_TANG"
+    else:
+        pulse_state = "TRUNG_LAP_THEO_DOI"
+
+    def format_rows(frame: pd.DataFrame) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        for rank, row in enumerate(frame.to_dict("records"), start=1):
+            rows.append(
+                {
+                    "rank": rank,
+                    "symbol": row["symbol"],
+                    "industry": row.get("industry"),
+                    "flow_signal": row["flow_signal"],
+                    "flow_trend_5d": row["flow_trend_5d"],
+                    "inflow_days_5d": int(row["inflow_days_5d"]),
+                    "flow_score_today": _round_or_none(row.get(score_col)),
+                    "flow_score_avg_5d": _round_or_none(row.get("flow_score_avg_5d")),
+                    "flow_score_change_5d": _round_or_none(row.get("flow_score_change_5d")),
+                    "flow_sponsorship_score": _round_or_none(row.get("flow_sponsorship_score")),
+                    "flow_absorption_score": _round_or_none(row.get("flow_absorption_score")),
+                    "distribution_pressure_score": _round_or_none(row.get("distribution_pressure_score")),
+                    "value_ratio_20": _round_or_none(row.get("value_ratio_20")),
+                    "rs_percentile_20": _round_or_none(row.get("rs_percentile_20")),
+                }
+            )
+        return rows
+
+    today_ranked = latest[latest["strong_flow_today"]].sort_values(score_col, ascending=False).head(limit)
+    recent_ranked = (
+        latest[latest["inflow_days_5d"] >= 2]
+        .sort_values(["inflow_days_5d", "flow_score_avg_5d", score_col], ascending=[False, False, False])
+        .head(limit)
+    )
+    today_rows = format_rows(today_ranked)
+    recent_rows = format_rows(recent_ranked)
+
+    summary = {
+        "available": True,
+        "date": dates[-1].strftime("%Y-%m-%d"),
+        "data_basis": "price_volume_flow_proxy_not_investor_net_buy",
+        "lookback_sessions": len(five_dates),
+        "pulse_state": pulse_state,
+        "market_regime_state": state,
+        "mkt_CHDM20": _round_or_none(today_market.get("mkt_CHDM20")),
+        "mkt_CHDM20_change_5d": _round_or_none(chdm_delta),
+        "mkt_DS20": _round_or_none(today_market.get("mkt_DS20")),
+        "mkt_DS20_change_5d": _round_or_none(ds_delta),
+        "strong_inflow_symbols_today": int(latest["strong_flow_today"].sum()),
+        "persistent_inflow_symbols_5d": int((latest["inflow_days_5d"] >= 3).sum()),
+        "displayed_today_leaders": len(today_rows),
+        "displayed_recent_leaders": len(recent_rows),
+        "interpretation_note": (
+            "Tín hiệu dòng tiền là proxy từ giá, thanh khoản, sponsorship, absorption "
+            "và distribution của Flow V2; không phải giá trị mua ròng theo lệnh."
+        ),
+    }
+    return summary, today_rows, recent_rows
+
+
 def _target_plan(
     candidates: list[dict[str, Any]],
     *,
@@ -165,6 +382,10 @@ Files:
 
 - `flow_v2_status.json`: run status and safety notes.
 - `market_snapshot.json`: market regime and money-cycle context at as-of close.
+- `money_flow_pulse.json`: market-level observable money-flow pulse and trend context.
+- `flow_v2_money_flow_today.csv`: symbols satisfying the observable inflow proxy today.
+- `flow_v2_money_flow_recent.csv`: symbols repeatedly showing the proxy over the last five sessions.
+- `ungated_discovery_candidates.csv`: display-only symbols after removing the market gate; never used for paper targets.
 - `flow_v2_candidates.csv`: ranked eligible pool.
 - `flow_v2_target_plan.csv`: paper target allocation for the next session.
 
@@ -192,6 +413,10 @@ def main() -> None:
     parser.add_argument("--score-mode", default="sector_heavy")
     parser.add_argument("--max-candidates", type=int, default=30)
     parser.add_argument("--lot-size", type=int, default=100)
+    parser.add_argument("--sleeve-id", default="flow_v2")
+    parser.add_argument("--sleeve-label", default="Flow V2 Rotation")
+    parser.add_argument("--logic-label", default="Flow Money V2 high-RS flow-heavy rotation")
+    parser.add_argument("--early-exit-mode", default="none")
     parser.add_argument(
         "--price-unit-multiplier",
         type=float,
@@ -239,9 +464,32 @@ def main() -> None:
         lot_size=cfg.lot_size,
         price_unit_multiplier=args.price_unit_multiplier,
     )
+    money_flow_pulse, money_flow_today, money_flow_recent = _money_flow_pulse(features, as_of, score_col)
+    ungated_discovery = _ungated_discovery_rows(
+        day,
+        score_col=score_col,
+        pool_filter=cfg.pool_filter,
+        market_gate=cfg.market_gate,
+        limit=args.max_candidates,
+    )
 
     pd.DataFrame(candidates).to_csv(out_dir / "flow_v2_candidates.csv", index=False, encoding="utf-8-sig")
     pd.DataFrame(targets).to_csv(out_dir / "flow_v2_target_plan.csv", index=False, encoding="utf-8-sig")
+    pd.DataFrame(money_flow_today).to_csv(
+        out_dir / "flow_v2_money_flow_today.csv",
+        index=False,
+        encoding="utf-8-sig",
+    )
+    pd.DataFrame(money_flow_recent).to_csv(
+        out_dir / "flow_v2_money_flow_recent.csv",
+        index=False,
+        encoding="utf-8-sig",
+    )
+    pd.DataFrame(ungated_discovery).to_csv(
+        out_dir / "ungated_discovery_candidates.csv",
+        index=False,
+        encoding="utf-8-sig",
+    )
 
     market = _market_snapshot(day, as_of)
     status = {
@@ -258,9 +506,15 @@ def main() -> None:
         "score_mode": cfg.score_mode,
         "capital": cfg.initial_capital,
         "price_unit_multiplier": args.price_unit_multiplier,
+        "sleeve_id": args.sleeve_id,
+        "sleeve_label": args.sleeve_label,
+        "logic_label": args.logic_label,
+        "early_exit_mode": args.early_exit_mode,
         "candidate_count": len(candidates),
         "target_count": len(targets),
         "target_symbols": [item["symbol"] for item in targets],
+        "ungated_discovery_count": len(ungated_discovery),
+        "ungated_discovery_display_only": True,
         "safety_notes": [
             "No broker order is sent.",
             "Signals use only local parquet data through the as-of close.",
@@ -274,6 +528,10 @@ def main() -> None:
     )
     (out_dir / "market_snapshot.json").write_text(
         json.dumps(market, ensure_ascii=False, indent=2, default=_json_default),
+        encoding="utf-8",
+    )
+    (out_dir / "money_flow_pulse.json").write_text(
+        json.dumps(money_flow_pulse, ensure_ascii=False, indent=2, default=_json_default),
         encoding="utf-8",
     )
     _write_readme(out_dir, status)

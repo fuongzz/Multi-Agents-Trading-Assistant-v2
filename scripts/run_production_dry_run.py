@@ -128,11 +128,26 @@ def _market_snapshot(features: pd.DataFrame, as_of: pd.Timestamp) -> dict[str, A
     return snapshot
 
 
-def _candidate_rows(day_signals: dict[str, dict[str, Any]], max_candidates: int) -> list[dict[str, Any]]:
+def _candidate_rows(
+    day_signals: dict[str, dict[str, Any]],
+    max_candidates: int,
+    latest_features: pd.DataFrame | None = None,
+    max_edge_rank: int | None = None,
+) -> list[dict[str, Any]]:
+    close_by_symbol: dict[str, Any] = {}
+    if latest_features is not None and not latest_features.empty and "close" in latest_features:
+        close_by_symbol = dict(zip(latest_features["symbol"].astype(str), latest_features["close"]))
     rows = []
     for symbol, signal in day_signals.items():
         if not signal.get("passed"):
             continue
+        if max_edge_rank is not None:
+            try:
+                edge_rank = float(signal.get("edge_rank") or 999999.0)
+            except Exception:
+                edge_rank = 999999.0
+            if edge_rank > max_edge_rank:
+                continue
         rows.append(
             {
                 "symbol": symbol,
@@ -151,6 +166,7 @@ def _candidate_rows(day_signals: dict[str, dict[str, Any]], max_candidates: int)
                 "mkt_regime_state": signal.get("mkt_regime_state"),
                 "mkt_regime_score": signal.get("mkt_regime_score"),
                 "feature_date": signal.get("feature_date"),
+                "close": _round_or_none(close_by_symbol.get(symbol), 2),
                 "risk": json.dumps(signal.get("risk") or {}, ensure_ascii=False),
             }
         )
@@ -186,6 +202,74 @@ def _vote_rows(
                 }
             )
     return rows
+
+
+def _without_market_filters(hypothesis: Hypothesis) -> tuple[Hypothesis, list[str]]:
+    removed = [
+        str(rule.get("column"))
+        for rule in hypothesis.filters
+        if str(rule.get("column") or "").startswith("mkt_")
+    ]
+    relaxed = Hypothesis(
+        name=hypothesis.name,
+        description=hypothesis.description,
+        universe=hypothesis.universe,
+        filters=[
+            rule
+            for rule in hypothesis.filters
+            if not str(rule.get("column") or "").startswith("mkt_")
+        ],
+        rank=hypothesis.rank,
+        risk=hypothesis.risk,
+        tags=hypothesis.tags,
+    )
+    return relaxed, removed
+
+
+def _ungated_discovery_rows(
+    *,
+    latest_features: pd.DataFrame,
+    hypotheses: list[Hypothesis],
+    as_of: pd.Timestamp,
+    max_per_strategy: int = 3,
+) -> list[dict[str, Any]]:
+    """Expose ideas with market filters removed, without changing paper signals."""
+    rows: list[dict[str, Any]] = []
+    for hypothesis in hypotheses:
+        relaxed, removed = _without_market_filters(hypothesis)
+        ranked = rank_candidates(latest_features[evaluate_filters(latest_features, relaxed)], relaxed)
+        for rank_idx, row in enumerate(ranked.head(max_per_strategy).to_dict("records"), start=1):
+            rs_value = _round_or_none(row.get("rs_percentile_20"))
+            liquidity = _round_or_none(row.get("value_ratio_20"))
+            smt = _round_or_none(row.get("smart_money_score"))
+            rows.append(
+                {
+                    "date": as_of.strftime("%Y-%m-%d"),
+                    "family": "Core MVP",
+                    "sleeves": "mvp_p5, mvp_p4",
+                    "symbol": row["symbol"],
+                    "strategy_name": hypothesis.name,
+                    "rank": rank_idx,
+                    "score": _round_or_none(row.get("_edge_rank")),
+                    "close": _round_or_none(row.get("close"), 2),
+                    "smart_money_score": smt,
+                    "rs_percentile_20": rs_value,
+                    "value_ratio_20": liquidity,
+                    "flow_sponsorship_score": None,
+                    "flow_absorption_score": None,
+                    "distribution_pressure_score": None,
+                    "market_regime_state": row.get("mkt_regime_state"),
+                    "relaxed_rule": "Bỏ qua filter thị trường: " + ", ".join(removed),
+                    "display_only": True,
+                    "risk": json.dumps(hypothesis.risk or {}, ensure_ascii=False),
+                    "explanation": (
+                        f"Đạt điều kiện riêng của {hypothesis.name}: smart money {smt}, "
+                        f"RS {rs_value}, thanh khoản {liquidity}x; market filter chỉ được bỏ "
+                        "trong danh sách quan sát."
+                    ),
+                }
+            )
+    return sorted(rows, key=lambda item: float(item.get("score") or 0.0), reverse=True)
 
 
 def _action_rows(candidates: list[dict[str, Any]], *, max_positions: int, market_state: str | None) -> list[dict[str, Any]]:
@@ -284,6 +368,7 @@ def main() -> None:
     parser.add_argument("--out-dir", default="")
     parser.add_argument("--max-candidates", type=int, default=15)
     parser.add_argument("--max-positions", type=int, default=0, help="Override core MVP max positions. 0 uses sleeve default.")
+    parser.add_argument("--max-edge-rank", type=int, default=0, help="Only keep candidates with edge_rank <= N. 0 disables.")
     parser.add_argument("--lookback-days", type=int, default=0, help="Also export rolling dry-run signals for recent calendar days.")
     args = parser.parse_args()
 
@@ -320,7 +405,8 @@ def main() -> None:
         clean_symbols=symbols,
     )
     day_signals = signal_cache.get(as_of, {})
-    candidates = _candidate_rows(day_signals, args.max_candidates)
+    max_edge_rank = int(args.max_edge_rank) if int(args.max_edge_rank) > 0 else None
+    candidates = _candidate_rows(day_signals, args.max_candidates, latest_features, max_edge_rank=max_edge_rank)
 
     active_sleeves = active_portfolio_sleeves(include_shadow=False)
     core_sleeve = next(item for item in active_sleeves if item.sleeve_id == "core_mvp")
@@ -333,10 +419,20 @@ def main() -> None:
         market_state=market_state,
     )
     votes = _vote_rows(latest_features=latest_features, hypotheses=hypotheses, as_of=as_of)
+    ungated_discovery = _ungated_discovery_rows(
+        latest_features=latest_features,
+        hypotheses=hypotheses,
+        as_of=as_of,
+    )
 
     pd.DataFrame(candidates).to_csv(out_dir / "production_signals.csv", index=False, encoding="utf-8-sig")
     pd.DataFrame(actions).to_csv(out_dir / "candidate_actions.csv", index=False, encoding="utf-8-sig")
     pd.DataFrame(votes).to_csv(out_dir / "strategy_votes.csv", index=False, encoding="utf-8-sig")
+    pd.DataFrame(ungated_discovery).to_csv(
+        out_dir / "ungated_discovery_candidates.csv",
+        index=False,
+        encoding="utf-8-sig",
+    )
     pd.DataFrame(catalog_rows()).to_csv(out_dir / "strategy_catalog.csv", index=False, encoding="utf-8-sig")
 
     rolling_signal_rows: list[dict[str, Any]] = []
@@ -349,7 +445,13 @@ def main() -> None:
             if start_date <= pd.Timestamp(date).normalize() <= as_of
         ]
         for date in dates:
-            day_candidates = _candidate_rows(signal_cache.get(date, {}), args.max_candidates)
+            day_features = features[features["date"] == pd.Timestamp(date).normalize()].reset_index(drop=True)
+            day_candidates = _candidate_rows(
+                signal_cache.get(date, {}),
+                args.max_candidates,
+                day_features,
+                max_edge_rank=max_edge_rank,
+            )
             day_market = _market_snapshot(features, pd.Timestamp(date).normalize())
             day_market_state = day_market.get("mkt_regime_state") if isinstance(day_market, dict) else None
             day_actions = _action_rows(
@@ -404,8 +506,13 @@ def main() -> None:
         "candidate_count": len(candidates),
         "paper_buy_candidate_count": sum(1 for item in actions if _is_paper_buy_action(item.get("action"))),
         "vetoed_candidate_count": sum(1 for item in actions if str(item.get("action", "")).startswith("VETO_")),
+        "ungated_discovery_count": len(ungated_discovery),
+        "ungated_discovery_display_only": True,
         "lookback_days": args.lookback_days,
         "lookback_start_date": start_date.strftime("%Y-%m-%d") if args.lookback_days > 0 else None,
+        "max_edge_rank": max_edge_rank,
+        "sizing_mode": "compound_equity",
+        "optimized_contract": "Core MVP9 p2 rank2 compound equity",
         "safety_notes": [
             "No broker order is sent by this dry-run.",
             "Signals use only same-day close features and are intended for the next session.",

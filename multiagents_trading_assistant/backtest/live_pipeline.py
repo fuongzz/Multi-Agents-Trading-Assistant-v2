@@ -1128,7 +1128,11 @@ def _resolve_symbols(universe: str) -> list[str]:
         return get_vn30_symbols()
     if name == "vn100":
         return get_vn100_symbols()
+    if name in {"liquid150", "liquid_150", "top150"}:
+        from multiagents_trading_assistant.fetcher import get_liquid150_symbols
+
+        return get_liquid150_symbols()
     symbols = [item.strip().upper() for item in universe.split(",") if item.strip()]
     if not symbols:
-        raise ValueError("Universe must be vn30, vn100, or comma-separated symbols")
+        raise ValueError("Universe must be vn30, vn100, liquid150, or comma-separated symbols")
     return symbols

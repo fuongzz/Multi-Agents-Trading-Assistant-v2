@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import time
 from copy import deepcopy
 from dataclasses import dataclass
@@ -345,6 +346,9 @@ def _refresh_watchlist(
     force: bool,
     once: bool,
 ) -> None:
+    graph_enabled = os.getenv("ALLOW_ANTHROPIC_SHADOW_GRAPH", "").strip() == "1"
+    if not graph_enabled:
+        once = True
     today = _today()
     if not force and state.get("watchlist_date") == today and state.get("watchlist"):
         return

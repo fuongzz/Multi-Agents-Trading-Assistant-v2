@@ -11,6 +11,6 @@ if not exist "%PYTHON%" (
   exit /b 1
 )
 
-"%PYTHON%" -m scripts.update_combined_paper_realtime --out-dir "%ROOTOUT%" --interval-seconds 60 --html-refresh-seconds 60 --market-session-only
+"%PYTHON%" -m scripts.update_combined_paper_realtime --out-dir "%ROOTOUT%" --interval-seconds 30 --html-refresh-seconds 30 --no-market-session-only --realtime-paper-entries
 
 endlocal

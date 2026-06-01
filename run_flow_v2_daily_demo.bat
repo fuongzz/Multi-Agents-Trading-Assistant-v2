@@ -22,7 +22,10 @@ if errorlevel 1 exit /b %errorlevel%
 "%PYTHON%" -m multiagents_trading_assistant.research.money_cycle.cli --input multiagents_trading_assistant/data/ohlcv_master.parquet --output data/research/money_cycle --windows 3,5,10,20,50,100,200
 if errorlevel 1 exit /b %errorlevel%
 
-"%PYTHON%" -m scripts.run_flow_v2_production_demo --universe vn100 --start 2020-01-01 --positions 2 --rebalance-days 20 --market-gate risk_on_or_strong_neutral --pool-filter clean_flow --score-mode sector_heavy --capital 1000000000 --out-dir "%DEMODIR%"
+"%PYTHON%" -m multiagents_trading_assistant.research.smart_money_trace.cli --input multiagents_trading_assistant/data/ohlcv_master.parquet --output data/research/smart_money_trace
+if errorlevel 1 exit /b %errorlevel%
+
+"%PYTHON%" -m scripts.run_flow_v2_production_demo --universe vn100 --start 2020-01-01 --positions 2 --rebalance-days 10 --market-gate risk_on_or_strong_neutral --pool-filter high_rs --score-mode flow_heavy --capital 1000000000 --out-dir "%DEMODIR%"
 if errorlevel 1 exit /b %errorlevel%
 
 "%PYTHON%" -m scripts.export_flow_v2_demo_html --demo-dir "%DEMODIR%"

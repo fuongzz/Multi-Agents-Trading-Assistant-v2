@@ -12,6 +12,11 @@ from multiagents_trading_assistant.edge_lab.hypothesis import (
     evaluate_filters,
     rank_candidates,
 )
+from multiagents_trading_assistant.edge_lab.portfolio_optimizer import (
+    AllocationConfig,
+    AllocationMethod,
+    allocate_candidate_budgets,
+)
 
 
 @dataclass(frozen=True)
@@ -31,6 +36,12 @@ class PortfolioConfig:
     risk_on_exposure: float = 1.0
     neutral_exposure: float = 0.7
     risk_off_exposure: float = 0.3
+    allocation_method: AllocationMethod = "equal_weight"
+    allocation_lookback_bars: int = 60
+    allocation_min_weight: float = 0.05
+    allocation_max_weight: float = 0.35
+    allocation_rank_blend: float = 0.25
+    allocation_shrinkage: float = 0.20
 
 
 @dataclass
@@ -314,13 +325,21 @@ def _run_portfolio(
                 exposure = _target_exposure(candidates)
                 current_exposure = _mark_to_market(positions, price_map, date)
                 deployable = max(0.0, min(cash, equity * exposure - current_exposure))
-                per_trade_budget = deployable / len(candidates) if len(candidates) else 0.0
+                candidates = allocate_candidate_budgets(
+                    candidates,
+                    price_map,
+                    date,
+                    deployable=deployable,
+                    config=_allocation_config(cfg),
+                )
                 for candidate in candidates.to_dict("records"):
                     symbol = candidate["symbol"]
                     idx = date_index.get(symbol, {}).get(date)
                     if idx is None:
                         continue
-                    cash, position = _buy(date, price_map[symbol].iloc[idx], candidate, per_trade_budget, cash, cfg)
+                    if not _entry_confirmation_passes(price_map[symbol].iloc[idx], candidate):
+                        continue
+                    cash, position = _buy(date, price_map[symbol].iloc[idx], candidate, float(candidate.get("_budget", 0.0)), cash, cfg)
                     if position is not None:
                         positions[symbol] = position
 
@@ -592,6 +611,17 @@ def _date_index(price_map: dict[str, pd.DataFrame]) -> dict[str, dict[pd.Timesta
     }
 
 
+def _allocation_config(cfg: PortfolioConfig) -> AllocationConfig:
+    return AllocationConfig(
+        method=cfg.allocation_method,
+        lookback_bars=cfg.allocation_lookback_bars,
+        min_weight=cfg.allocation_min_weight,
+        max_weight=cfg.allocation_max_weight,
+        rank_blend=cfg.allocation_rank_blend,
+        shrinkage=cfg.allocation_shrinkage,
+    )
+
+
 def _feature_history(features: pd.DataFrame) -> dict[str, pd.DataFrame]:
     return {
         symbol: frame.sort_values("date").reset_index(drop=True)
@@ -616,6 +646,37 @@ def _latest_features_before(
 def _entry_price(row: pd.Series) -> float:
     open_price = float(row["open"])
     return open_price if np.isfinite(open_price) and open_price > 0 else float(row["close"])
+
+
+def _entry_confirmation_passes(row: pd.Series, candidate: dict) -> bool:
+    """Optional next-bar confirmation using only signal-bar data and entry open."""
+    risk = candidate.get("_risk") if isinstance(candidate.get("_risk"), dict) else {}
+    if not risk:
+        return True
+
+    open_price = _safe_float(row.get("open", np.nan))
+    if not np.isfinite(open_price) or open_price <= 0:
+        return False
+
+    low_buffer = risk.get("entry_open_above_signal_low_buffer_pct")
+    if low_buffer is not None:
+        signal_low = _safe_float(candidate.get("low", np.nan))
+        if np.isfinite(signal_low) and open_price < signal_low * (1.0 + float(low_buffer)):
+            return False
+
+    if risk.get("entry_open_above_signal_ma20"):
+        signal_ma20 = _safe_float(candidate.get("ma20", np.nan))
+        if np.isfinite(signal_ma20) and open_price < signal_ma20:
+            return False
+
+    max_gap_up = risk.get("max_entry_gap_up_pct")
+    if max_gap_up is not None:
+        signal_close = _safe_float(candidate.get("close", np.nan))
+        if np.isfinite(signal_close) and signal_close > 0:
+            if open_price / signal_close - 1.0 > float(max_gap_up):
+                return False
+
+    return True
 
 
 def _buy(date, row, candidate, budget, cash, cfg):
@@ -741,6 +802,10 @@ def _feature_exit_reason(features: pd.Series, risk: dict) -> str | None:
     ma50_break = risk.get("exit_close_below_ma50")
     if ma50_break and _value(features, "close") < _value(features, "ma50"):
         return "MA50_EXIT"
+
+    ma20_break = risk.get("exit_close_below_ma20")
+    if ma20_break and _value(features, "close") < _value(features, "ma20"):
+        return "MA20_EXIT"
 
     return None
 

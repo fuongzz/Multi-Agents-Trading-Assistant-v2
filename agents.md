@@ -410,3 +410,28 @@ If `vnstock_data` is detected in `~/.venv`, prioritize the **Sponsored Path**. O
 **Last Updated**: Febuary 2026  
 **Version**: 1.1  
 **Maintained By**: Thịnh Vũ
+
+---
+
+## Local Project MVP Registry
+
+Before answering any question about "MVP", MVP dashboards, active paper HTML
+MVPs, or MVP strategy backtest results, read `docs/mvp_registry.md`.
+
+Current convention:
+- Unqualified "MVP" means the active HTML/paper MVP sleeves in
+  `reports/combined_paper_trading_demo`: `mvp_p5`, `mvp_p4`, and `flow_v2`.
+- Do not mix VN30, VN100, and liquid-150 results.
+- When a new MVP is promoted, or when an MVP strategy has verified return from
+  `2025-01-01` greater than 60%, update `docs/mvp_registry.md` in the same turn.
+
+## Local Project Backtest Universe
+
+Default backtest universe from 2026-05-23 onward:
+- Use `VN100` for unqualified MVP, Flow V2, and strategy backtests.
+- The liquid-150 universe in `reports/liquid_universe_2020_now/` is retained
+  only as a research comparison set, not as the default operating universe.
+
+When the user asks for an unqualified "backtest", use `VN100` by default unless
+they explicitly request `VN30`, `liquid150`, or another custom universe. Keep
+VN30, VN100, and liquid-150 results separate in reports and comparisons.

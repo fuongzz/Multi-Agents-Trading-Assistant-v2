@@ -26,6 +26,7 @@ from multiagents_trading_assistant.agentic.position_exit_agent import (
 from multiagents_trading_assistant.edge_lab.features import build_feature_table
 from multiagents_trading_assistant.edge_lab.hypothesis import load_hypotheses
 from multiagents_trading_assistant.edge_lab.live_signal import DEFAULT_CONFIG
+from scripts.backtest_flow_v2_rotation_production_like import RotationConfig, _prepare_features, run_backtest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -145,7 +146,9 @@ def _price_frame() -> pd.DataFrame:
     frame = pd.read_parquet(PRICE_PATH)
     frame["date"] = pd.to_datetime(frame["date"]).dt.normalize()
     frame["symbol"] = frame["symbol"].astype(str).str.upper()
-    return frame.sort_values(["symbol", "date"]).reset_index(drop=True)
+    frame = frame.sort_values(["symbol", "date"]).reset_index(drop=True)
+    frame["ma20"] = frame.groupby("symbol", sort=False)["close"].transform(lambda s: pd.to_numeric(s, errors="coerce").rolling(20).mean())
+    return frame
 
 
 def _symbol_rows(prices: pd.DataFrame, symbol: str) -> pd.DataFrame:
@@ -181,8 +184,33 @@ def _risk_map() -> dict[str, dict[str, Any]]:
     return out
 
 
+FLOW_SLEEVES = ["flow_v2", "flow_v2_baseline", "flow_v2_tiered"]
+HOSTILE_SLEEVES = ["hostile_combo_long"]
+CORE_SLEEVES = ["core_mvp9_rank2"]
+ALL_SLEEVES = [*FLOW_SLEEVES, *HOSTILE_SLEEVES, *CORE_SLEEVES]
+COMPOUND_EQUITY_SLEEVES = {"hostile_combo_long", "core_mvp9_rank2"}
+
+
 def _risk_for(strategy_name: str, risk_by_strategy: dict[str, dict[str, Any]], sleeve_id: str) -> dict[str, Any]:
-    if sleeve_id == "flow_v2":
+    if sleeve_id == "hostile_combo_long":
+        return {
+            "stop_loss": 0.9999,
+            "take_profit": 99.0,
+            "max_holding_bars": 100000,
+            "trailing_atr_mult": 0.0,
+            "trailing_profit_activation": 99.0,
+        }
+    if sleeve_id in {"flow_v2_baseline", "flow_v2_tiered"}:
+        # These sleeves are tracked against the audited Flow logic. Do not
+        # introduce the legacy dashboard stop/take-profit overlay.
+        return {
+            "stop_loss": 0.9999,
+            "take_profit": 99.0,
+            "max_holding_bars": 100000,
+            "trailing_atr_mult": 0.0,
+            "trailing_profit_activation": 99.0,
+        }
+    if sleeve_id in FLOW_SLEEVES:
         return {"stop_loss": 0.08, "take_profit": 0.25, "max_holding_bars": 20, "trailing_atr_mult": 2.6, "trailing_profit_activation": 0.09}
     risk = dict(risk_by_strategy.get(strategy_name) or {})
     risk.setdefault("stop_loss", 0.08)
@@ -222,10 +250,56 @@ def _existing_signal_keys(open_: pd.DataFrame, closed: pd.DataFrame) -> set[tupl
     return keys
 
 
+def _filter_by_sleeve_start(frame: pd.DataFrame, sleeve_starts: dict[str, pd.Timestamp]) -> pd.DataFrame:
+    if frame.empty or "sleeve_id" not in frame or "signal_date" not in frame:
+        return frame
+    work = frame.copy()
+    signal_dates = pd.to_datetime(work["signal_date"], errors="coerce").dt.normalize()
+    keep = pd.Series(True, index=work.index)
+    for sleeve_id, started_at in sleeve_starts.items():
+        mask = work["sleeve_id"].astype(str).eq(sleeve_id)
+        keep &= ~(mask & signal_dates.lt(started_at))
+    return work[keep].copy()
+
+
+def _filter_events_by_sleeve_start(frame: pd.DataFrame, sleeve_starts: dict[str, pd.Timestamp]) -> pd.DataFrame:
+    if frame.empty or "sleeve_id" not in frame or "date" not in frame:
+        return frame
+    work = frame.copy()
+    event_dates = pd.to_datetime(work["date"], errors="coerce").dt.normalize()
+    keep = pd.Series(True, index=work.index)
+    for sleeve_id, started_at in sleeve_starts.items():
+        mask = work["sleeve_id"].astype(str).eq(sleeve_id)
+        keep &= ~(mask & event_dates.lt(started_at))
+    return work[keep].copy()
+
+
 def _cash_for_sleeve(sleeve_id: str, open_: pd.DataFrame, closed: pd.DataFrame, capital: float) -> float:
     open_cost = 0.0 if open_.empty else pd.to_numeric(open_.loc[open_["sleeve_id"] == sleeve_id, "cost_value"], errors="coerce").fillna(0).sum()
     realized = 0.0 if closed.empty else pd.to_numeric(closed.loc[closed["sleeve_id"] == sleeve_id, "net_pnl"], errors="coerce").fillna(0).sum()
     return float(capital + realized - open_cost)
+
+
+def _equity_for_sleeve(
+    sleeve_id: str,
+    open_: pd.DataFrame,
+    closed: pd.DataFrame,
+    prices: pd.DataFrame,
+    as_of: pd.Timestamp,
+    capital: float,
+    price_unit_multiplier: float,
+) -> float:
+    cash = _cash_for_sleeve(sleeve_id, open_, closed, capital)
+    if open_.empty:
+        return cash
+    market_value = 0.0
+    for item in open_[open_["sleeve_id"] == sleeve_id].to_dict("records"):
+        latest = _latest_row(prices, str(item.get("symbol") or "").upper(), as_of)
+        if latest is None:
+            market_value += _as_float(item.get("cost_value"), 0.0)
+            continue
+        market_value += _as_int(item.get("shares")) * float(latest["close"]) * price_unit_multiplier
+    return float(cash + market_value)
 
 
 def _mvp_candidates(source_dir: Path, sleeve_id: str, label: str, as_of: pd.Timestamp) -> list[dict[str, Any]]:
@@ -253,7 +327,7 @@ def _mvp_candidates(source_dir: Path, sleeve_id: str, label: str, as_of: pd.Time
     return rows
 
 
-def _flow_candidates(source_dir: Path, as_of: pd.Timestamp) -> list[dict[str, Any]]:
+def _flow_candidates(source_dir: Path, as_of: pd.Timestamp, fallback_sleeve_id: str, fallback_label: str) -> list[dict[str, Any]]:
     targets = _read_csv(source_dir / "flow_v2_target_plan.csv")
     status = _read_json(source_dir / "flow_v2_status.json")
     if targets.empty:
@@ -261,18 +335,55 @@ def _flow_candidates(source_dir: Path, as_of: pd.Timestamp) -> list[dict[str, An
     signal_date = pd.Timestamp(status.get("as_of_date") or as_of).normalize()
     if signal_date >= as_of:
         return []
+    sleeve_id = str(status.get("sleeve_id") or fallback_sleeve_id)
+    sleeve_label = str(status.get("sleeve_label") or fallback_label)
+    strategy_name = (
+        "flow_v2_rotation_high_rs_flow_heavy_tiered_exit"
+        if status.get("early_exit_mode") == "flow_momentum_tiered"
+        else "flow_v2_rotation_high_rs_flow_heavy"
+    )
     rows = []
     for item in targets.to_dict("records"):
         rows.append(
             {
-                "sleeve_id": "flow_v2",
-                "sleeve_label": "Flow V2 Rotation",
+                "sleeve_id": sleeve_id,
+                "sleeve_label": sleeve_label,
                 "symbol": str(item.get("symbol") or "").upper(),
-                "strategy_name": "flow_v2_rotation_clean_sector_heavy",
+                "strategy_name": strategy_name,
                 "signal_date": signal_date,
                 "max_positions": _as_int(status.get("positions"), 2),
                 "priority": _as_int(item.get("rank"), 999),
                 "target_value": _as_float(item.get("target_value"), 0.0),
+            }
+        )
+    return rows
+
+
+def _hostile_candidates(source_dir: Path, as_of: pd.Timestamp) -> list[dict[str, Any]]:
+    targets = _read_csv(source_dir / "hostile_target_plan.csv")
+    status = _read_json(source_dir / "hostile_status.json")
+    if not bool(status.get("paper_trading_enabled")):
+        return []
+    if targets.empty:
+        return []
+    signal_date = pd.Timestamp(status.get("as_of_date") or as_of).normalize()
+    if signal_date >= as_of:
+        return []
+    rows = []
+    for item in targets.to_dict("records"):
+        if str(item.get("action") or "").startswith("PAPER_BUY_CANDIDATE") is False:
+            continue
+        rows.append(
+            {
+                "sleeve_id": str(status.get("sleeve_id") or "hostile_combo_long"),
+                "sleeve_label": str(status.get("sleeve_label") or "Hostile Combo Long p1"),
+                "symbol": str(item.get("symbol") or "").upper(),
+                "strategy_name": str(item.get("strategy_name") or "hostile_combo_long"),
+                "signal_date": signal_date,
+                "max_positions": 1,
+                "priority": _as_int(item.get("rank"), 999),
+                "target_value": _as_float(item.get("target_value"), 0.0),
+                "target_exposure": _as_float(item.get("target_exposure"), _as_float(status.get("target_exposure"), 1.0)),
             }
         )
     return rows
@@ -291,11 +402,12 @@ def _enter_positions(
     price_unit_multiplier: float,
     risk_by_strategy: dict[str, dict[str, Any]],
     start_date: pd.Timestamp | None,
+    sleeve_starts: dict[str, pd.Timestamp] | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     candidates = [
-        *_mvp_candidates(out_dir / "mvp_p5", "mvp_p5", "MVP Original p5/c10", as_of),
-        *_mvp_candidates(out_dir / "mvp_p4", "mvp_p4", "MVP Improved p4/c10", as_of),
-        *_flow_candidates(out_dir / "flow_v2", as_of),
+        *_mvp_candidates(out_dir / "core_mvp9_rank2", "core_mvp9_rank2", "Core MVP9 p2 rank2 compound", as_of),
+        *_flow_candidates(out_dir / "flow_v2", as_of, "flow_v2", "Flow V2 Rotation"),
+        *_hostile_candidates(out_dir / "hostile_combo_long", as_of),
     ]
     if not candidates:
         return open_, events
@@ -309,6 +421,8 @@ def _enter_positions(
         signal_date = item["signal_date"]
         if start_date is not None and signal_date < start_date:
             continue
+        if sleeve_starts and sleeve_id in sleeve_starts and signal_date < sleeve_starts[sleeve_id]:
+            continue
         if not symbol or (sleeve_id, symbol, signal_date.date().isoformat()) in keys:
             continue
         if not open_.empty and ((open_["sleeve_id"] == sleeve_id) & (open_["symbol"].astype(str).str.upper() == symbol)).any():
@@ -321,8 +435,23 @@ def _enter_positions(
         if entry is None or pd.Timestamp(entry["date"]).normalize() > as_of:
             continue
         entry_price = float(entry["open"]) * price_unit_multiplier
-        target_value = _as_float(item.get("target_value"), 0.0) or capital / max_positions
         cash = _cash_for_sleeve(sleeve_id, open_, closed, capital)
+        if sleeve_id in COMPOUND_EQUITY_SLEEVES:
+            equity = _equity_for_sleeve(
+                sleeve_id,
+                open_,
+                closed,
+                prices,
+                pd.Timestamp(entry["date"]).normalize(),
+                capital,
+                price_unit_multiplier,
+            )
+            target_exposure = _as_float(item.get("target_exposure"), 1.0)
+            if target_exposure <= 0 or target_exposure > 1:
+                target_exposure = 1.0
+            target_value = equity * target_exposure / max_positions
+        else:
+            target_value = _as_float(item.get("target_value"), 0.0) or capital / max_positions
         target_value = min(target_value, cash)
         shares = _lot_shares(target_value, entry_price, lot_size)
         if shares <= 0:
@@ -349,7 +478,11 @@ def _enter_positions(
             "agent_last_action": "",
             "agent_last_reason": "",
             "status": "OPEN_LEDGER",
-            "fill_model": "signal_close_T_fill_next_open_T_plus_1",
+            "fill_model": (
+                "signal_close_T_fill_next_open_T_plus_1_compound_equity"
+                if sleeve_id in COMPOUND_EQUITY_SLEEVES
+                else "signal_close_T_fill_next_open_T_plus_1"
+            ),
         }
         rows.append(row)
         event_rows.append(
@@ -455,6 +588,8 @@ def _review_exits(
             pending_action = str(position.get("pending_exit_action") or "")
             if pending_action == "TAKE_PROFIT_NEXT_OPEN" and holding_bars >= 2:
                 reason, exit_price = "AGENT_TAKE_PROFIT_NEXT_OPEN", float(bar["open"]) * price_unit_multiplier
+            elif pending_action == "HOSTILE_MA20_NEXT_OPEN" and holding_bars >= 2:
+                reason, exit_price = "HOSTILE_MA20_NEXT_OPEN", float(bar["open"]) * price_unit_multiplier
             else:
                 pending_stop = _as_float(position.get("pending_stop_loss"), 0.0)
                 if pending_stop > stop_loss:
@@ -475,6 +610,25 @@ def _review_exits(
                 position["pending_exit_action"] = ""
                 position["pending_stop_loss"] = ""
                 reason, exit_price = _exit_price_for_bar(bar, stop_loss, take_profit, price_unit_multiplier)
+
+            if reason is None and str(position.get("sleeve_id")) == "hostile_combo_long":
+                ma20 = _as_float(bar.get("ma20"), 0.0) * price_unit_multiplier
+                if ma20 > 0 and close_v < ma20:
+                    position["pending_exit_action"] = "HOSTILE_MA20_NEXT_OPEN"
+                    position["agent_last_action"] = "HOSTILE_MA20_NEXT_OPEN"
+                    position["agent_last_reason"] = "CLOSE_BELOW_MA20"
+                    event_rows.append(
+                        {
+                            "date": date.date().isoformat(),
+                            "sleeve_id": position["sleeve_id"],
+                            "symbol": symbol,
+                            "event": "EXIT_SIGNAL",
+                            "price": round(close_v, 2),
+                            "shares": shares,
+                            "reason": "HOSTILE_CLOSE_BELOW_MA20",
+                            "details": f"ma20={round(ma20, 2)}; execute_next_open=true",
+                        }
+                    )
 
             if reason is None:
                 risk = _risk_for(str(position.get("strategy_name")), risk_by_strategy, str(position.get("sleeve_id")))
@@ -611,6 +765,161 @@ def _mark_open(open_: pd.DataFrame, prices: pd.DataFrame, as_of: pd.Timestamp, p
     return pd.DataFrame(rows)
 
 
+def _remaining_lots(trades: pd.DataFrame) -> dict[str, list[list[float]]]:
+    lots: dict[str, list[list[float]]] = {}
+    if trades.empty:
+        return lots
+    for row in trades.to_dict("records"):
+        symbol = str(row["symbol"])
+        shares = int(row["shares"])
+        if row["side"] == "BUY":
+            lots.setdefault(symbol, []).append([float(shares), float(row["price"])])
+            continue
+        outstanding = shares
+        for lot in lots.get(symbol, []):
+            if outstanding <= 0:
+                break
+            consumed = min(outstanding, int(lot[0]))
+            lot[0] -= consumed
+            outstanding -= consumed
+        lots[symbol] = [lot for lot in lots.get(symbol, []) if lot[0] > 0]
+    return lots
+
+
+def _audited_flow_forward_state(
+    *,
+    out_dir: Path,
+    as_of: pd.Timestamp,
+    capital: float,
+    price_unit_multiplier: float,
+    start_date: pd.Timestamp,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    sleeve_configs = [
+        ("flow_v2_baseline", "Baseline fresh-signal top2", "none"),
+        ("flow_v2_tiered", "Early-exit hai tầng top2", "flow_momentum_tiered"),
+    ]
+    account_rows: list[dict[str, Any]] = []
+    open_frames: list[pd.DataFrame] = []
+    strategy_rows: list[dict[str, Any]] = []
+    if as_of < start_date:
+        for sleeve_id, label, _ in sleeve_configs:
+            account_rows.append(
+                {
+                    "sleeve_id": sleeve_id,
+                    "paper_equity": capital,
+                    "paper_cash": capital,
+                    "open_positions": 0,
+                    "open_cost_value": 0.0,
+                    "open_market_value": 0.0,
+                    "unrealized_pnl": 0.0,
+                    "unrealized_pnl_pct": 0.0,
+                    "realized_pnl": 0.0,
+                    "closed_trades": 0,
+                }
+            )
+        return pd.DataFrame(), pd.DataFrame(strategy_rows), pd.DataFrame(account_rows)
+
+    features = _prepare_features("vn100", start_date.date().isoformat(), as_of.date().isoformat())
+    for sleeve_id, label, exit_mode in sleeve_configs:
+        cfg = RotationConfig(
+            universe="vn100",
+            start=start_date.date().isoformat(),
+            end=as_of.date().isoformat(),
+            positions=2,
+            rebalance_days=10,
+            initial_capital=capital,
+            market_gate="risk_on_or_strong_neutral",
+            pool_filter="high_rs",
+            score_mode="flow_heavy",
+            early_exit_mode=exit_mode,
+            price_unit_multiplier=price_unit_multiplier,
+            liquidate_at_end=False,
+        )
+        result = run_backtest(cfg, features=features)
+        trades = result["trades"].copy()
+        trades.to_csv(out_dir / sleeve_id / "paper_forward_orders.csv", index=False, encoding="utf-8-sig")
+        result["equity"].to_csv(out_dir / sleeve_id / "paper_forward_equity.csv", index=False, encoding="utf-8-sig")
+        lots = _remaining_lots(trades)
+        latest_day = features.loc[features["date"] <= as_of].sort_values("date").groupby("symbol", as_index=False).tail(1)
+        close_by_symbol = latest_day.set_index("symbol")["close"] * price_unit_multiplier if not latest_day.empty else pd.Series(dtype=float)
+        open_rows: list[dict[str, Any]] = []
+        for symbol, shares in result["open_positions"].items():
+            symbol_lots = lots.get(symbol, [])
+            lot_shares = sum(int(lot[0]) for lot in symbol_lots)
+            entry_price = (
+                sum(float(lot[0]) * float(lot[1]) for lot in symbol_lots) / lot_shares
+                if lot_shares
+                else 0.0
+            )
+            market_price = float(close_by_symbol.get(symbol, entry_price))
+            cost_value = entry_price * int(shares)
+            market_value = market_price * int(shares)
+            open_rows.append(
+                {
+                    "sleeve_id": sleeve_id,
+                    "sleeve_label": label,
+                    "symbol": symbol,
+                    "strategy_name": sleeve_id,
+                    "signal_date": "",
+                    "entry_date": "",
+                    "entry_price": round(entry_price, 2),
+                    "shares": int(shares),
+                    "cost_value": round(cost_value, 2),
+                    "stop_loss": "",
+                    "take_profit": "",
+                    "market_date": as_of.date().isoformat(),
+                    "market_price": round(market_price, 2),
+                    "market_value": round(market_value, 2),
+                    "unrealized_pnl": round(market_value - cost_value, 2),
+                    "unrealized_pnl_pct": round((market_price / entry_price - 1.0) * 100.0, 2) if entry_price else 0.0,
+                    "days_held": "",
+                    "status": "AUDITED_FORWARD_PAPER",
+                    "agent_last_action": "",
+                    "agent_last_reason": "",
+                    "fill_model": "audited_flow_signal_close_T_fill_open_T_plus_1",
+                }
+            )
+        open_frame = pd.DataFrame(open_rows)
+        if not open_frame.empty:
+            open_frames.append(open_frame)
+        final_equity = float(result["summary"]["ending_equity"])
+        cash = float(result["ending_cash"])
+        market_value = final_equity - cash
+        gross_open_cost = float(open_frame["cost_value"].sum()) if not open_frame.empty else 0.0
+        unrealized = float(open_frame["unrealized_pnl"].sum()) if not open_frame.empty else 0.0
+        realized = final_equity - capital - unrealized
+        account_rows.append(
+            {
+                "sleeve_id": sleeve_id,
+                "paper_equity": round(final_equity, 2),
+                "paper_cash": round(cash, 2),
+                "open_positions": int(len(result["open_positions"])),
+                "open_cost_value": round(gross_open_cost, 2),
+                "open_market_value": round(market_value, 2),
+                "unrealized_pnl": round(unrealized, 2),
+                "unrealized_pnl_pct": round((unrealized / gross_open_cost * 100.0), 2) if gross_open_cost else 0.0,
+                "realized_pnl": round(realized, 2),
+                "closed_trades": int((trades["side"] == "SELL").sum()) if not trades.empty else 0,
+            }
+        )
+        strategy_rows.append(
+            {
+                "sleeve_id": sleeve_id,
+                "strategy_name": sleeve_id,
+                "open_positions": int(len(result["open_positions"])),
+                "cost_value": round(gross_open_cost, 2),
+                "market_value": round(market_value, 2),
+                "unrealized_pnl": round(unrealized, 2),
+                "unrealized_pnl_pct": round((unrealized / gross_open_cost * 100.0), 2) if gross_open_cost else 0.0,
+            }
+        )
+    return (
+        pd.concat(open_frames, ignore_index=True, sort=False) if open_frames else pd.DataFrame(),
+        pd.DataFrame(strategy_rows),
+        pd.DataFrame(account_rows),
+    )
+
+
 def _summaries(open_holdings: pd.DataFrame, closed: pd.DataFrame, capital: float) -> tuple[pd.DataFrame, pd.DataFrame]:
     if open_holdings.empty:
         strategy_pnl = _empty(["sleeve_id", "strategy_name", "open_positions", "cost_value", "market_value", "unrealized_pnl", "unrealized_pnl_pct"])
@@ -633,7 +942,7 @@ def _summaries(open_holdings: pd.DataFrame, closed: pd.DataFrame, capital: float
     else:
         closed_by_sleeve = closed.groupby("sleeve_id", dropna=False).agg(realized_pnl=("net_pnl", "sum"), closed_trades=("symbol", "count")).reset_index()
 
-    sleeves = pd.DataFrame({"sleeve_id": ["mvp_p4", "mvp_p5", "flow_v2"]})
+    sleeves = pd.DataFrame({"sleeve_id": ALL_SLEEVES})
     overview = sleeves.merge(open_by_sleeve, on="sleeve_id", how="left").merge(closed_by_sleeve, on="sleeve_id", how="left").fillna(0)
     overview["paper_cash"] = capital + overview["realized_pnl"] - overview["open_cost_value"]
     overview["paper_equity"] = overview["paper_cash"] + overview["open_market_value"]
@@ -658,7 +967,15 @@ def _summaries(open_holdings: pd.DataFrame, closed: pd.DataFrame, capital: float
     return strategy_pnl, overview
 
 
-def build_pnl(out_dir: Path, capital: float, lot_size: int, price_unit_multiplier: float, reset_ledger: bool, use_exit_agent: bool) -> None:
+def build_pnl(
+    out_dir: Path,
+    capital: float,
+    lot_size: int,
+    price_unit_multiplier: float,
+    reset_ledger: bool,
+    use_exit_agent: bool,
+    paper_start_date: str | None = None,
+) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     prices = _price_frame()
     as_of = pd.to_datetime(prices["date"]).max().normalize()
@@ -676,20 +993,40 @@ def build_pnl(out_dir: Path, capital: float, lot_size: int, price_unit_multiplie
             path = out_dir / name
             if path.exists():
                 path.unlink()
+        reset_start = pd.Timestamp(paper_start_date).normalize() if paper_start_date else (as_of + pd.Timedelta(days=1))
         _write_json(
             out_dir / LEDGER_META,
             {
-                "started_at": as_of.date().isoformat(),
+                "started_at": reset_start.date().isoformat(),
+                "audited_flow_started_at": reset_start.date().isoformat(),
                 "capital_per_sleeve": capital,
                 "reset_at": pd.Timestamp.now().isoformat(timespec="seconds"),
-                "note": "Ledger was reset; historical rolling signals before started_at are ignored.",
+                "note": "Fresh paper run; historical signals and positions before started_at are ignored.",
+                "audited_flow_note": "Audited Flow sleeves accept only signals formed on or after the fresh paper start date.",
             },
         )
 
     meta = _read_json(out_dir / LEDGER_META)
+    if not meta.get("audited_flow_started_at"):
+        meta["audited_flow_started_at"] = (as_of + pd.Timedelta(days=1)).date().isoformat()
+        meta["audited_flow_note"] = "flow_v2_baseline and flow_v2_tiered run forward only from the next session after adoption."
+        _write_json(out_dir / LEDGER_META, meta)
+    sleeve_started_at = dict(meta.get("sleeve_started_at") or {})
+    if "core_mvp9_rank2" not in sleeve_started_at:
+        sleeve_started_at["core_mvp9_rank2"] = (as_of + pd.Timedelta(days=1)).date().isoformat()
+        meta["sleeve_started_at"] = sleeve_started_at
+        _write_json(out_dir / LEDGER_META, meta)
+    sleeve_starts = {
+        sleeve_id: pd.Timestamp(value).normalize()
+        for sleeve_id, value in sleeve_started_at.items()
+        if value
+    }
     start_date = pd.Timestamp(meta["started_at"]).normalize() if meta.get("started_at") else None
     risk_by_strategy = _risk_map()
     open_, closed, events = _load_ledger(out_dir)
+    open_ = _filter_by_sleeve_start(open_, sleeve_starts)
+    closed = _filter_by_sleeve_start(closed, sleeve_starts)
+    events = _filter_events_by_sleeve_start(events, sleeve_starts)
     open_, closed, events = _review_exits(
         open_=open_,
         closed=closed,
@@ -712,6 +1049,7 @@ def build_pnl(out_dir: Path, capital: float, lot_size: int, price_unit_multiplie
         price_unit_multiplier=price_unit_multiplier,
         risk_by_strategy=risk_by_strategy,
         start_date=start_date,
+        sleeve_starts=sleeve_starts,
     )
     # On first adoption the ledger may be seeded from historical paper signals.
     # Review those seeded positions through the current as-of date immediately;
@@ -728,13 +1066,39 @@ def build_pnl(out_dir: Path, capital: float, lot_size: int, price_unit_multiplie
     )
 
     open_holdings = _mark_open(open_, prices, as_of, price_unit_multiplier)
-    strategy_pnl, overview = _summaries(open_holdings, closed, capital)
+    if not open_holdings.empty and "sleeve_id" in open_holdings:
+        open_holdings = open_holdings[open_holdings["sleeve_id"].astype(str).isin(ALL_SLEEVES)].copy()
+    if not closed.empty and "sleeve_id" in closed:
+        closed_for_summary = closed[closed["sleeve_id"].astype(str).isin(ALL_SLEEVES)].copy()
+    else:
+        closed_for_summary = closed
+    strategy_pnl, overview = _summaries(open_holdings, closed_for_summary, capital)
+    audited_open, audited_strategy, audited_overview = _audited_flow_forward_state(
+        out_dir=out_dir,
+        as_of=as_of,
+        capital=capital,
+        price_unit_multiplier=price_unit_multiplier,
+        start_date=pd.Timestamp(meta["audited_flow_started_at"]).normalize(),
+    )
+    if not audited_open.empty:
+        open_holdings = pd.concat([open_holdings, audited_open], ignore_index=True, sort=False)
+    if not audited_strategy.empty:
+        strategy_pnl = pd.concat(
+            [strategy_pnl.loc[~strategy_pnl["sleeve_id"].isin({"flow_v2_baseline", "flow_v2_tiered"})], audited_strategy],
+            ignore_index=True,
+            sort=False,
+        )
+    overview = pd.concat(
+        [overview.loc[~overview["sleeve_id"].isin({"flow_v2_baseline", "flow_v2_tiered"})], audited_overview],
+        ignore_index=True,
+        sort=False,
+    )
 
     open_.to_csv(out_dir / "paper_ledger_open.csv", index=False, encoding="utf-8-sig")
     closed.to_csv(out_dir / "paper_ledger_closed.csv", index=False, encoding="utf-8-sig")
     events.to_csv(out_dir / "paper_ledger_events.csv", index=False, encoding="utf-8-sig")
     open_holdings.to_csv(out_dir / "paper_open_holdings.csv", index=False, encoding="utf-8-sig")
-    closed.to_csv(out_dir / "paper_closed_trades.csv", index=False, encoding="utf-8-sig")
+    closed_for_summary.to_csv(out_dir / "paper_closed_trades.csv", index=False, encoding="utf-8-sig")
     strategy_pnl.to_csv(out_dir / "paper_strategy_pnl.csv", index=False, encoding="utf-8-sig")
     overview.to_csv(out_dir / "paper_account_pnl.csv", index=False, encoding="utf-8-sig")
 
@@ -746,6 +1110,7 @@ def main() -> None:
     parser.add_argument("--lot-size", type=int, default=100)
     parser.add_argument("--price-unit-multiplier", type=float, default=1000.0)
     parser.add_argument("--reset-ledger", action="store_true")
+    parser.add_argument("--start-date", default="", help="Paper activation date used with --reset-ledger, YYYY-MM-DD.")
     parser.add_argument("--no-exit-agent", action="store_true")
     args = parser.parse_args()
     build_pnl(
@@ -755,6 +1120,7 @@ def main() -> None:
         args.price_unit_multiplier,
         reset_ledger=args.reset_ledger,
         use_exit_agent=not args.no_exit_agent,
+        paper_start_date=args.start_date or None,
     )
     print(Path(args.out_dir) / "paper_account_pnl.csv")
 

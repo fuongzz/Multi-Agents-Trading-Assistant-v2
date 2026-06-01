@@ -101,10 +101,6 @@ def main():
     last_date = ohlcv_store.get_last_date()
     today = datetime.now().date()
 
-    if last_date == today:
-        print(f"✓ Store already updated for {today}. Skipping.")
-        return
-
     # Determine fetch range: yesterday to today
     if last_date is None:
         print("⚠️  No data in store. Run build_ohlcv_history.py first.")
@@ -113,12 +109,25 @@ def main():
     fetch_start = (last_date + timedelta(days=1)).strftime("%Y-%m-%d")
     fetch_end = today.strftime("%Y-%m-%d")
 
-    print(f"📥 Fetching data for {fetch_start} → {fetch_end}")
-
     # Fetch symbols
     vn30 = set(get_vn30_symbols())
     vn100 = set(get_vn100_symbols())
-    symbols = sorted(list(vn30 | vn100))
+    required_symbols = vn30 | vn100
+    symbols = sorted(required_symbols)
+    if last_date == today:
+        current = ohlcv_store.load(symbols=symbols, start=today, end=today)
+        available_symbols = set(current["symbol"].astype(str).str.upper()) if not current.empty else set()
+        missing_symbols = required_symbols - available_symbols
+        if not missing_symbols:
+            print(f"Store already complete for {today}: {len(available_symbols)}/{len(required_symbols)} symbols.")
+            return
+        symbols = sorted(missing_symbols)
+        fetch_start = today.strftime("%Y-%m-%d")
+        print(
+            f"Partial EOD data for {today}: {len(available_symbols)}/{len(required_symbols)} symbols; "
+            f"retrying {len(symbols)} missing symbols."
+        )
+    print(f"Fetching data for {fetch_start} -> {fetch_end}")
     print(f"   {len(symbols)} symbols")
 
     # Fetch maps

@@ -22,6 +22,7 @@ Output:
 
 from __future__ import annotations
 
+from collections.abc import Collection
 import logging
 from pathlib import Path
 
@@ -101,7 +102,7 @@ def _sector_returns(prices: pd.DataFrame, horizons=(5, 10, 20)) -> pd.DataFrame:
     parts = []
     for h in horizons:
         ret = log_close - log_close.shift(h)
-        sector_ret = ret.groupby(level="sector_l1", axis=1).mean()
+        sector_ret = ret.T.groupby(level="sector_l1").mean().T
         sector_ret = sector_ret.stack().rename(f"sector_ret_{h}d").reset_index()
         parts.append(sector_ret)
     out = parts[0]
@@ -116,11 +117,17 @@ def compute_sector_rotation(
     ds_path: str | Path,
     out_path: str | Path,
     min_symbols_per_sector: int = 2,
+    symbols: Collection[str] | None = None,
 ) -> pd.DataFrame:
     """Build sector_rotation.parquet from inputs and persist."""
     logger.info("Loading OHLCV master...")
     ohlcv = pd.read_parquet(ohlcv_path)
     ohlcv["date"] = pd.to_datetime(ohlcv["date"]).dt.normalize()
+    ohlcv["symbol"] = ohlcv["symbol"].astype(str).str.upper()
+    symbol_set = {str(symbol).upper() for symbol in symbols} if symbols else None
+    if symbol_set is not None:
+        ohlcv = ohlcv[ohlcv["symbol"].isin(symbol_set)].copy()
+        logger.info("Restricted sector rotation input to %s requested symbols", len(symbol_set))
     ohlcv["sector_l1"] = ohlcv["industry"].map(L2_TO_L1)
     unmapped = ohlcv.loc[ohlcv["sector_l1"].isna(), "industry"].unique()
     if len(unmapped):
@@ -140,6 +147,11 @@ def compute_sector_rotation(
     ds = pd.read_parquet(ds_path)
     chdm["date"] = pd.to_datetime(chdm["date"]).dt.normalize()
     ds["date"] = pd.to_datetime(ds["date"]).dt.normalize()
+    chdm["symbol"] = chdm["symbol"].astype(str).str.upper()
+    ds["symbol"] = ds["symbol"].astype(str).str.upper()
+    if symbol_set is not None:
+        chdm = chdm[chdm["symbol"].isin(symbol_set)].copy()
+        ds = ds[ds["symbol"].isin(symbol_set)].copy()
 
     sym_sector = prices[["symbol", "sector_l1"]].drop_duplicates()
     chdm = chdm.merge(sym_sector, on="symbol", how="inner")

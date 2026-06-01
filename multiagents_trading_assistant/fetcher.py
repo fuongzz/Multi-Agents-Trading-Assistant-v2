@@ -119,6 +119,8 @@ def _fiin_extract_equity(fs_list: list, year: int) -> float:
 _BASE_DIR  = Path(__file__).parent
 _CACHE_DIR = _BASE_DIR / "cache"
 _CACHE_DIR.mkdir(exist_ok=True)
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+_LIQUID150_SYMBOLS_PATH = _PROJECT_ROOT / "reports" / "liquid_universe_2020_now" / "top150_symbols_only.csv"
 
 _TODAY = datetime.now().strftime("%Y-%m-%d")
 
@@ -509,6 +511,28 @@ def get_vn100_symbols() -> list[str]:
         "TCH", "TPB", "VCB", "VCG", "VCI", "VGC", "VHC", "VHM", "VIB", "VIC",
         "VIX", "VJC", "VND", "VNM", "VPB", "VPI", "VPL", "VRE", "VSC", "VTP",
     ]
+
+
+def get_liquid150_symbols() -> list[str]:
+    """Load the project default liquid-150 universe from the ranked local report."""
+    if not _LIQUID150_SYMBOLS_PATH.exists():
+        raise FileNotFoundError(
+            f"Liquid-150 universe file not found: {_LIQUID150_SYMBOLS_PATH}. "
+            "Generate reports/liquid_universe_2020_now/top150_symbols_only.csv first."
+        )
+    df = pd.read_csv(_LIQUID150_SYMBOLS_PATH)
+    if "symbol" not in df.columns:
+        raise ValueError(f"Missing 'symbol' column in {_LIQUID150_SYMBOLS_PATH}")
+    symbols = [
+        str(symbol).strip().upper()
+        for symbol in df["symbol"].dropna().tolist()
+        if str(symbol).strip()
+    ]
+    symbols = list(dict.fromkeys(symbols))
+    if len(symbols) != 150:
+        raise ValueError(f"Expected 150 liquid symbols, found {len(symbols)} in {_LIQUID150_SYMBOLS_PATH}")
+    print(f"[fetcher] Liquid150 from local report: {len(symbols)} symbols")
+    return symbols
 
 
 def get_hnx30_symbols() -> list[str]:

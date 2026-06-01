@@ -89,6 +89,7 @@ RESEARCH_EDGE_STRATEGIES: tuple[str, ...] = (
     "theme_flow_leader_quality_v2",
     "theme_flow_shock_reclaim_v2",
     "theme_flow_breakout_quality_v2",
+    "bullish_divergence_flow_confirm_v1",
 )
 
 
