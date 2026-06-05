@@ -23,6 +23,7 @@ from langgraph.graph import StateGraph, END
 from multiagents_trading_assistant.agents.invest import (
     fundamental_agent, valuation_agent, debate_agent,
 )
+from multiagents_trading_assistant.agents.shared import catalyst_agent
 from multiagents_trading_assistant.agents.invest.macro_agent import get_macro_context
 from multiagents_trading_assistant.nodes import trader_invest, risk_invest
 from multiagents_trading_assistant.formatters.invest_output import format_invest_signal
@@ -48,6 +49,7 @@ class InvestState(TypedDict, total=False):
     # Analysts (parallel)
     fundamental_analysis: dict
     valuation_analysis: dict
+    catalyst_analysis: dict
 
     # Debate
     bull_argument: str
@@ -83,26 +85,29 @@ def run_analysts(state: InvestState) -> dict:
 
     def _fa(): return _safe("fundamental", fundamental_agent.analyze, symbol, date)
     def _val(): return _safe("valuation", valuation_agent.analyze, symbol, date)
+    def _cat(): return _safe("catalyst", catalyst_agent.analyze, symbol, date)
 
     async def _run():
         loop = asyncio.get_event_loop()
         return await asyncio.gather(
             loop.run_in_executor(None, _fa),
             loop.run_in_executor(None, _val),
+            loop.run_in_executor(None, _cat),
         )
 
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        fa, val = loop.run_until_complete(_run())
+        fa, val, cat = loop.run_until_complete(_run())
         loop.close()
     except Exception as e:
         print(f"[investment_graph] asyncio fail → sequential: {e}")
-        fa, val = _fa(), _val()
+        fa, val, cat = _fa(), _val(), _cat()
 
     return {
         "fundamental_analysis": fa or {},
         "valuation_analysis": val or {},
+        "catalyst_analysis": cat or {},
     }
 
 
@@ -227,7 +232,7 @@ def run_pipeline(
     initial: InvestState = {
         "symbol": symbol, "date": date,
         "market_context": market_context or {}, "macro_context": {},
-        "fundamental_analysis": {}, "valuation_analysis": {},
+        "fundamental_analysis": {}, "valuation_analysis": {}, "catalyst_analysis": {},
         "bull_argument": "", "bear_argument": "", "debate_synthesis": {},
         "trader_decision": {}, "risk_output": {},
         "formatted_text": "", "error": None,

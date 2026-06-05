@@ -26,7 +26,9 @@ from langgraph.graph import StateGraph, END
 
 from multiagents_trading_assistant.agents.trade import (
     technical_agent, flow_agent, sentiment_agent, synthesis_agent, money_flow_agent,
+    insider_agent,
 )
+from multiagents_trading_assistant.agents.shared import catalyst_agent
 from multiagents_trading_assistant.nodes import trader_trade, risk_trade
 from multiagents_trading_assistant.nodes.portfolio_monitor import run_portfolio_monitor
 from multiagents_trading_assistant.nodes.persist_trade import run_persist_trade
@@ -64,6 +66,8 @@ class TradeState(TypedDict, total=False):
     foreign_flow_analysis: dict
     sentiment_analysis: dict
     money_flow_analysis: dict
+    insider_analysis: dict
+    catalyst_analysis: dict
 
     # Synthesis
     synthesis: dict
@@ -113,10 +117,16 @@ def run_analysts(state: TradeState) -> dict:
     print(f"[trade_graph] === parallel analysts {symbol} ===")
 
     mkt = state.get("market_context")
+    backtest_mode = bool(state.get("backtest_mode", False))
+    aod = date if backtest_mode else None
     def _tech():  return _safe("technical",   technical_agent.analyze,   symbol, date)
     def _flow():  return _safe("flow",         flow_agent.analyze,        symbol, date)
     def _sent():  return _safe("sentiment",    sentiment_agent.analyze,   symbol, date)
     def _mflow(): return _safe("money_flow",   money_flow_agent.analyze,  symbol, date, mkt, None)
+    def _ins():   return _safe("insider",  insider_agent.analyze,  symbol, date,
+                               as_of_date=aod, backtest_mode=backtest_mode)
+    def _cat():   return _safe("catalyst", catalyst_agent.analyze, symbol, date,
+                               as_of_date=aod, backtest_mode=backtest_mode)
 
     async def _run():
         loop = asyncio.get_event_loop()
@@ -125,22 +135,28 @@ def run_analysts(state: TradeState) -> dict:
             loop.run_in_executor(None, _flow),
             loop.run_in_executor(None, _sent),
             loop.run_in_executor(None, _mflow),
+            loop.run_in_executor(None, _ins),
+            loop.run_in_executor(None, _cat),
         )
 
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        tech, flow, sent, mflow = loop.run_until_complete(_run())
+        tech, flow, sent, mflow, ins, cat = loop.run_until_complete(_run())
         loop.close()
     except Exception as e:
         print(f"[trade_graph] asyncio fail → sequential: {e}")
-        tech, flow, sent, mflow = _tech(), _flow(), _sent(), _mflow()
+        tech, flow, sent, mflow, ins, cat = (
+            _tech(), _flow(), _sent(), _mflow(), _ins(), _cat()
+        )
 
     return {
         "technical_analysis":  tech  or {},
         "foreign_flow_analysis": flow or {},
         "sentiment_analysis":  sent  or {},
         "money_flow_analysis": mflow or {},
+        "insider_analysis":    ins   or {},
+        "catalyst_analysis":   cat   or {},
     }
 
 
@@ -301,7 +317,7 @@ def run_pipeline(
         "backtest_mode": backtest_mode,
         "market_context": market_context or {}, "macro_context": {},
         "technical_analysis": {}, "foreign_flow_analysis": {}, "sentiment_analysis": {},
-        "money_flow_analysis": {},
+        "money_flow_analysis": {}, "insider_analysis": {}, "catalyst_analysis": {},
         "synthesis": {}, "memory_context": {}, "trader_decision": {}, "risk_output": {},
         "portfolio_summary": {}, "execution_plan": {},
         "formatted_text": "", "error": None,

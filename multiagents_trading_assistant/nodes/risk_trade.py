@@ -245,6 +245,31 @@ def check(state: dict) -> dict:
         if mfa_bias == "AVOID_OR_EXIT":
             return _override(action, "CHỜ", f"Blackbox: {mfa_regime} → AVOID_OR_EXIT", warnings, 0.0)
 
+    # Rule 11: Catalyst gate — sự kiện doanh nghiệp phía trước (cả MUA mới)
+    # GDKHQ sắp tới → giá điều chỉnh kỹ thuật, dễ nhầm thủng SL → chặn MUA mới.
+    if action in _BUY_ACTIONS:
+        cat = state.get("catalyst_analysis", {}) or {}
+        if cat.get("blackout"):
+            return _override(
+                action, "CHỜ",
+                f"Catalyst: {cat.get('summary', 'GDKHQ sắp tới')}",
+                warnings, 0.0,
+            )
+        if cat.get("dilution_warning"):
+            sizing *= 0.7
+            warnings.append(f"Catalyst: {cat.get('summary', 'rủi ro pha loãng')} — sizing ×0.7")
+        elif cat.get("event_risk") == "AGM":
+            warnings.append(f"Catalyst: {cat.get('summary', 'ĐHCĐ sắp tới')}")
+
+    # Rule 12: Insider — cổ đông lớn/nội bộ đăng ký BÁN ròng → giảm size (tín hiệu mềm)
+    if action in _BUY_ACTIONS:
+        ins = state.get("insider_analysis", {}) or {}
+        if ins.get("distribution_warning"):
+            sizing *= 0.7
+            warnings.append(f"Insider: {ins.get('summary', 'cổ đông lớn đăng ký bán')} — sizing ×0.7")
+        elif ins.get("signal") == "DISTRIBUTION":
+            warnings.append(f"Insider: {ins.get('summary', 'nội bộ phân phối')}")
+
     # Rule 6: Liquidity gate — safety net dưới screener (screener đã lọc ≥500k)
     # Chặn nếu avg_vol_20d < 200k — chỉ áp dụng cho MUA
     if action in _BUY_ACTIONS:

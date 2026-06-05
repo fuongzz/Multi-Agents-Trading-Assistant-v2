@@ -43,6 +43,11 @@ _CONFLUENCE_DROP_THRESHOLD = 3  # điểm trên thang 0-10
 _SL_WARNING_PCT = 0.02          # giá <= SL * 1.02 → "sắp chạm SL"
 _TP_WARNING_PCT = 0.02          # giá >= TP * 0.98 → "gần TP"
 
+# [C] Entry timing — dedup alert trong ngày (state giữ qua các chu kỳ 5 phút)
+_entry_alerted: set[str] = set()   # f"{date}:{symbol}" đã báo ENTER_NOW
+_cancel_alerted: set[str] = set()  # f"{date}:{symbol}" đã báo CANCEL
+_alert_day: str | None = None      # ngày hiện tại của dedup set
+
 
 # ──────────────────────────────────────────────
 # Entry point — gọi từ APScheduler mỗi 5 phút
@@ -64,6 +69,9 @@ def run_session_monitor() -> None:
 
     # ── [B] Re-analysis MUA signals hôm nay ──
     _reanalyze_today_signals(date, time_str)
+
+    # ── [C] Entry timing — điểm vào tối ưu trong phiên ──
+    _check_entry_timing(date, time_str)
 
 
 # ──────────────────────────────────────────────
@@ -306,6 +314,120 @@ def _check_signal(
             new_conf=new_conf, new_qual=new_qual,
             has_confirmed_position=has_confirmed_position,
         )
+
+
+# ──────────────────────────────────────────────
+# [C] Entry timing — intraday execution agent
+# ──────────────────────────────────────────────
+
+def _check_entry_timing(date: str, time_str: str) -> None:
+    """Định thời vào lệnh cho các khuyến nghị MUA hôm nay CHƯA khớp (chưa có vị thế).
+
+    Mỗi 5 phút chạy intraday_execution_agent với giá live:
+      ENTER_NOW → alert "✅ VÀO LỆNH" (1 lần/ngày/mã)
+      CANCEL    → alert "❌ HỦY SETUP" (1 lần/ngày/mã)
+      WAIT      → chỉ log (tránh spam)
+    """
+    global _alert_day, _entry_alerted, _cancel_alerted
+    if _alert_day != date:
+        _alert_day = date
+        _entry_alerted = set()
+        _cancel_alerted = set()
+
+    from multiagents_trading_assistant.agents.trade import intraday_execution_agent
+
+    # Chỉ xét tín hiệu MUA chưa có vị thế xác nhận (pre-trade)
+    candidates = [d for d in _get_today_buys(date) if not db.has_position(d["symbol"])]
+    if not candidates:
+        return
+
+    symbols = [d["symbol"] for d in candidates]
+    live_prices = _fetch_live_prices(symbols)
+
+    for decision in candidates:
+        symbol = decision["symbol"]
+        key = f"{date}:{symbol}"
+        if key in _entry_alerted or key in _cancel_alerted:
+            continue  # đã có quyết định cuối cho mã này hôm nay
+
+        current = live_prices.get(symbol)
+        if not current:
+            continue
+
+        full = decision.get("full_output") or {}
+        if isinstance(full, str):
+            try:
+                full = json.loads(full)
+            except Exception:
+                full = {}
+        tech = full.get("technical_analysis", {}) or {}
+        snap = tech.get("indicator_snapshot", {}) or {}
+        signal_close = tech.get("current_price") or snap.get("current_price")
+        ma20 = tech.get("ma20") or snap.get("ma20")
+        trader = full.get("trader_decision", {}) or {}
+        entry_zone = trader.get("entry_zone")
+
+        if not signal_close:
+            continue
+
+        try:
+            verdict = intraday_execution_agent.decide(
+                symbol,
+                float(signal_close),
+                float(current),
+                ma20=float(ma20) if ma20 else None,
+                entry_zone=entry_zone,
+                now_clock=time_str,
+            )
+        except Exception as e:
+            print(f"[session_monitor] {symbol} entry timing fail: {e}")
+            continue
+
+        action = verdict.get("action")
+        print(f"[session_monitor] {symbol} entry timing → {action} @ {current:,.0f} ({verdict.get('reason')})")
+
+        if action == "ENTER_NOW":
+            _entry_alerted.add(key)
+            _send_entry_timing_alert(symbol, verdict, current, entry_zone,
+                                     trader.get("stop_loss"), time_str)
+        elif action == "CANCEL":
+            _cancel_alerted.add(key)
+            _send_entry_timing_alert(symbol, verdict, current, entry_zone,
+                                     trader.get("stop_loss"), time_str)
+
+
+def _send_entry_timing_alert(
+    symbol: str, verdict: dict, current_price: float,
+    entry_zone, sl, time_str: str,
+) -> None:
+    """Alert điểm vào tối ưu trong phiên (ENTER_NOW / CANCEL)."""
+    webhook = _get_webhook()
+    action = verdict.get("action")
+    ez_str = (
+        f"{entry_zone[0]:,.0f}–{entry_zone[1]:,.0f}" if entry_zone else "N/A"
+    )
+    ret = verdict.get("ret_from_signal_close")
+    ret_str = f"{ret*100:+.1f}%" if ret is not None else "N/A"
+
+    if action == "ENTER_NOW":
+        title = f"✅ VÀO LỆNH — {symbol} @ {current_price:,.0f}"
+        color = 0x00CC66
+    else:
+        title = f"❌ HỦY SETUP — {symbol} @ {current_price:,.0f}"
+        color = 0xFF4444
+
+    fields = [
+        {"name": "Thời gian",     "value": time_str,                              "inline": True},
+        {"name": "Giá hiện tại",  "value": f"{current_price:,.0f}",               "inline": True},
+        {"name": "vs phiên TH",   "value": ret_str,                               "inline": True},
+        {"name": "Entry zone",    "value": ez_str,                                "inline": True},
+        {"name": "SL",            "value": f"{sl:,.0f}" if sl else "N/A",         "inline": True},
+        {"name": "Lý do",         "value": verdict.get("reason", ""),             "inline": False},
+    ]
+    _post_embed(
+        webhook, title, "Định thời vào lệnh trong phiên (RECOMMENDATION_ONLY).",
+        color, fields, footer="AI Trading Assistant — Intraday Execution",
+    )
 
 
 # ──────────────────────────────────────────────

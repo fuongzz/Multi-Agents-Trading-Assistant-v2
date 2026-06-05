@@ -236,6 +236,29 @@ class VnstockDataProvider:
         ]
         return result
 
+    def get_corporate_events(self, symbol: str) -> pd.DataFrame:
+        # Company requires symbol in constructor; source must be 'VCI' or 'KBS'.
+        # VCI.events() returns dividends, AGM, issuance AND major-shareholder
+        # (insider) trading in one frame — both Catalyst and Insider agents read it.
+        from vnstock_data import Company
+
+        df = Company(symbol=symbol.upper(), source="VCI").events()
+        if df is None or df.empty:
+            return pd.DataFrame()
+
+        df = df.copy()
+        out = pd.DataFrame()
+        out["ticker"] = df.get("ticker", pd.Series([symbol.upper()] * len(df)))
+        out["category"] = df.get("category", pd.Series(dtype=str))
+        out["event_name_vi"] = df.get("event_name_vi", pd.Series(dtype=str))
+        out["action_type_vi"] = df.get("action_type_vi", pd.Series(dtype=str))
+        out["title"] = df.get("event_title_vi", pd.Series(dtype=str))
+        out["exercise_ratio"] = df.get("exercise_ratio", pd.Series(dtype=float))
+        out["value_per_share"] = df.get("value_per_share", pd.Series(dtype=float))
+        for col in ("public_date", "record_date", "exright_date", "issue_date", "payout_date"):
+            out[col] = pd.to_datetime(df.get(col), errors="coerce").dt.tz_localize(None).dt.normalize()
+        return out.reset_index(drop=True)
+
     def _normalize_ohlcv(self, df: pd.DataFrame) -> pd.DataFrame:
         if df is None or df.empty:
             return pd.DataFrame()

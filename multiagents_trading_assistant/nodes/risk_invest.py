@@ -213,6 +213,15 @@ def check(state: dict) -> dict:
         if mkt_risk == "RISK_OFF":
             warnings.append("Market RISK_OFF — cân nhắc trì hoãn vào lệnh")
 
+    # Rule 6: Catalyst — phát hành cổ phiếu pha loãng là cảnh báo dài hạn (không block)
+    if action == "MUA":
+        cat = state.get("catalyst_analysis", {}) or {}
+        if cat.get("dilution_warning"):
+            warnings.append(f"Catalyst: {cat.get('summary', 'sắp phát hành — rủi ro pha loãng EPS')}")
+            sizing_modifier = min(sizing_modifier, 0.7)
+        elif cat.get("event_risk") == "AGM":
+            warnings.append(f"Catalyst: {cat.get('summary', 'ĐHCĐ sắp tới — chờ nghị quyết')}")
+
     if warnings:
         print(f"[risk_invest] warnings: {'; '.join(warnings)}")
     print(f"[risk_invest] OK — final={action}")

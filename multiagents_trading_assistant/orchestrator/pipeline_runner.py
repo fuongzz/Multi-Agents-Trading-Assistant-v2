@@ -79,6 +79,17 @@ def run_bob_strategy_meeting() -> None:
         print(f"[runner] Bob meeting FAIL: {e}")
         send_pipeline_alert("bob", e, date=_today())
 
+    # Trade Journal (hậu kiểm): narrative LLM phủ lên patterns Bob vừa tính.
+    # Chạy độc lập — lỗi journal không ảnh hưởng kết quả Bob.
+    try:
+        from multiagents_trading_assistant.agents.review import trade_journal_agent
+        from multiagents_trading_assistant.services import output_service
+        journal = trade_journal_agent.analyze(period_days=30, date=_today())
+        output_service.send_trade_journal(journal)
+        print(f"[runner] Trade journal sent — {journal.get('total_trades', 0)} lệnh hậu kiểm")
+    except Exception as e:
+        print(f"[runner] Trade journal FAIL: {e}")
+
 
 def _update_ohlcv_daily() -> None:
     """Daily OHLCV data update — runs after market close (15:35).

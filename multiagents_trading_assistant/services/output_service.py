@@ -193,6 +193,35 @@ def _invest_embed(state: dict) -> dict:
     }
 
 
+def send_trade_journal(journal: dict) -> None:
+    """Gửi Trade Journal (hậu kiểm tuần) ra stdout + Discord.
+
+    journal: output của agents.review.trade_journal_agent.analyze().
+    Kênh ưu tiên: DISCORD_WEBHOOK_JOURNAL → DISCORD_WEBHOOK_TRADE → DISCORD_WEBHOOK_URL.
+    Không raise — báo cáo không được làm crash scheduler.
+    """
+    from multiagents_trading_assistant.formatters.journal_embed import build_journal_embed
+
+    period = journal.get("period_days", 30)
+    n = journal.get("total_trades", 0)
+    wr = journal.get("win_rate", 0.0)
+    pf = journal.get("profit_factor", 0.0)
+
+    # stdout
+    print(f"\n{_BOLD}══ TRADE JOURNAL ({period}d) ══{_RESET}")
+    print(f"  {journal.get('headline', '')}")
+    print(f"  n={n} | WR={wr:.0f}% | PF={pf:.2f}")
+    for lesson in (journal.get("lessons") or [])[:4]:
+        print(f"    • {lesson}")
+
+    webhook = (
+        os.getenv("DISCORD_WEBHOOK_JOURNAL")
+        or os.getenv("DISCORD_WEBHOOK_TRADE")
+        or os.getenv("DISCORD_WEBHOOK_URL", "")
+    )
+    _send_signal_to_discord(webhook, build_journal_embed(journal))
+
+
 def send_pipeline_alert(
     pipeline: str,
     error: Exception | str,

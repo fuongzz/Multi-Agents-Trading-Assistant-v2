@@ -1184,6 +1184,50 @@ def get_foreign_flow(symbol: str, n_days: int = 20) -> dict:
 
 
 # ──────────────────────────────────────────────
+# Corporate Events (cổ tức, ĐHCĐ, phát hành, giao dịch nội bộ)
+# ──────────────────────────────────────────────
+
+def get_corporate_events(symbol: str) -> pd.DataFrame:
+    """Lấy lịch sự kiện doanh nghiệp từ vnstock_data Company (VCI).
+
+    Một nguồn duy nhất nuôi cả Catalyst agent (cổ tức/ĐHCĐ/GDKHQ/phát hành)
+    lẫn Insider agent (category == MAJOR_SHAREHOLDER_TRADING).
+
+    Cache theo ngày (events ít đổi). Trả DataFrame trống nếu nguồn lỗi.
+
+    Returns:
+        DataFrame columns: ticker, category, event_name_vi, action_type_vi,
+        title, public_date, record_date, exright_date, issue_date, payout_date,
+        exercise_ratio, value_per_share. Date là Timestamp tz-naive.
+    """
+    symbol = symbol.upper().strip()
+    _date_cols = ["public_date", "record_date", "exright_date", "issue_date", "payout_date"]
+
+    def _parse_event_dates(df: pd.DataFrame) -> pd.DataFrame:
+        for col in _date_cols:
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col], errors="coerce").dt.normalize()
+        return df
+
+    key = f"{symbol}_{_TODAY}_events"
+    cached = _load_cache(key)
+    if cached is not None:
+        return _parse_event_dates(pd.DataFrame(cached)) if cached else pd.DataFrame()
+
+    try:
+        df = get_data_provider().get_corporate_events(symbol)
+        if df is not None and not df.empty:
+            _save_cache(key, _df_to_records(df))
+            print(f"[fetcher] corporate_events ✓ {symbol}: {len(df)} sự kiện")
+            return df
+        print(f"[fetcher] corporate_events trống {symbol}")
+        _save_cache(key, [])  # cache empty để khỏi gọi lại trong ngày
+    except Exception as e:
+        print(f"[fetcher] corporate_events ✗ {symbol}: {e}")
+    return pd.DataFrame()
+
+
+# ──────────────────────────────────────────────
 # Global Macro (yfinance)
 # ──────────────────────────────────────────────
 

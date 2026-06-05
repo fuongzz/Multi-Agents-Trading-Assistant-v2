@@ -37,6 +37,10 @@ APScheduler (Asia/Ho_Chi_Minh)
   │     [B] Re-analysis check (decisions table):
   │           Re-run technical_agent (Haiku ~2s) trên BUY signals hôm nay
   │           Alert nếu: confluence drop ≥3pt / setup flip / giá sát SL hoặc TP ±2%
+  │     [C] Entry timing (intraday_execution_agent, rule-based):
+  │           BUY signals hôm nay CHƯA có vị thế → ENTER_NOW/WAIT/CANCEL
+  │           ENTER_NOW khi ret≥-0.5% & price≥ma20×0.995; CANCEL khi drop≤-2.5% / price<ma20×0.985
+  │           Alert ENTER_NOW/CANCEL (dedup 1 lần/ngày/mã), WAIT chỉ log
   │     Live price: DNSE WebSocket (≤60s cache) → DNSE HTTP fallback
   │
   ├── Bob Strategy Meeting  [Thứ 6, 20:00]          ID: bob_strategy_meeting
@@ -92,6 +96,12 @@ multiagents_trading_assistant/
       sentiment_agent.py     — News crawl CafeF/VnExpress, ingest SQLite+ChromaDB (Haiku)
       money_flow_agent.py    — Blackbox regime detection (Rule-based, NO LLM)
       synthesis_agent.py     — Weighted merge → confluence 0-100 (Rule-based)
+      insider_agent.py       — Giao dịch nội bộ/cổ đông lớn: net Mua/Bán vol 30/90d → score (Rule-based)
+      intraday_execution_agent.py — Định thời vào lệnh trong phiên: ENTER_NOW/WAIT/CANCEL (Rule-based) → session_monitor [C]
+    shared/
+      catalyst_agent.py      — Gate sự kiện DN: GDKHQ/ĐHCĐ/cổ tức/phát hành (Rule-based, dùng cả 2 pipeline)
+    review/
+      trade_journal_agent.py — Hậu kiểm tuần: narrative LLM phủ lên loss patterns Bob đã tính (Haiku + fallback) → #trade-journal
   nodes/
     trader_invest.py         — MUA/CHỜ/TRÁNH, 3-12 tháng, position 3-5% NAV (Sonnet)
     trader_trade.py          — State machine 7 actions, price-action exit (Sonnet)
@@ -222,6 +232,7 @@ label: RẺ (≥30%) | HỢP_LÝ (0-30%) | ĐẮT (<0%)
 | ROE/EPS/Growth | **vnstock_data** `Fundamental.equity().income_statement()` | Investment |
 | Industry | **vnstock_data** `Reference.equity.list_by_industry()` → `icb_name` L2 | Investment |
 | Foreign flow net5d/net20d | **vnstock_data** `Market.equity().foreign_flow()` | Trade |
+| Sự kiện DN (cổ tức/ĐHCĐ/GDKHQ/phát hành) + giao dịch nội bộ | **vnstock_data** `Company(symbol, source='VCI').events()` → `fetcher.get_corporate_events()` | Cả hai |
 | VN-Index / Macro | yfinance | Investment |
 | News/Sentiment | CafeF crawl (Crawl4AI) | Trade |
 
@@ -279,6 +290,8 @@ label: RẺ (≥30%) | HỢP_LÝ (0-30%) | ĐẮT (<0%)
 - **Timestamp OHLCV từ DNSE**: trả UTC unix timestamp — cần convert sang Asia/Ho_Chi_Minh rồi `.normalize()` để ra date
 - **vnstock_data `Fundamental.equity().financial_health()`**: có thể không tồn tại trên một số tier — có try/except bảo vệ, fallback sang `balance_sheet()` + `income_statement()`
 - **ROE annualize**: tính `profit * 4 / equity` (giả định quarterly) — cần confirm data period trước khi dùng
+- **vnstock_data `Company.insider_trading()`**: KHÔNG khả dụng — VCI raise `NotImplementedError`, KBS trả rỗng. Dùng `Company(source='VCI').events()` filter `category=='MAJOR_SHAREHOLDER_TRADING'` thay thế; khối lượng nằm trong `event_title_vi` ("... Đăng kí Mua 50,000,000 HPG") — parse bằng regex
+- **vnstock_data `Company` source**: chỉ nhận `'VCI'` hoặc `'KBS'` (không phải TCBS). `events()` chỉ có ở VCI. `Company(symbol=...)` cần symbol trong constructor
 
 ---
 
@@ -300,6 +313,7 @@ label: RẺ (≥30%) | HỢP_LÝ (0-30%) | ĐẮT (<0%)
 |---|---|---|---|
 | `#invest-signal` | Investment | Xanh teal | Mã, luận điểm dài hạn, target price, exit condition, margin of safety |
 | `#trade-signal` | Trade | Cam coral | Mã, setup type, entry zone, SL, TP, R:R ratio, confluence score |
+| `#trade-journal` | Review | Tím | Hậu kiểm tuần: WR, PF, bài học, đề xuất chỉnh ngưỡng (chạy sau Bob, Thứ 6 20:00) |
 
 ---
 
@@ -388,6 +402,9 @@ run.bat                                                           # 24/7 với a
 | 8 | Money flow gate | DISTRIBUTION hoặc AVOID_OR_EXIT | Override → CHỜ |
 | 9 | R:R tối thiểu | R:R < 1.5 | Override → CHỜ |
 | 10 | Max loss | position_pct × (entry-SL)/entry > 2% | Giảm position_pct |
+| 11 | Catalyst gate | GDKHQ ≤ 2 ngày (blackout) | Override → CHỜ |
+| | | Sắp phát hành (dilution) | Sizing ×0.7 |
+| 12 | Insider | Cổ đông lớn đăng ký BÁN ròng 30d | Sizing ×0.7 |
 
 **Breakaway exception** (Rule 6): nhóm setup `_BREAKAWAY_SETUPS` (BREAKOUT, MOMENTUM_SURGE, BB_SQUEEZE, GOLDEN_CROSS, BREAKOUT_RETEST_ENTRY) + confluence ≥75 + large-cap → được mua dù tăng ≥5%, sizing ×0.5.
 
@@ -532,4 +549,4 @@ Chi tiết: `MIGRATION_NOTES.md`. Reproducible: `scripts/compare_live_pipeline_i
 
 ---
 
-**Last Updated**: 2026-05-14 (session: backtest bias discovery + fix; baseline benchmark sửa từ +101% phóng đại xuống +56% thực; added MIGRATION_NOTES.md)
+**Last Updated**: 2026-06-03 (session: thêm 4 agent nghiệp vụ — trade_journal (review), catalyst + insider (shared/trade, nguồn Company.events VCI), intraday_execution (session_monitor [C]). Chi tiết: `docs/agents_roadmap.md`)

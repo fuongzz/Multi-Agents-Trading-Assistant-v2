@@ -100,3 +100,35 @@ notebooks/
 
 # ── Local venv with non-standard name ──
 UsersNC.venv/
+
+# ════════════════════════════════════════════════════════════════
+# Repo cleanup 2026-06-05 — chỉ giữ code khung/kiến trúc trên git
+# (file vẫn còn ở local, chỉ ngừng theo dõi trên git)
+# ════════════════════════════════════════════════════════════════
+
+# ── Test suite & experiment: local-only ──
+tests/
+
+# ── scripts/: ignore tất cả, chỉ giữ lại script vận hành data pipeline ──
+scripts/*
+!scripts/auto_update_data_system.py
+!scripts/build_index_master.py
+!scripts/build_ohlcv_history.py
+!scripts/enrich_ohlcv_metadata.py
+!scripts/repair_ohlcv_bounds.py
+!scripts/update_ohlcv_daily.py
+!scripts/validate_data_quality.py
+
+# ── Data sinh ra & artifact nghiên cứu ──
+data/research/
+*.parquet
+multiagents_trading_assistant/data/strategy_memory.json
+multiagents_trading_assistant/data/intraday/
+multiagents_trading_assistant/edge_lab/evolved/
+multiagents_trading_assistant/tradingagents_vn/memory/
+
+# ── Launcher thử nghiệm ở root (giữ run.bat) ──
+/run_*.bat
+!/run.bat
+/setup_*.ps1
+/setup_*.bat
