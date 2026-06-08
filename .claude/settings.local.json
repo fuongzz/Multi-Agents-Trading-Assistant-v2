@@ -62,7 +62,8 @@
       "Bash(cp *)",
       "Bash(mv *)",
       "Bash(touch *)",
-      "Bash(diff *)"
+      "Bash(diff *)",
+      "Bash(git -C C:/Users/NC/Desktop/AI-Trading-Assistant log --oneline -20)"
     ],
     "deny": [
       "Bash(rm -rf *)",

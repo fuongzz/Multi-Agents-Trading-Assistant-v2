@@ -1236,6 +1236,7 @@ _MACRO_TICKERS = {
     "dxy":    "DX-Y.NYB",
     "oil":    "CL=F",
     "gold":   "GC=F",
+    "btc":    "BTC-USD",
     "nikkei": "^N225",
     "kospi":  "^KS11",
     "hsi":    "^HSI",
@@ -1250,7 +1251,7 @@ def get_global_macro() -> dict:
         dict[name → {current, change_pct}]
         Ví dụ: {"sp500": {"current": 5123.0, "change_pct": 0.5}, ...}
     """
-    key    = f"global_macro_{_TODAY}"
+    key    = f"global_macro_v2_{_TODAY}"
     cached = _load_cache(key)
     if cached is not None:
         return cached[0] if isinstance(cached, list) else cached
@@ -1258,18 +1259,31 @@ def get_global_macro() -> dict:
     result = {}
     for name, ticker in _MACRO_TICKERS.items():
         try:
-            hist = yf.Ticker(ticker).history(period="5d")
+            hist = yf.Ticker(ticker).history(period="8d")
+            if not hist.empty and pd.isna(hist["Close"].iloc[-1]):
+                try:
+                    intraday = yf.Ticker(ticker).history(period="1d", interval="1m")
+                    intraday = intraday.dropna(subset=["Close"])
+                    if not intraday.empty:
+                        hist.loc[hist.index[-1], "Close"] = float(intraday["Close"].iloc[-1])
+                except Exception:
+                    pass
+            hist = hist.dropna(subset=["Close"])
             if len(hist) >= 2:
                 cur  = float(hist["Close"].iloc[-1])
                 prev = float(hist["Close"].iloc[-2])
+                base = float(hist["Close"].iloc[0])
                 result[name] = {
                     "current":    round(cur, 2),
                     "change_pct": round((cur - prev) / prev * 100, 2),
+                    "change_5d_pct": round((cur - base) / base * 100, 2) if base else None,
+                    "date": str(hist.index[-1].date()),
+                    "previous_date": str(hist.index[-2].date()),
                 }
             else:
-                result[name] = {"current": None, "change_pct": None}
+                result[name] = {"current": None, "change_pct": None, "change_5d_pct": None, "date": None, "previous_date": None}
         except Exception:
-            result[name] = {"current": None, "change_pct": None}
+            result[name] = {"current": None, "change_pct": None, "change_5d_pct": None, "date": None, "previous_date": None}
 
     _save_cache(key, [result])
     print(f"[fetcher] global_macro ✓: {list(result.keys())}")

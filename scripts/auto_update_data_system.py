@@ -264,6 +264,10 @@ def _build_daily_stages(args: argparse.Namespace, run_date: date) -> list[Stage]
                     "build_market_regime_parquet",
                     [py, "-m", "multiagents_trading_assistant.research.sector_rotation.compute_market_regime"],
                 ),
+                Stage(
+                    "build_daily_market_state_report",
+                    [py, "scripts/generate_daily_market_state_report.py", "--with-live-context"],
+                ),
             ]
         )
     stages.append(
